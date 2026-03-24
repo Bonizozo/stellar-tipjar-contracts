@@ -37,6 +37,22 @@ pub enum DataKey {
     CreatorMessages(Address),
 }
 
+/// Public view of the contract's current configuration.
+///
+/// Returned by [`TipJarContract::get_config`] so that frontends and SDKs
+/// can read all relevant settings in a single, stable call without relying
+/// on internal storage assumptions.
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ContractConfig {
+    /// The token contract address used for all tips.
+    pub token: Address,
+    /// The contract administrator address.
+    pub admin: Address,
+    /// Whether the contract is currently paused.
+    pub paused: bool,
+}
+
 #[contracterror]
 #[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
 #[repr(u32)]
@@ -46,6 +62,8 @@ pub enum TipJarError {
     InvalidAmount = 3,
     NothingToWithdraw = 4,
     MessageTooLong = 5,
+    /// Returned when a read is attempted before the contract is initialized.
+    NotInitialized = 6,
 }
 
 #[contract]
@@ -205,6 +223,28 @@ impl TipJarContract {
     pub fn get_withdrawable_balance(env: Env, creator: Address) -> i128 {
         let key = DataKey::CreatorBalance(creator);
         env.storage().persistent().get(&key).unwrap_or(0)
+    }
+
+    /// Returns the full current contract configuration in a single stable call.
+    ///
+    /// Safe and read-only — no state is mutated. Returns an error if the
+    /// contract has not been initialized yet, so callers can distinguish
+    /// between a missing config and a zero-value config.
+    pub fn get_config(env: Env) -> Result<ContractConfig, TipJarError> {
+        let token: Option<Address> = env.storage().instance().get(&DataKey::Token);
+        let admin: Option<Address> = env.storage().instance().get(&DataKey::Admin);
+
+        match (token, admin) {
+            (Some(token), Some(admin)) => {
+                let paused: bool = env
+                    .storage()
+                    .instance()
+                    .get(&DataKey::Paused)
+                    .unwrap_or(false);
+                Ok(ContractConfig { token, admin, paused })
+            }
+            _ => Err(TipJarError::NotInitialized),
+        }
     }
 
     /// Allows creator to withdraw their accumulated escrowed tips.
@@ -441,5 +481,47 @@ mod tests {
 
         let result = tipjar_client.try_withdraw(&creator);
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_get_config_initialized() {
+        let (env, contract_id, token_id, admin) = setup();
+        let tipjar_client = TipJarContractClient::new(&env, &contract_id);
+
+        // The Soroban client unwraps Ok automatically; use try_ to get the Result.
+        let config = tipjar_client.get_config();
+        assert_eq!(config.token, token_id);
+        assert_eq!(config.admin, admin);
+        assert!(!config.paused);
+    }
+
+    #[test]
+    fn test_get_config_not_initialized() {
+        let env = Env::default();
+        let contract_id = env.register(TipJarContract, ());
+        let tipjar_client = TipJarContractClient::new(&env, &contract_id);
+
+        // try_ variant returns Result; Err means NotInitialized was returned.
+        let result = tipjar_client.try_get_config();
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_get_config_reflects_pause_state() {
+        let (env, contract_id, token_id, admin) = setup();
+        let tipjar_client = TipJarContractClient::new(&env, &contract_id);
+
+        let config_before = tipjar_client.get_config();
+        assert!(!config_before.paused);
+        assert_eq!(config_before.token, token_id);
+        assert_eq!(config_before.admin, admin);
+
+        tipjar_client.pause(&admin);
+
+        let config_after = tipjar_client.get_config();
+        assert!(config_after.paused);
+        // token and admin must remain unchanged
+        assert_eq!(config_after.token, token_id);
+        assert_eq!(config_after.admin, admin);
     }
 }
