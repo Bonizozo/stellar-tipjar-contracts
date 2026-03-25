@@ -41,6 +41,16 @@ pub struct BatchTip {
 
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
+pub struct LockedTip {
+    pub sender: Address,
+    pub creator: Address,
+    pub token: Address,
+    pub amount: i128,
+    pub unlock_timestamp: u64,
+}
+
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum TimePeriod {
     AllTime,
     Monthly,
@@ -105,6 +115,10 @@ pub enum DataKey {
     TipperParticipants(u32),
     /// Ordered list of all known creator addresses for a bucket.
     CreatorParticipants(u32),
+    /// Locked tip record keyed by (creator, tip_id).
+    LockedTip(Address, u64),
+    /// Per-creator counter for assigning tip IDs (u64).
+    LockedTipCounter(Address),
 }
 
 #[contracterror]
@@ -123,6 +137,9 @@ pub enum TipJarError {
     RoleNotFound = 10,
     BatchTooLarge = 11,
     InsufficientBalance = 12,
+    InvalidUnlockTime = 13,
+    TipStillLocked = 14,
+    LockedTipNotFound = 15,
 }
 
 #[contract]
@@ -433,6 +450,118 @@ impl TipJarContract {
     pub fn get_top_creators(env: Env, period: TimePeriod, offset: u32, limit: u32) -> Vec<LeaderboardEntry> {
         let bucket = bucket_id_for_period(&env, &period);
         ranked_page(&env, DataKey::CreatorParticipants(bucket), false, bucket, offset, limit)
+    }
+
+    /// Locks `amount` tokens from `sender` in escrow for `creator`, releasing only after `unlock_timestamp`.
+    ///
+    /// Returns the assigned `tip_id` (monotonically increasing per creator, starting at 0).
+    pub fn tip_locked(
+        env: Env,
+        sender: Address,
+        creator: Address,
+        token: Address,
+        amount: i128,
+        unlock_timestamp: u64,
+    ) -> u64 {
+        // 1. Pause guard
+        if Self::is_paused(&env) {
+            panic!("Contract is paused");
+        }
+        // 2. Token whitelist check
+        if !Self::is_whitelisted(env.clone(), token.clone()) {
+            panic_with_error!(&env, TipJarError::TokenNotWhitelisted);
+        }
+        // 3. Amount guard
+        if amount <= 0 {
+            panic_with_error!(&env, TipJarError::InvalidAmount);
+        }
+        // 4. Timestamp guard
+        if unlock_timestamp <= env.ledger().timestamp() {
+            panic_with_error!(&env, TipJarError::InvalidUnlockTime);
+        }
+        // 5. Auth
+        sender.require_auth();
+
+        // 6. Read/increment per-creator tip counter
+        let counter_key = DataKey::LockedTipCounter(creator.clone());
+        let tip_id: u64 = env.storage().persistent().get(&counter_key).unwrap_or(0u64);
+        env.storage().persistent().set(&counter_key, &(tip_id + 1));
+
+        // 7. Transfer tokens from sender to this contract
+        let token_client = token::Client::new(&env, &token);
+        token_client.transfer(&sender, &env.current_contract_address(), &amount);
+
+        // 8. Store the LockedTip record
+        let locked_tip = LockedTip {
+            sender: sender.clone(),
+            creator: creator.clone(),
+            token: token.clone(),
+            amount,
+            unlock_timestamp,
+        };
+        env.storage()
+            .persistent()
+            .set(&DataKey::LockedTip(creator.clone(), tip_id), &locked_tip);
+
+        // 9. Emit event
+        env.events().publish(
+            (symbol_short!("tip_lckd"), creator.clone(), token.clone()),
+            (tip_id, sender.clone(), amount, unlock_timestamp),
+        );
+
+        // 10. Return tip_id
+        tip_id
+    }
+
+    /// Withdraws a locked tip to the creator after its unlock timestamp has elapsed.
+    ///
+    /// Requires the caller to hold the `Creator` role.
+    pub fn withdraw_locked(env: Env, creator: Address, tip_id: u64) {
+        // 1. Pause guard
+        if Self::is_paused(&env) {
+            panic!("Contract is paused");
+        }
+        // 2. Auth
+        creator.require_auth();
+        // 3. Role check
+        require_role(&env, &creator, Role::Creator);
+
+        // 4. Load the locked tip record
+        let locked_tip: LockedTip = env
+            .storage()
+            .persistent()
+            .get(&DataKey::LockedTip(creator.clone(), tip_id))
+            .unwrap_or_else(|| panic_with_error!(&env, TipJarError::LockedTipNotFound));
+
+        // 5. Time check
+        if env.ledger().timestamp() < locked_tip.unlock_timestamp {
+            panic_with_error!(&env, TipJarError::TipStillLocked);
+        }
+
+        // 6. Transfer tokens from contract to creator
+        let token_client = token::Client::new(&env, &locked_tip.token);
+        token_client.transfer(&env.current_contract_address(), &creator, &locked_tip.amount);
+
+        // 7. Remove the record
+        env.storage()
+            .persistent()
+            .remove(&DataKey::LockedTip(creator.clone(), tip_id));
+
+        // 8. Emit event
+        env.events().publish(
+            (symbol_short!("lck_wdrw"), creator.clone(), locked_tip.token.clone()),
+            (tip_id, locked_tip.amount),
+        );
+    }
+
+    /// Returns the stored `LockedTip` for the given creator and tip_id.
+    ///
+    /// No auth required; available even when the contract is paused.
+    pub fn get_locked_tip(env: Env, creator: Address, tip_id: u64) -> LockedTip {
+        env.storage()
+            .persistent()
+            .get(&DataKey::LockedTip(creator, tip_id))
+            .unwrap_or_else(|| panic_with_error!(&env, TipJarError::LockedTipNotFound))
     }
 }
 
@@ -769,7 +898,7 @@ fn ranked_page(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use soroban_sdk::{testutils::{Address as _, Events as _}, token, Address, Env};
+    use soroban_sdk::{testutils::{Address as _, Events as _, Ledger as _}, token, Address, Env};
 
     /// Returns (env, contract_id, token_id_1, token_id_2, admin).
     fn setup() -> (Env, Address, Address, Address, Address) {
@@ -1691,5 +1820,358 @@ mod tests {
 
         assert_eq!(tippers.len(), 1, "get_top_tippers should work while paused");
         assert_eq!(creators.len(), 1, "get_top_creators should work while paused");
+    }
+
+    // ── Helper: advance ledger timestamp ─────────────────────────────────────
+
+    fn advance_time(env: &Env, new_ts: u64) {
+        env.ledger().with_mut(|li| {
+            li.timestamp = new_ts;
+        });
+    }
+
+    // ── Task 6.1: tip_locked unit tests ──────────────────────────────────────
+
+    #[test]
+    fn test_tip_locked_happy_path() {
+        let (env, contract_id, token_id_1, _, _) = setup();
+        let client = TipJarContractClient::new(&env, &contract_id);
+        let token_admin = token::StellarAssetClient::new(&env, &token_id_1);
+        let token_client = token::Client::new(&env, &token_id_1);
+
+        let sender = Address::generate(&env);
+        let creator = Address::generate(&env);
+        token_admin.mint(&sender, &1_000);
+
+        let current_ts = env.ledger().timestamp();
+        let unlock_ts = current_ts + 1000;
+
+        let tip_id = client.tip_locked(&sender, &creator, &token_id_1, &500, &unlock_ts);
+        assert_eq!(tip_id, 0, "first tip_id should be 0");
+
+        // Verify stored record
+        let locked = client.get_locked_tip(&creator, &tip_id);
+        assert_eq!(locked.sender, sender);
+        assert_eq!(locked.creator, creator);
+        assert_eq!(locked.token, token_id_1);
+        assert_eq!(locked.amount, 500);
+        assert_eq!(locked.unlock_timestamp, unlock_ts);
+
+        // Verify sender balance decreased
+        assert_eq!(token_client.balance(&sender), 500);
+        assert_eq!(token_client.balance(&contract_id), 500);
+    }
+
+    #[test]
+    fn test_tip_locked_token_not_whitelisted() {
+        let (env, contract_id, _, token_id_2, _) = setup();
+        let client = TipJarContractClient::new(&env, &contract_id);
+        let token_admin = token::StellarAssetClient::new(&env, &token_id_2);
+
+        let sender = Address::generate(&env);
+        let creator = Address::generate(&env);
+        token_admin.mint(&sender, &1_000);
+
+        let unlock_ts = env.ledger().timestamp() + 1000;
+        let result = client.try_tip_locked(&sender, &creator, &token_id_2, &500, &unlock_ts);
+        assert_eq!(result.unwrap_err().unwrap(), TipJarError::TokenNotWhitelisted.into());
+    }
+
+    #[test]
+    fn test_tip_locked_invalid_amount() {
+        let (env, contract_id, token_id_1, _, _) = setup();
+        let client = TipJarContractClient::new(&env, &contract_id);
+
+        let sender = Address::generate(&env);
+        let creator = Address::generate(&env);
+
+        let unlock_ts = env.ledger().timestamp() + 1000;
+        let result = client.try_tip_locked(&sender, &creator, &token_id_1, &0, &unlock_ts);
+        assert_eq!(result.unwrap_err().unwrap(), TipJarError::InvalidAmount.into());
+    }
+
+    #[test]
+    fn test_tip_locked_invalid_unlock_time() {
+        let (env, contract_id, token_id_1, _, _) = setup();
+        let client = TipJarContractClient::new(&env, &contract_id);
+
+        let sender = Address::generate(&env);
+        let creator = Address::generate(&env);
+
+        // unlock_timestamp == current ledger timestamp (not strictly future)
+        let current_ts = env.ledger().timestamp();
+        let result = client.try_tip_locked(&sender, &creator, &token_id_1, &100, &current_ts);
+        assert_eq!(result.unwrap_err().unwrap(), TipJarError::InvalidUnlockTime.into());
+    }
+
+    #[test]
+    fn test_tip_locked_paused() {
+        let (env, contract_id, token_id_1, _, admin) = setup();
+        let client = TipJarContractClient::new(&env, &contract_id);
+
+        client.pause(&admin);
+
+        let sender = Address::generate(&env);
+        let creator = Address::generate(&env);
+        let unlock_ts = env.ledger().timestamp() + 1000;
+
+        let result = client.try_tip_locked(&sender, &creator, &token_id_1, &100, &unlock_ts);
+        assert!(result.is_err());
+    }
+
+    // ── Task 6.2: withdraw_locked unit tests ─────────────────────────────────
+
+    #[test]
+    fn test_withdraw_locked_happy_path() {
+        let (env, contract_id, token_id_1, _, admin) = setup();
+        let client = TipJarContractClient::new(&env, &contract_id);
+        let token_admin = token::StellarAssetClient::new(&env, &token_id_1);
+        let token_client = token::Client::new(&env, &token_id_1);
+
+        let sender = Address::generate(&env);
+        let creator = Address::generate(&env);
+        token_admin.mint(&sender, &1_000);
+
+        let unlock_ts = env.ledger().timestamp() + 1000;
+        let tip_id = client.tip_locked(&sender, &creator, &token_id_1, &500, &unlock_ts);
+
+        // Advance time past unlock
+        advance_time(&env, unlock_ts + 1);
+
+        // Grant Creator role
+        client.grant_role(&admin, &creator, &Role::Creator);
+
+        let creator_balance_before = token_client.balance(&creator);
+        client.withdraw_locked(&creator, &tip_id);
+
+        // Tokens transferred to creator
+        assert_eq!(token_client.balance(&creator), creator_balance_before + 500);
+        assert_eq!(token_client.balance(&contract_id), 0);
+
+        // Record removed
+        let result = client.try_get_locked_tip(&creator, &tip_id);
+        assert_eq!(result.unwrap_err().unwrap(), TipJarError::LockedTipNotFound.into());
+    }
+
+    #[test]
+    fn test_withdraw_locked_tip_still_locked() {
+        let (env, contract_id, token_id_1, _, admin) = setup();
+        let client = TipJarContractClient::new(&env, &contract_id);
+        let token_admin = token::StellarAssetClient::new(&env, &token_id_1);
+
+        let sender = Address::generate(&env);
+        let creator = Address::generate(&env);
+        token_admin.mint(&sender, &1_000);
+
+        let unlock_ts = env.ledger().timestamp() + 1000;
+        let tip_id = client.tip_locked(&sender, &creator, &token_id_1, &500, &unlock_ts);
+
+        // Grant Creator role but do NOT advance time
+        client.grant_role(&admin, &creator, &Role::Creator);
+
+        let result = client.try_withdraw_locked(&creator, &tip_id);
+        assert_eq!(result.unwrap_err().unwrap(), TipJarError::TipStillLocked.into());
+    }
+
+    #[test]
+    fn test_withdraw_locked_unauthorized() {
+        let (env, contract_id, token_id_1, _, _) = setup();
+        let client = TipJarContractClient::new(&env, &contract_id);
+        let token_admin = token::StellarAssetClient::new(&env, &token_id_1);
+
+        let sender = Address::generate(&env);
+        let creator = Address::generate(&env);
+        token_admin.mint(&sender, &1_000);
+
+        let unlock_ts = env.ledger().timestamp() + 1000;
+        let tip_id = client.tip_locked(&sender, &creator, &token_id_1, &500, &unlock_ts);
+
+        // Advance time but do NOT grant Creator role
+        advance_time(&env, unlock_ts + 1);
+
+        let result = client.try_withdraw_locked(&creator, &tip_id);
+        assert_eq!(result.unwrap_err().unwrap(), TipJarError::Unauthorized.into());
+    }
+
+    #[test]
+    fn test_withdraw_locked_not_found() {
+        let (env, contract_id, _, _, admin) = setup();
+        let client = TipJarContractClient::new(&env, &contract_id);
+
+        let creator = Address::generate(&env);
+        client.grant_role(&admin, &creator, &Role::Creator);
+
+        let result = client.try_withdraw_locked(&creator, &99);
+        assert_eq!(result.unwrap_err().unwrap(), TipJarError::LockedTipNotFound.into());
+    }
+
+    #[test]
+    fn test_withdraw_locked_paused() {
+        let (env, contract_id, token_id_1, _, admin) = setup();
+        let client = TipJarContractClient::new(&env, &contract_id);
+        let token_admin = token::StellarAssetClient::new(&env, &token_id_1);
+
+        let sender = Address::generate(&env);
+        let creator = Address::generate(&env);
+        token_admin.mint(&sender, &1_000);
+
+        let unlock_ts = env.ledger().timestamp() + 1000;
+        let tip_id = client.tip_locked(&sender, &creator, &token_id_1, &500, &unlock_ts);
+
+        advance_time(&env, unlock_ts + 1);
+        client.grant_role(&admin, &creator, &Role::Creator);
+        client.pause(&admin);
+
+        let result = client.try_withdraw_locked(&creator, &tip_id);
+        assert!(result.is_err());
+    }
+
+    // ── Task 6.3: get_locked_tip unit tests ──────────────────────────────────
+
+    #[test]
+    fn test_get_locked_tip_not_found() {
+        let (env, contract_id, _, _, _) = setup();
+        let client = TipJarContractClient::new(&env, &contract_id);
+
+        let creator = Address::generate(&env);
+        let result = client.try_get_locked_tip(&creator, &0);
+        assert_eq!(result.unwrap_err().unwrap(), TipJarError::LockedTipNotFound.into());
+    }
+
+    #[test]
+    fn test_get_locked_tip_while_paused() {
+        let (env, contract_id, token_id_1, _, admin) = setup();
+        let client = TipJarContractClient::new(&env, &contract_id);
+        let token_admin = token::StellarAssetClient::new(&env, &token_id_1);
+
+        let sender = Address::generate(&env);
+        let creator = Address::generate(&env);
+        token_admin.mint(&sender, &1_000);
+
+        let unlock_ts = env.ledger().timestamp() + 1000;
+        let tip_id = client.tip_locked(&sender, &creator, &token_id_1, &500, &unlock_ts);
+
+        client.pause(&admin);
+
+        // get_locked_tip should succeed even while paused
+        let locked = client.get_locked_tip(&creator, &tip_id);
+        assert_eq!(locked.amount, 500);
+    }
+
+    // ── Task 6.4: event emission unit tests ──────────────────────────────────
+
+    #[test]
+    fn test_tip_locked_event() {
+        let (env, contract_id, token_id_1, _, _) = setup();
+        let client = TipJarContractClient::new(&env, &contract_id);
+        let token_admin = token::StellarAssetClient::new(&env, &token_id_1);
+
+        let sender = Address::generate(&env);
+        let creator = Address::generate(&env);
+        token_admin.mint(&sender, &1_000);
+
+        let unlock_ts = env.ledger().timestamp() + 1000;
+        client.tip_locked(&sender, &creator, &token_id_1, &500, &unlock_ts);
+
+        let events = env.events().all();
+        let last = events.last().unwrap();
+        // Topics: (symbol "tip_lckd", creator, token)
+        let topics: soroban_sdk::Vec<soroban_sdk::Val> = last.1;
+        let topic_sym: soroban_sdk::Symbol =
+            soroban_sdk::FromVal::from_val(&env, &topics.get(0).unwrap());
+        assert_eq!(topic_sym, soroban_sdk::Symbol::new(&env, "tip_lckd"));
+    }
+
+    #[test]
+    fn test_withdraw_locked_event() {
+        let (env, contract_id, token_id_1, _, admin) = setup();
+        let client = TipJarContractClient::new(&env, &contract_id);
+        let token_admin = token::StellarAssetClient::new(&env, &token_id_1);
+
+        let sender = Address::generate(&env);
+        let creator = Address::generate(&env);
+        token_admin.mint(&sender, &1_000);
+
+        let unlock_ts = env.ledger().timestamp() + 1000;
+        let tip_id = client.tip_locked(&sender, &creator, &token_id_1, &500, &unlock_ts);
+
+        advance_time(&env, unlock_ts + 1);
+        client.grant_role(&admin, &creator, &Role::Creator);
+        client.withdraw_locked(&creator, &tip_id);
+
+        let events = env.events().all();
+        let last = events.last().unwrap();
+        let topics: soroban_sdk::Vec<soroban_sdk::Val> = last.1;
+        let topic_sym: soroban_sdk::Symbol =
+            soroban_sdk::FromVal::from_val(&env, &topics.get(0).unwrap());
+        assert_eq!(topic_sym, soroban_sdk::Symbol::new(&env, "lck_wdrw"));
+    }
+
+    // ── Task 7.1: multiple concurrent locked tips ─────────────────────────────
+
+    #[test]
+    fn test_multiple_concurrent_locked_tips() {
+        let (env, contract_id, token_id_1, _, admin) = setup();
+        let client = TipJarContractClient::new(&env, &contract_id);
+        let token_admin = token::StellarAssetClient::new(&env, &token_id_1);
+        let token_client = token::Client::new(&env, &token_id_1);
+
+        let sender = Address::generate(&env);
+        let creator = Address::generate(&env);
+        token_admin.mint(&sender, &3_000);
+
+        let base_ts = env.ledger().timestamp();
+        let unlock_ts_0 = base_ts + 100;
+        let unlock_ts_1 = base_ts + 200;
+        let unlock_ts_2 = base_ts + 300;
+
+        // Create 3 locked tips
+        let id0 = client.tip_locked(&sender, &creator, &token_id_1, &100, &unlock_ts_0);
+        let id1 = client.tip_locked(&sender, &creator, &token_id_1, &200, &unlock_ts_1);
+        let id2 = client.tip_locked(&sender, &creator, &token_id_1, &300, &unlock_ts_2);
+
+        assert_eq!(id0, 0);
+        assert_eq!(id1, 1);
+        assert_eq!(id2, 2);
+
+        // Grant Creator role
+        client.grant_role(&admin, &creator, &Role::Creator);
+
+        // Advance past first unlock only
+        advance_time(&env, unlock_ts_0 + 1);
+
+        // Withdraw tip 0
+        client.withdraw_locked(&creator, &id0);
+        assert_eq!(token_client.balance(&creator), 100);
+
+        // Tips 1 and 2 still exist
+        let tip1 = client.get_locked_tip(&creator, &id1);
+        assert_eq!(tip1.amount, 200);
+        let tip2 = client.get_locked_tip(&creator, &id2);
+        assert_eq!(tip2.amount, 300);
+
+        // Tip 0 is gone
+        let gone = client.try_get_locked_tip(&creator, &id0);
+        assert_eq!(gone.unwrap_err().unwrap(), TipJarError::LockedTipNotFound.into());
+
+        // Advance past all unlock times
+        advance_time(&env, unlock_ts_2 + 1);
+
+        // Withdraw remaining tips
+        client.withdraw_locked(&creator, &id1);
+        client.withdraw_locked(&creator, &id2);
+
+        assert_eq!(token_client.balance(&creator), 600);
+        assert_eq!(token_client.balance(&contract_id), 0);
+
+        // All records removed
+        assert_eq!(
+            client.try_get_locked_tip(&creator, &id1).unwrap_err().unwrap(),
+            TipJarError::LockedTipNotFound.into()
+        );
+        assert_eq!(
+            client.try_get_locked_tip(&creator, &id2).unwrap_err().unwrap(),
+            TipJarError::LockedTipNotFound.into()
+        );
     }
 }
