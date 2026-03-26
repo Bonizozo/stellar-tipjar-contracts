@@ -8,6 +8,18 @@ use soroban_sdk::{
 #[cfg(test)]
 extern crate std;
 
+// Advanced Event System
+pub mod events;
+
+// Automated Market Maker
+pub mod amm;
+
+// Governance System
+pub mod governance;
+
+// Staking and Rewards
+pub mod staking;
+
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct TipWithMessage {
