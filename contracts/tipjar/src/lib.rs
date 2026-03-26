@@ -181,8 +181,6 @@ pub enum TipJarError {
     InvalidMatchRatio = 18,
 }
 
-/// Grace period for automatic refunds: 24 hours in seconds.
-const GRACE_PERIOD_SECS: u64 = 86_400;
 
 #[contract]
 pub struct TipJarContract;
@@ -218,8 +216,7 @@ impl TipJarContract {
     }
 
     /// Moves `amount` tokens from `sender` into contract escrow for `creator`.
-    /// Returns the tip ID for use in refund requests.
-    pub fn tip(env: Env, sender: Address, creator: Address, token: Address, amount: i128) -> u64 {
+    pub fn tip(env: Env, sender: Address, creator: Address, token: Address, amount: i128) {
         if Self::is_paused(&env) {
             panic!("Contract is paused");
         }
@@ -233,32 +230,17 @@ impl TipJarContract {
         sender.require_auth();
 
         let token_client = token::Client::new(&env, &token);
-        let contract_address = env.current_contract_address();
+        token_client.transfer(&sender, &env.current_contract_address(), &amount);
 
-        token_client.transfer(&sender, &contract_address, &amount);
+        let balance_key = DataKey::CreatorBalance(creator.clone(), token.clone());
+        let total_key = DataKey::CreatorTotal(creator.clone(), token.clone());
+        let storage = env.storage().persistent();
 
-        let creator_balance_key = DataKey::CreatorBalance(creator.clone(), token.clone());
-        let creator_total_key = DataKey::CreatorTotal(creator.clone(), token.clone());
+        let next_balance: i128 = storage.get(&balance_key).unwrap_or(0) + amount;
+        let next_total: i128 = storage.get(&total_key).unwrap_or(0) + amount;
 
-        let next_balance: i128 = env.storage().persistent().get(&creator_balance_key).unwrap_or(0) + amount;
-        let next_total: i128 = env.storage().persistent().get(&creator_total_key).unwrap_or(0) + amount;
-
-        env.storage().persistent().set(&creator_balance_key, &next_balance);
-        env.storage().persistent().set(&creator_total_key, &next_total);
-
-        // Record the tip for refund tracking.
-        let tip_id = Self::next_tip_id(&env);
-        let record = TipRecord {
-            id: tip_id,
-            sender: sender.clone(),
-            creator: creator.clone(),
-            token: token.clone(),
-            amount,
-            timestamp: env.ledger().timestamp(),
-            refunded: false,
-            refund_requested: false,
-        };
-        env.storage().persistent().set(&DataKey::TipRecord(tip_id), &record);
+        storage.set(&balance_key, &next_balance);
+        storage.set(&total_key, &next_total);
 
         env.events()
             .publish((symbol_short!("tip"), creator.clone(), token), (sender.clone(), amount));
@@ -267,7 +249,6 @@ impl TipJarContract {
     }
 
     /// Allows supporters to attach a note and metadata to a tip.
-    /// Returns the tip ID for use in refund requests.
     pub fn tip_with_message(
         env: Env,
         sender: Address,
@@ -293,19 +274,15 @@ impl TipJarContract {
         sender.require_auth();
 
         let token_client = token::Client::new(&env, &token);
-        let contract_address = env.current_contract_address();
-
-        token_client.transfer(&sender, &contract_address, &amount);
+        token_client.transfer(&sender, &env.current_contract_address(), &amount);
 
         let balance_key = DataKey::CreatorBalance(creator.clone(), token.clone());
         let total_key = DataKey::CreatorTotal(creator.clone(), token.clone());
         let msgs_key = DataKey::CreatorMessages(creator.clone());
+        let storage = env.storage().persistent();
 
-        let current_balance: i128 = env.storage().persistent().get(&balance_key).unwrap_or(0);
-        let current_total: i128 = env.storage().persistent().get(&total_key).unwrap_or(0);
-
-        env.storage().persistent().set(&balance_key, &(current_balance + amount));
-        env.storage().persistent().set(&total_key, &(current_total + amount));
+        storage.set(&balance_key, &(storage.get::<_, i128>(&balance_key).unwrap_or(0) + amount));
+        storage.set(&total_key, &(storage.get::<_, i128>(&total_key).unwrap_or(0) + amount));
 
         let timestamp = env.ledger().timestamp();
         let payload = TipWithMessage {
@@ -316,33 +293,16 @@ impl TipJarContract {
             metadata: metadata.clone(),
             timestamp,
         };
-        let mut messages: Vec<TipWithMessage> = env
-            .storage()
-            .persistent()
+        let mut messages: Vec<TipWithMessage> = storage
             .get(&msgs_key)
             .unwrap_or_else(|| Vec::new(&env));
         messages.push_back(payload);
-        env.storage().persistent().set(&msgs_key, &messages);
-
-        // Record the tip for refund tracking.
-        let tip_id = Self::next_tip_id(&env);
-        let record = TipRecord {
-            id: tip_id,
-            sender: sender.clone(),
-            creator: creator.clone(),
-            token: token.clone(),
-            amount,
-            timestamp,
-            refunded: false,
-            refund_requested: false,
-        };
-        env.storage().persistent().set(&DataKey::TipRecord(tip_id), &record);
+        storage.set(&msgs_key, &messages);
 
         env.events().publish(
             (symbol_short!("tip_msg"), creator.clone()),
             (sender.clone(), amount, message, metadata),
         );
-    }
 
         update_leaderboard_aggregates(&env, &sender, &creator, amount);
     }
