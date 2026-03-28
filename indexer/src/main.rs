@@ -27,7 +27,7 @@ pub struct AppState {
 #[derive(Debug, Clone)]
 struct Config {
     database_url: String,
-    rpc_url: String,
+    events_api_url: String,
     contract_id: String,
     bind_addr: SocketAddr,
     poll_interval_secs: u64,
@@ -39,8 +39,9 @@ struct Config {
 impl Config {
     fn from_env() -> Result<Self> {
         let database_url = required_env("DATABASE_URL")?;
-        let rpc_url = env::var("STELLAR_RPC_URL")
-            .unwrap_or_else(|_| "https://soroban-testnet.stellar.org".to_string());
+        let events_api_url = env::var("STELLAR_HORIZON_URL")
+            .or_else(|_| env::var("STELLAR_RPC_URL"))
+            .unwrap_or_else(|_| "https://horizon-testnet.stellar.org".to_string());
         let contract_id = required_env("CONTRACT_ID")?;
 
         let bind_addr = env::var("INDEXER_BIND").unwrap_or_else(|_| "0.0.0.0:8080".to_string());
@@ -68,7 +69,7 @@ impl Config {
 
         Ok(Self {
             database_url,
-            rpc_url,
+            events_api_url,
             contract_id,
             bind_addr,
             poll_interval_secs,
@@ -103,7 +104,7 @@ async fn main() -> Result<()> {
     let (stream_tx, _) = broadcast::channel::<IndexedEvent>(2_000);
 
     let listener = Arc::new(EventListener::new(
-        HorizonClient::new(cfg.rpc_url.clone(), cfg.page_size),
+        HorizonClient::new(cfg.events_api_url.clone(), cfg.page_size),
         cfg.contract_id.clone(),
         db_pool.clone(),
         stream_tx.clone(),

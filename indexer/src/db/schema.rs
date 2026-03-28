@@ -18,10 +18,20 @@ CREATE TABLE IF NOT EXISTS contract_events (
     topic_values JSONB NOT NULL,
     event_data JSONB NOT NULL,
     parsed_data JSONB,
+    raw_event JSONB NOT NULL,
     tx_hash TEXT,
     successful_call BOOLEAN,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+ALTER TABLE contract_events ADD COLUMN IF NOT EXISTS raw_event JSONB;
+UPDATE contract_events SET raw_event = jsonb_build_object(
+    'event_data', event_data,
+    'topic_values', topic_values,
+    'topic', topic,
+    'event_id', event_id
+) WHERE raw_event IS NULL;
+ALTER TABLE contract_events ALTER COLUMN raw_event SET NOT NULL;
 
 CREATE INDEX IF NOT EXISTS idx_contract_events_ledger ON contract_events (ledger DESC);
 CREATE INDEX IF NOT EXISTS idx_contract_events_topic ON contract_events (topic);

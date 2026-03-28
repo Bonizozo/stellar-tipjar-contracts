@@ -41,6 +41,7 @@ pub struct ApiEvent {
     pub topic_values: Value,
     pub event_data: Value,
     pub parsed_data: Value,
+    pub raw_event: Value,
     pub tx_hash: Option<String>,
     pub successful_call: Option<bool>,
     pub created_at: DateTime<Utc>,
@@ -64,7 +65,7 @@ async fn list_events(
 
     let mut qb: QueryBuilder<Postgres> = QueryBuilder::new(
         r#"SELECT event_id, contract_id, cursor, ledger, ledger_closed_at, topic, topic_values,
-                  event_data, parsed_data, tx_hash, successful_call, created_at
+                  event_data, parsed_data, raw_event, tx_hash, successful_call, created_at
            FROM contract_events WHERE 1 = 1"#,
     );
 
@@ -114,7 +115,7 @@ async fn get_event(
 ) -> Result<Json<Option<ApiEvent>>, (axum::http::StatusCode, String)> {
     let row = sqlx::query(
         r#"SELECT event_id, contract_id, cursor, ledger, ledger_closed_at, topic, topic_values,
-                  event_data, parsed_data, tx_hash, successful_call, created_at
+                  event_data, parsed_data, raw_event, tx_hash, successful_call, created_at
            FROM contract_events WHERE event_id = $1"#,
     )
     .bind(event_id)
@@ -141,14 +142,12 @@ async fn stream_events(
     State(state): State<AppState>,
 ) -> Sse<impl Stream<Item = Result<Event, Infallible>>> {
     let rx = state.stream_tx.subscribe();
-    let stream = BroadcastStream::new(rx).filter_map(|evt| async move {
-        match evt {
-            Ok(event) => {
-                let payload = serde_json::to_string(&event).ok()?;
-                Some(Ok(Event::default().event("contract_event").data(payload)))
-            }
-            Err(_) => None,
+    let stream = BroadcastStream::new(rx).filter_map(|evt| match evt {
+        Ok(event) => {
+            let payload = serde_json::to_string(&event).ok()?;
+            Some(Ok(Event::default().event("contract_event").data(payload)))
         }
+        Err(_) => None,
     });
 
     Sse::new(stream).keep_alive(
@@ -170,6 +169,7 @@ fn row_to_event(row: PgRow) -> ApiEvent {
         topic_values: row.get("topic_values"),
         event_data: row.get("event_data"),
         parsed_data: row.get("parsed_data"),
+        raw_event: row.get("raw_event"),
         tx_hash: row.get("tx_hash"),
         successful_call: row.get("successful_call"),
         created_at: row.get("created_at"),

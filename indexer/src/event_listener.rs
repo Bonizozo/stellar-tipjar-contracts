@@ -15,20 +15,20 @@ use crate::event_parser::{parse_event, ParsedEvent};
 #[serde(rename_all = "camelCase")]
 pub struct RawContractEvent {
     pub id: String,
-    #[serde(default)]
+    #[serde(default, alias = "pagingToken")]
     pub paging_token: Option<String>,
-    #[serde(default)]
+    #[serde(default, alias = "contractId")]
     pub contract_id: Option<String>,
     pub ledger: i64,
-    #[serde(default)]
+    #[serde(default, alias = "ledgerClosedAt", alias = "closed_at")]
     pub ledger_closed_at: Option<DateTime<Utc>>,
     #[serde(default)]
     pub topic: Vec<Value>,
     #[serde(default)]
     pub value: Value,
-    #[serde(default)]
+    #[serde(default, alias = "txHash", alias = "transaction_hash")]
     pub tx_hash: Option<String>,
-    #[serde(default)]
+    #[serde(default, alias = "inSuccessfulContractCall")]
     pub in_successful_contract_call: Option<bool>,
 }
 
@@ -90,6 +90,90 @@ impl HorizonClient {
         cursor: Option<&str>,
         start_ledger: Option<u64>,
     ) -> Result<EventsPage> {
+        match self
+            .get_events_horizon_rest(contract_id, cursor, start_ledger)
+            .await
+        {
+            Ok(page) => Ok(page),
+            Err(rest_err) => {
+                warn!(error = %rest_err, "horizon REST /events failed; falling back to RPC getEvents");
+                self.get_events_rpc(contract_id, cursor, start_ledger).await
+            }
+        }
+    }
+
+    async fn get_events_horizon_rest(
+        &self,
+        contract_id: &str,
+        cursor: Option<&str>,
+        start_ledger: Option<u64>,
+    ) -> Result<EventsPage> {
+        let events_url = format!("{}/events", self.rpc_url.trim_end_matches('/'));
+        let limit = self.page_size.to_string();
+        let mut query: Vec<(&str, String)> = vec![
+            ("order", "asc".to_string()),
+            ("limit", limit),
+            ("contract_ids", contract_id.to_string()),
+        ];
+        if let Some(cursor) = cursor {
+            query.push(("cursor", cursor.to_string()));
+        } else if let Some(start_ledger) = start_ledger {
+            query.push(("start_ledger", start_ledger.to_string()));
+        }
+
+        let response = self
+            .http
+            .get(&events_url)
+            .query(&query)
+            .send()
+            .await
+            .with_context(|| format!("requesting Horizon events from {events_url}"))?;
+
+        let status = response.status();
+        if !status.is_success() {
+            let body = response.text().await.unwrap_or_default();
+            return Err(anyhow!(
+                "horizon /events returned status {}: {}",
+                status,
+                body
+            ));
+        }
+
+        let payload: Value = response
+            .json()
+            .await
+            .with_context(|| format!("decoding Horizon /events response status={status}"))?;
+
+        let events = payload
+            .get("_embedded")
+            .and_then(|v| v.get("records"))
+            .and_then(|v| v.as_array())
+            .or_else(|| payload.get("events").and_then(|v| v.as_array()))
+            .ok_or_else(|| anyhow!("horizon /events payload missing records"))?
+            .iter()
+            .map(|v| serde_json::from_value::<RawContractEvent>(v.clone()))
+            .collect::<std::result::Result<Vec<_>, _>>()
+            .with_context(|| "parsing Horizon /events records")?;
+
+        let latest_ledger = payload
+            .get("latest_ledger")
+            .or_else(|| payload.get("latestLedger"))
+            .and_then(|v| v.as_u64());
+
+        let next_cursor = events.last().map(RawContractEvent::cursor);
+        Ok(EventsPage {
+            events,
+            latest_ledger,
+            next_cursor,
+        })
+    }
+
+    async fn get_events_rpc(
+        &self,
+        contract_id: &str,
+        cursor: Option<&str>,
+        start_ledger: Option<u64>,
+    ) -> Result<EventsPage> {
         let mut params = json!({
             "filters": [{
                 "type": "contract",
@@ -119,13 +203,13 @@ impl HorizonClient {
             .json(&body)
             .send()
             .await
-            .with_context(|| format!("requesting events from {}", self.rpc_url))?;
+            .with_context(|| format!("requesting RPC getEvents from {}", self.rpc_url))?;
 
         let status = response.status();
         let payload: RpcResponse<EventsResult> = response
             .json()
             .await
-            .with_context(|| format!("decoding getEvents response status={status}"))?;
+            .with_context(|| format!("decoding RPC getEvents response status={status}"))?;
 
         if let Some(err) = payload.error {
             return Err(anyhow!("rpc error {}: {}", err.code, err.message));
@@ -157,6 +241,7 @@ pub struct IndexedEvent {
     pub topic_values: Value,
     pub event_data: Value,
     pub parsed_data: Value,
+    pub raw_event: Value,
     pub tx_hash: Option<String>,
     pub successful_call: Option<bool>,
     pub indexed_at: DateTime<Utc>,
@@ -216,6 +301,7 @@ impl EventListener {
 
         loop {
             let request_cursor = cursor.clone();
+            let boot_start_ledger = self.boot_start_ledger;
             let page = retry_with_backoff(self.max_retries, || {
                 let client = self.horizon_client.clone();
                 let contract_id = self.contract_id.clone();
@@ -226,7 +312,7 @@ impl EventListener {
                             &contract_id,
                             request_cursor.as_deref(),
                             if request_cursor.is_none() {
-                                self.boot_start_ledger
+                                boot_start_ledger
                             } else {
                                 None
                             },
@@ -244,6 +330,12 @@ impl EventListener {
                     continue;
                 }
             };
+            if let Some(latest) = page.latest_ledger {
+                info!(
+                    latest_ledger = latest,
+                    "latest ledger observed from event source"
+                );
+            }
 
             if page.events.is_empty() {
                 tokio::time::sleep(self.poll_interval).await;
@@ -295,6 +387,12 @@ impl EventListener {
                     },
                 )
                 .await?;
+            if let Some(latest) = page.latest_ledger {
+                info!(
+                    latest_ledger = latest,
+                    "latest ledger observed during replay"
+                );
+            }
 
             if page.events.is_empty() {
                 break;
@@ -352,6 +450,7 @@ impl EventListener {
     }
 
     async fn persist_event(&self, event: &RawContractEvent, parsed: &ParsedEvent) -> Result<()> {
+        let raw_event = serde_json::to_value(event)?;
         let topic_values = serde_json::to_value(&event.topic)?;
         let cursor = event.cursor();
         let parsed_data = serde_json::to_value(parsed)?;
@@ -365,6 +464,7 @@ impl EventListener {
             let topic_values = topic_values.clone();
             let event_data = event.value.clone();
             let parsed_data = parsed_data.clone();
+            let raw_event = raw_event.clone();
             let tx_hash = event.tx_hash.clone();
             let successful_call = event.in_successful_contract_call;
             let ledger_closed_at = event.ledger_closed_at;
@@ -373,9 +473,9 @@ impl EventListener {
                     r#"
                     INSERT INTO contract_events (
                         contract_id, event_id, cursor, ledger, ledger_closed_at,
-                        topic, topic_values, event_data, parsed_data, tx_hash, successful_call
+                        topic, topic_values, event_data, parsed_data, raw_event, tx_hash, successful_call
                     )
-                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
                     ON CONFLICT (event_id) DO NOTHING
                     "#,
                 )
@@ -388,6 +488,7 @@ impl EventListener {
                 .bind(topic_values)
                 .bind(event_data)
                 .bind(parsed_data)
+                .bind(raw_event)
                 .bind(tx_hash)
                 .bind(successful_call)
                 .execute(&db)
@@ -418,6 +519,7 @@ impl EventListener {
             topic_values,
             event_data: event.value.clone(),
             parsed_data: serde_json::to_value(parsed)?,
+            raw_event,
             tx_hash: event.tx_hash.clone(),
             successful_call: event.in_successful_contract_call,
             indexed_at: Utc::now(),
