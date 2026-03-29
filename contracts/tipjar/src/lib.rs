@@ -27,6 +27,9 @@ pub mod governance;
 // Staking and Rewards
 pub mod staking;
 
+// Yield farming
+pub mod farming;
+
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct TipWithMessage {
@@ -192,6 +195,12 @@ pub enum DataKey {
     TipRecord(u64),
     /// Global tip counter for assigning tip IDs.
     TipCounter,
+    /// Monotonic farming pool counter.
+    FarmingPoolCounter,
+    /// Farming pool configuration and aggregate state by pool ID.
+    FarmingPool(u64),
+    /// Farming position by `(pool_id, staker)`.
+    FarmingPosition(u64, Address),
 }
 
 #[contracterror]
@@ -219,6 +228,9 @@ pub enum TipJarError {
     DexNotConfigured = 19,
     NftNotConfigured = 20,
     SwapFailed = 21,
+    FarmingPoolNotFound = 22,
+    FarmingPositionNotFound = 23,
+    FarmingLockNotExpired = 24,
 }
 
 #[contract]
@@ -232,5 +244,62 @@ impl TipJarContract {
             panic_with_error!(&env, TipJarError::AlreadyInitialized as u32);
         }
         env.storage().instance().put(&DataKey::Admin, &admin);
+    }
+
+    /// Creates a new farming pool for LP staking rewards.
+    pub fn create_farming_pool(
+        env: Env,
+        creator: Address,
+        lp_token: Address,
+        reward_token: Address,
+        reward_rate_bps: u32,
+        lock_period: u64,
+    ) -> u64 {
+        creator.require_auth();
+        farming::pool::create_pool(
+            &env,
+            &lp_token,
+            &reward_token,
+            reward_rate_bps,
+            lock_period,
+        )
+    }
+
+    /// Stakes LP tokens into a farming pool.
+    pub fn farm_stake(env: Env, staker: Address, pool_id: u64, amount: i128) {
+        staker.require_auth();
+        farming::pool::stake(&env, &staker, pool_id, amount);
+    }
+
+    /// Harvests accrued rewards from a farming pool without unstaking principal.
+    pub fn farm_harvest(env: Env, staker: Address, pool_id: u64) -> i128 {
+        staker.require_auth();
+        farming::pool::harvest(&env, &staker, pool_id)
+    }
+
+    /// Unstakes LP principal from a farming pool after lock period.
+    pub fn farm_unstake(env: Env, staker: Address, pool_id: u64, amount: i128) {
+        staker.require_auth();
+        farming::pool::unstake(&env, &staker, pool_id, amount);
+    }
+
+    /// Returns a farming pool by ID.
+    pub fn get_farming_pool(env: Env, pool_id: u64) -> Option<farming::FarmingPool> {
+        farming::pool::get_pool(&env, pool_id)
+    }
+
+    /// Returns a farming position by pool and staker.
+    pub fn get_farming_position(
+        env: Env,
+        pool_id: u64,
+        staker: Address,
+    ) -> Option<farming::FarmingPosition> {
+        farming::pool::get_position(&env, pool_id, &staker)
+    }
+
+    /// Returns configured APY basis points for a farming pool.
+    pub fn get_farming_apy_bps(env: Env, pool_id: u64) -> u32 {
+        let pool = farming::pool::get_pool_or_panic(&env, pool_id);
+        farming::rewards::calculate_apy_bps(&pool)
     }
 }
