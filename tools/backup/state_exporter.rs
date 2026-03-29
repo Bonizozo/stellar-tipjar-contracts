@@ -264,10 +264,12 @@ async fn main() -> Result<()> {
             metadata: state.metadata.clone(),
         };
 
-        let json = serde_json::to_string_pretty(&diff)?;
-        let checksum = checksum::sha256_hex(json.as_bytes());
-        // Re-embed checksum in metadata field via string replacement (simple approach).
-        let json = json.replace("\"checksum\": \"\"", &format!("\"checksum\": \"{}\"", checksum));
+        let json_for_hash = serde_json::to_string_pretty(&diff)?;
+        let checksum = checksum::sha256_hex(json_for_hash.as_bytes());
+        // Re-embed checksum: clone diff with checksum set, then re-serialise.
+        let mut diff_with_checksum = diff;
+        diff_with_checksum.metadata.checksum = checksum.clone();
+        let json = serde_json::to_string_pretty(&diff_with_checksum)?;
 
         let out_path = cli.output.unwrap_or_else(|| PathBuf::from(format!("{}.json", backup_id)));
         let (final_bytes, encrypted) = if cli.encrypt {
@@ -284,9 +286,12 @@ async fn main() -> Result<()> {
         return Ok(());
     }
 
-    // Full backup: compute checksum.
-    let json = serde_json::to_string_pretty(&state)?;
-    let checksum = checksum::sha256_hex(json.as_bytes());
+    // Full backup: checksum is computed over the payload with checksum="" (same
+    // convention used by verify_backup in the importer), then embedded.
+    // state.metadata.checksum is already "" here, so we serialise, hash, embed,
+    // then re-serialise once more so the file contains the correct digest.
+    let json_for_hash = serde_json::to_string_pretty(&state)?;
+    let checksum = checksum::sha256_hex(json_for_hash.as_bytes());
     state.metadata.checksum = checksum.clone();
     let json = serde_json::to_string_pretty(&state)?;
 

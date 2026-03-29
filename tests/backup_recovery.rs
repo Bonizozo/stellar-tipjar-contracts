@@ -228,6 +228,55 @@ fn test_backup_metadata_fields() {
     assert_eq!(state.metadata.tool_version, "0.1.0");
 }
 
+#[test]
+fn test_recovery_verify_only_accepts_valid_backup() {
+    // Simulates the --verify-only path of state-importer: load a backup from
+    // disk, verify its checksum, and confirm it passes without actually restoring.
+    let mut persistent = HashMap::new();
+    persistent.insert("CreatorBalance(GCREATOR,TOKEN)".to_string(), "9999".to_string());
+    persistent.insert("TipCounter".to_string(), "7".to_string());
+
+    let state = make_state("CRECOVERY", HashMap::new(), persistent);
+
+    // Write to a temp file (simulates what state-exporter produces).
+    let tmp = std::env::temp_dir().join(format!("tipjar_test_{}.json", state.metadata.backup_id));
+    let json = serde_json::to_string_pretty(&state).unwrap();
+    std::fs::write(&tmp, &json).unwrap();
+
+    // Read back and verify — mirrors what state-importer does before restoring.
+    let loaded_json = std::fs::read_to_string(&tmp).unwrap();
+    let loaded: ContractState = serde_json::from_str(&loaded_json).unwrap();
+
+    assert!(verify_state_checksum(&loaded), "Loaded backup should pass integrity check");
+    assert_eq!(loaded.contract_id, "CRECOVERY");
+    assert_eq!(loaded.persistent_entries["TipCounter"], "7");
+
+    std::fs::remove_file(&tmp).ok();
+}
+
+#[test]
+fn test_recovery_rejects_corrupted_backup() {
+    let state = make_state("CCORRUPT", HashMap::new(), HashMap::new());
+    let mut json: serde_json::Value = serde_json::to_value(&state).unwrap();
+
+    // Corrupt a field after the checksum was embedded.
+    json["ledger_sequence"] = serde_json::json!(99999);
+    let corrupted: ContractState = serde_json::from_value(json).unwrap();
+
+    assert!(!verify_state_checksum(&corrupted), "Corrupted backup should fail integrity check");
+}
+
+#[test]
+fn test_incremental_backup_type_flag() {
+    let base = make_state("CTEST", HashMap::new(), HashMap::new());
+    let mut meta = base.metadata.clone();
+    meta.backup_type = BackupType::Incremental;
+    meta.base_backup_id = Some(base.metadata.backup_id.clone());
+
+    assert_eq!(meta.backup_type, BackupType::Incremental);
+    assert!(meta.base_backup_id.is_some());
+}
+
 // ── Inline crypto helpers (mirrors tools/backup/crypto.rs) ───────────────────
 
 fn encrypt(plaintext: &[u8], key: &[u8; 32]) -> Result<Vec<u8>, String> {
