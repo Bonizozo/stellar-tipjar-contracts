@@ -27,6 +27,9 @@ pub mod governance;
 // Staking and Rewards
 pub mod staking;
 
+// Conditional tip execution
+pub mod conditions;
+
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct TipWithMessage {
@@ -192,6 +195,8 @@ pub enum DataKey {
     TipRecord(u64),
     /// Global tip counter for assigning tip IDs.
     TipCounter,
+    /// Off-chain oracle approval flag keyed by condition ID.
+    OffchainCondition(BytesN<32>),
 }
 
 #[contracterror]
@@ -219,6 +224,7 @@ pub enum TipJarError {
     DexNotConfigured = 19,
     NftNotConfigured = 20,
     SwapFailed = 21,
+    ConditionFailed = 22,
 }
 
 #[contract]
@@ -232,5 +238,50 @@ impl TipJarContract {
             panic_with_error!(&env, TipJarError::AlreadyInitialized as u32);
         }
         env.storage().instance().put(&DataKey::Admin, &admin);
+    }
+
+    /// Sets an off-chain condition flag that can later be referenced in
+    /// conditional tip execution.
+    pub fn set_offchain_condition(
+        env: Env,
+        oracle: Address,
+        condition_id: BytesN<32>,
+        approved: bool,
+    ) {
+        oracle.require_auth();
+        conditions::evaluator::set_offchain_approval(&env, &condition_id, approved);
+    }
+
+    /// Executes a token tip only if all provided conditions evaluate to true.
+    ///
+    /// Returns true when the transfer is executed and false when conditions fail.
+    pub fn execute_conditional_tip(
+        env: Env,
+        sender: Address,
+        creator: Address,
+        token: Address,
+        amount: i128,
+        condition_list: Vec<conditions::types::Condition>,
+    ) -> bool {
+        sender.require_auth();
+
+        if amount <= 0 {
+            panic_with_error!(&env, TipJarError::InvalidAmount);
+        }
+
+        let is_valid = conditions::evaluator::evaluate_all(&env, &condition_list);
+        if !is_valid {
+            return false;
+        }
+
+        let token_client = token::Client::new(&env, &token);
+        token_client.transfer(&sender, &creator, &amount);
+
+        env.events().publish(
+            (symbol_short!("condtip"), sender.clone()),
+            (creator.clone(), token, amount),
+        );
+
+        true
     }
 }
