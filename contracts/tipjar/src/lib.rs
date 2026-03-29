@@ -27,6 +27,9 @@ pub mod governance;
 // Staking and Rewards
 pub mod staking;
 
+// Flash loans
+pub mod flashloan;
+
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct TipWithMessage {
@@ -192,6 +195,8 @@ pub enum DataKey {
     TipRecord(u64),
     /// Global tip counter for assigning tip IDs.
     TipCounter,
+    /// Reentrancy guard for flash loan execution.
+    FlashLoanGuard,
 }
 
 #[contracterror]
@@ -219,6 +224,9 @@ pub enum TipJarError {
     DexNotConfigured = 19,
     NftNotConfigured = 20,
     SwapFailed = 21,
+    FlashLoanNotRepaid = 22,
+    FlashLoanReentrant = 23,
+    FlashLoanCallbackFailed = 24,
 }
 
 #[contract]
@@ -232,5 +240,16 @@ impl TipJarContract {
             panic_with_error!(&env, TipJarError::AlreadyInitialized as u32);
         }
         env.storage().instance().put(&DataKey::Admin, &admin);
+    }
+
+    /// Executes a flash loan and enforces repayment plus fee in a single transaction.
+    pub fn flash_loan(
+        env: Env,
+        receiver: Address,
+        token: Address,
+        amount: i128,
+        params: Bytes,
+    ) {
+        flashloan::flash_loan(&env, &receiver, &token, amount, &params);
     }
 }
