@@ -70,6 +70,9 @@ pub mod bonding_curve;
 // TWAP oracle
 pub mod twap_oracle;
 
+// Lottery system
+pub mod lottery;
+
 /// A tip record that includes an optional memo and timestamp.
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -818,6 +821,21 @@ pub enum DataKey {
     AmmLpShares(u64, Address),
     /// Fee-per-share debt snapshot keyed by (pool_id, provider).
     AmmProviderDebt(u64, Address),
+    // ── Lottery keys ─────────────────────────────────────────────────────────
+    /// Lottery round record keyed by round ID.
+    LotteryRound(u64),
+    /// Global lottery round counter.
+    LotteryRoundCounter,
+    /// Currently active lottery round ID.
+    LotteryActiveRound,
+    /// Lottery entry keyed by (round_id, tipper).
+    LotteryEntry(u64, Address),
+    /// List of tipper addresses with entries in a round.
+    LotteryRoundTippers(u64),
+    /// Winner record keyed by (round_id, position).
+    LotteryWinner(u64, u32),
+    /// List of winner addresses for a round.
+    LotteryRoundWinners(u64),
 }
 
 #[contracterror]
@@ -1065,6 +1083,25 @@ pub enum CreditError {
     AmmInsufficientLiquidity = 141,
     /// Provider has insufficient LP shares.
     AmmInsufficientShares = 142,
+    // ── Lottery errors ────────────────────────────────────────────────────────
+    /// Lottery round not found.
+    LotteryRoundNotFound = 143,
+    /// Lottery round is not in Open status.
+    LotteryRoundNotOpen = 144,
+    /// Lottery round end time has not passed yet.
+    LotteryRoundNotEnded = 145,
+    /// Lottery round is not completed; cannot claim prize.
+    LotteryRoundNotCompleted = 146,
+    /// Winner record not found for this round and position.
+    LotteryWinnerNotFound = 147,
+    /// Prize has already been claimed.
+    LotteryPrizeAlreadyClaimed = 148,
+    /// An active lottery round already exists.
+    LotteryRoundAlreadyActive = 149,
+    /// Winner count must be between 1 and MAX_WINNERS_PER_ROUND.
+    LotteryInvalidWinnerCount = 150,
+    /// Lottery round duration is invalid (end_time must be after start_time).
+    LotteryInvalidDuration = 151,
 }
 
 #[contracterror]
@@ -1948,6 +1985,9 @@ impl TipJarContract {
         env.storage().instance().set(&DataKey::Tip(TipKey::Ctr), &(tip_id + 1));
 
         Self::update_leaderboard_stats(&env, &sender, &creator, creator_amount);
+
+        // Enter tipper into active lottery round (if any)
+        lottery::entries::record_tip_entry(&env, &sender, amount);
 
         // Track which tokens this creator has received
         Self::track_creator_token(&env, &creator, &token);
@@ -8214,6 +8254,181 @@ a
     /// Get LP share value as `(token_a_per_share, token_b_per_share)` × 1_000_000.
     pub fn amm_share_value(env: Env, pool_id: u64) -> (i128, i128) {
         amm::pricing::share_value(&env, pool_id)
+    }
+
+    // ── lottery ──────────────────────────────────────────────────────────────
+
+    /// Creates a new lottery round and funds the prize pool. Admin only.
+    ///
+    /// Transfers `prize_pool` of `prize_token` from `admin` into the contract.
+    /// Only one round may be active at a time.
+    ///
+    /// - `winner_count`: number of winners (1–10).
+    /// - `min_tip_amount`: minimum tip to qualify for an entry.
+    /// - `start_time` / `end_time`: open window for entries.
+    ///
+    /// Emits `("lot_new",)` with `(round_id, prize_pool, winner_count, end_time)`.
+    pub fn lottery_create_round(
+        env: Env,
+        admin: Address,
+        prize_token: Address,
+        prize_pool: i128,
+        winner_count: u32,
+        min_tip_amount: i128,
+        start_time: u64,
+        end_time: u64,
+    ) -> u64 {
+        Self::require_not_paused(&env);
+        admin.require_auth();
+
+        // Admin check
+        let stored_admin: Address = env.storage().instance().get(&DataKey::Admin).unwrap();
+        if admin != stored_admin {
+            panic_with_error!(&env, TipJarError::Unauthorized);
+        }
+
+        if winner_count == 0 || winner_count > lottery::MAX_WINNERS_PER_ROUND {
+            panic_with_error!(&env, TipJarError::LotteryInvalidWinnerCount);
+        }
+        if prize_pool <= 0 {
+            panic_with_error!(&env, TipJarError::InvalidAmount);
+        }
+        if end_time <= start_time {
+            panic_with_error!(&env, TipJarError::LotteryInvalidDuration);
+        }
+
+        // Only one active round at a time
+        if lottery::entries::get_active_round_id(&env).is_some() {
+            panic_with_error!(&env, TipJarError::LotteryRoundAlreadyActive);
+        }
+
+        // Assign round ID
+        let round_id: u64 = env
+            .storage()
+            .persistent()
+            .get(&DataKey::LotteryRoundCounter)
+            .unwrap_or(0)
+            + 1;
+        env.storage()
+            .persistent()
+            .set(&DataKey::LotteryRoundCounter, &round_id);
+
+        // Fund prize pool
+        token::Client::new(&env, &prize_token).transfer(
+            &admin,
+            &env.current_contract_address(),
+            &prize_pool,
+        );
+
+        let round = lottery::LotteryRound {
+            id: round_id,
+            prize_token,
+            prize_pool,
+            winner_count,
+            min_tip_amount,
+            start_time,
+            end_time,
+            status: lottery::LotteryStatus::Open,
+            total_entries: 0,
+            created_at: env.ledger().timestamp(),
+            drawn_at: None,
+        };
+
+        env.storage()
+            .persistent()
+            .set(&DataKey::LotteryRound(round_id), &round);
+
+        lottery::entries::set_active_round_id(&env, Some(round_id));
+
+        env.events().publish(
+            (symbol_short!("lot_new"),),
+            (round_id, prize_pool, winner_count, end_time),
+        );
+
+        round_id
+    }
+
+    /// Draws winners for a completed lottery round. Admin only.
+    ///
+    /// Can only be called after `end_time` has passed.
+    /// Selects winners pseudo-randomly weighted by entry count.
+    ///
+    /// Emits `("lot_draw",)` with `(round_id, winner_count, prize_pool)`.
+    pub fn lottery_draw_winners(
+        env: Env,
+        admin: Address,
+        round_id: u64,
+    ) -> Vec<lottery::LotteryWinner> {
+        Self::require_not_paused(&env);
+        lottery::drawing::draw_winners(&env, &admin, round_id)
+    }
+
+    /// Claims a lottery prize for a winner.
+    ///
+    /// `position` is 1-indexed (1 = 1st place).
+    /// Transfers the prize amount to the caller.
+    ///
+    /// Emits `("lot_clm",)` with `(winner, round_id, position, prize_amount)`.
+    pub fn lottery_claim_prize(env: Env, winner: Address, round_id: u64, position: u32) {
+        Self::require_not_paused(&env);
+        lottery::prizes::claim_prize(&env, &winner, round_id, position);
+    }
+
+    /// Reclaims unclaimed prizes from a completed round back to admin.
+    ///
+    /// Returns the total amount reclaimed.
+    /// Emits `("lot_rclm",)` with `(admin, round_id, total_reclaimed)`.
+    pub fn lottery_reclaim_prizes(env: Env, admin: Address, round_id: u64) -> i128 {
+        Self::require_not_paused(&env);
+        lottery::prizes::reclaim_unclaimed_prizes(&env, &admin, round_id)
+    }
+
+    /// Returns the lottery round record for `round_id`.
+    pub fn lottery_get_round(env: Env, round_id: u64) -> Option<lottery::LotteryRound> {
+        env.storage()
+            .persistent()
+            .get(&DataKey::LotteryRound(round_id))
+    }
+
+    /// Returns the currently active lottery round ID, or `None`.
+    pub fn lottery_active_round(env: Env) -> Option<u64> {
+        lottery::entries::get_active_round_id(&env)
+    }
+
+    /// Returns the lottery entry for `(round_id, tipper)`.
+    pub fn lottery_get_entry(
+        env: Env,
+        round_id: u64,
+        tipper: Address,
+    ) -> Option<lottery::LotteryEntry> {
+        lottery::entries::get_entry(&env, round_id, &tipper)
+    }
+
+    /// Returns all tipper addresses with entries in `round_id`.
+    pub fn lottery_get_tippers(env: Env, round_id: u64) -> Vec<Address> {
+        lottery::entries::get_round_tippers(&env, round_id)
+    }
+
+    /// Returns the winner record for `(round_id, position)` (1-indexed).
+    pub fn lottery_get_winner(
+        env: Env,
+        round_id: u64,
+        position: u32,
+    ) -> Option<lottery::LotteryWinner> {
+        lottery::drawing::get_winner(&env, round_id, position)
+    }
+
+    /// Returns all winner addresses for a completed round.
+    pub fn lottery_get_winners(env: Env, round_id: u64) -> Vec<Address> {
+        lottery::drawing::get_round_winners(&env, round_id)
+    }
+
+    /// Returns the total number of lottery rounds created.
+    pub fn lottery_round_count(env: Env) -> u64 {
+        env.storage()
+            .persistent()
+            .get(&DataKey::LotteryRoundCounter)
+            .unwrap_or(0)
     }
 }
 
