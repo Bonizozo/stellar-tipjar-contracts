@@ -73,6 +73,9 @@ pub mod twap_oracle;
 // Lottery system
 pub mod lottery;
 
+// Tip aggregation protocol
+pub mod aggregation;
+
 /// A tip record that includes an optional memo and timestamp.
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -836,6 +839,19 @@ pub enum DataKey {
     LotteryWinner(u64, u32),
     /// List of winner addresses for a round.
     LotteryRoundWinners(u64),
+    // ── Aggregation keys ──────────────────────────────────────────────────────
+    /// Aggregation protocol configuration.
+    AggregationConfig,
+    /// Global aggregation batch counter.
+    AggregationBatchCounter,
+    /// Aggregation batch record keyed by batch ID.
+    AggregationBatch(u64),
+    /// Open batch ID for a (token, creator) pair.
+    AggregationOpenBatch(Address, Address),
+    /// Queued tip record keyed by (batch_id, tip_index).
+    AggregationQueuedTip(u64, u32),
+    /// List of tip indices queued by a tipper in a batch, keyed by (batch_id, tipper).
+    AggregationTipperTips(u64, Address),
 }
 
 #[contracterror]
@@ -1102,6 +1118,21 @@ pub enum CreditError {
     LotteryInvalidWinnerCount = 150,
     /// Lottery round duration is invalid (end_time must be after start_time).
     LotteryInvalidDuration = 151,
+    // ── Aggregation errors ────────────────────────────────────────────────────
+    /// Aggregation protocol is disabled.
+    AggregationDisabled = 152,
+    /// The open batch is full; wait for settlement before queuing more tips.
+    AggregationBatchFull = 153,
+    /// Aggregation batch not found.
+    AggregationBatchNotFound = 154,
+    /// Batch has already been settled or cancelled.
+    AggregationBatchAlreadySettled = 155,
+    /// Batch is not yet ready for settlement (too small and window not expired).
+    AggregationBatchNotReady = 156,
+    /// Queued tip not found.
+    AggregationTipNotFound = 157,
+    /// Queued tip has already been refunded.
+    AggregationTipAlreadyRefunded = 158,
 }
 
 #[contracterror]
@@ -8429,6 +8460,169 @@ a
             .persistent()
             .get(&DataKey::LotteryRoundCounter)
             .unwrap_or(0)
+    }
+
+    // ── tip aggregation ───────────────────────────────────────────────────────
+
+    /// Configures the aggregation protocol. Admin only.
+    ///
+    /// - `optimal_batch_size`: tip count that triggers auto-settlement (1–50).
+    /// - `min_batch_size`: minimum tips before manual settlement is allowed.
+    /// - `max_batch_size`: hard cap on tips per batch (≤ 50).
+    /// - `batch_window_seconds`: seconds after which a batch can be force-settled.
+    /// - `fee_bps`: aggregation fee in basis points (max 500 = 5%).
+    /// - `enabled`: enable or disable the aggregation protocol.
+    pub fn agg_set_config(
+        env: Env,
+        admin: Address,
+        optimal_batch_size: u32,
+        min_batch_size: u32,
+        max_batch_size: u32,
+        batch_window_seconds: u64,
+        fee_bps: u32,
+        enabled: bool,
+    ) {
+        Self::require_not_paused(&env);
+        admin.require_auth();
+        let stored_admin: Address = env.storage().instance().get(&DataKey::Admin).unwrap();
+        if admin != stored_admin {
+            panic_with_error!(&env, TipJarError::Unauthorized);
+        }
+        if optimal_batch_size == 0
+            || optimal_batch_size > aggregation::MAX_BATCH_SIZE
+            || min_batch_size == 0
+            || min_batch_size > optimal_batch_size
+            || max_batch_size < optimal_batch_size
+            || max_batch_size > aggregation::MAX_BATCH_SIZE
+        {
+            panic_with_error!(&env, TipJarError::InvalidAmount);
+        }
+        if fee_bps > 500 {
+            panic_with_error!(&env, TipJarError::FeeExceedsMaximum);
+        }
+        let config = aggregation::AggregationConfig {
+            optimal_batch_size,
+            min_batch_size,
+            max_batch_size,
+            batch_window_seconds,
+            fee_bps,
+            enabled,
+        };
+        aggregation::batch::set_config(&env, &config);
+        env.events().publish(
+            (symbol_short!("agg_cfg"),),
+            (optimal_batch_size, max_batch_size, fee_bps, enabled),
+        );
+    }
+
+    /// Returns the current aggregation configuration.
+    pub fn agg_get_config(env: Env) -> aggregation::AggregationConfig {
+        aggregation::batch::get_config(&env)
+    }
+
+    /// Queues a tip for aggregation.
+    ///
+    /// Transfers `amount` of `token` from `tipper` into the contract immediately.
+    /// The tip is held in escrow and included in the next settlement for
+    /// `(token, creator)`.
+    ///
+    /// Returns `(batch_id, tip_index)`.
+    ///
+    /// Emits `("agg_q",)` with `(tipper, creator, token, amount, batch_id, tip_index)`.
+    pub fn agg_queue_tip(
+        env: Env,
+        tipper: Address,
+        creator: Address,
+        token: Address,
+        amount: i128,
+    ) -> (u64, u32) {
+        Self::require_not_paused(&env);
+        aggregation::queue::queue_tip(&env, &tipper, &creator, &token, amount)
+    }
+
+    /// Cancels a queued tip and refunds the tipper.
+    ///
+    /// Only the original tipper may cancel. Cannot cancel after settlement.
+    ///
+    /// Emits `("agg_cncl",)` with `(tipper, batch_id, tip_index, amount)`.
+    pub fn agg_cancel_tip(env: Env, tipper: Address, batch_id: u64, tip_index: u32) {
+        Self::require_not_paused(&env);
+        aggregation::queue::cancel_queued_tip(&env, &tipper, batch_id, tip_index);
+    }
+
+    /// Settles an open aggregation batch.
+    ///
+    /// Can be called by anyone once the batch reaches the optimal size or the
+    /// time window expires. Credits the creator's balance in a single write
+    /// and collects the aggregation fee.
+    ///
+    /// Returns a [`aggregation::SettlementResult`] summary.
+    ///
+    /// Emits `("agg_setl",)` with
+    /// `(creator, token, batch_id, tip_count, creator_amount, fee_amount)`.
+    pub fn agg_settle_batch(
+        env: Env,
+        caller: Address,
+        batch_id: u64,
+    ) -> aggregation::SettlementResult {
+        Self::require_not_paused(&env);
+        aggregation::settlement::settle_batch(&env, &caller, batch_id)
+    }
+
+    /// Force-cancels an open batch and refunds all queued tips. Admin only.
+    ///
+    /// Returns the number of tips refunded.
+    ///
+    /// Emits `("agg_adm",)` with `(admin, batch_id, refunded_count)`.
+    pub fn agg_cancel_batch(env: Env, admin: Address, batch_id: u64) -> u32 {
+        Self::require_not_paused(&env);
+        aggregation::settlement::cancel_batch(&env, &admin, batch_id)
+    }
+
+    /// Returns the open batch for `(token, creator)`, or `None`.
+    pub fn agg_get_open_batch(
+        env: Env,
+        token: Address,
+        creator: Address,
+    ) -> Option<aggregation::AggregationBatch> {
+        aggregation::batch::get_open_batch(&env, &token, &creator)
+    }
+
+    /// Returns a batch record by ID, or `None`.
+    pub fn agg_get_batch(env: Env, batch_id: u64) -> Option<aggregation::AggregationBatch> {
+        aggregation::batch::get_batch(&env, batch_id)
+    }
+
+    /// Returns a queued tip record by `(batch_id, tip_index)`, or `None`.
+    pub fn agg_get_queued_tip(
+        env: Env,
+        batch_id: u64,
+        tip_index: u32,
+    ) -> Option<aggregation::QueuedTip> {
+        aggregation::queue::get_queued_tip(&env, batch_id, tip_index)
+    }
+
+    /// Returns all tip indices queued by `tipper` in `batch_id`.
+    pub fn agg_get_tipper_tips(env: Env, batch_id: u64, tipper: Address) -> Vec<u32> {
+        aggregation::queue::get_tipper_tips(&env, batch_id, &tipper)
+    }
+
+    /// Returns `true` if `batch_id` is ready for settlement.
+    pub fn agg_is_ready(env: Env, batch_id: u64) -> bool {
+        match aggregation::batch::get_batch(&env, batch_id) {
+            Some(b) => aggregation::batch::is_ready_to_settle(&env, &b),
+            None => false,
+        }
+    }
+
+    /// Returns the optimal batch size from the current configuration.
+    pub fn agg_optimal_batch_size(env: Env) -> u32 {
+        aggregation::batch::optimal_batch_size(&env)
+    }
+
+    /// Returns the total number of aggregation batches ever created.
+    pub fn agg_batch_count(env: Env) -> u64 {
+        aggregation::batch::batch_count(&env)
     }
 }
 
