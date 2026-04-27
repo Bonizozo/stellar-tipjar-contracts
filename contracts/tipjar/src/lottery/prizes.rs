@@ -12,7 +12,7 @@
 
 use soroban_sdk::{panic_with_error, token, Address, Env};
 
-use crate::{DataKey, TipJarError};
+use crate::{DataKey, LotteryError, TipJarError};
 
 use super::{drawing::get_winner, LotteryStatus, LotteryWinner, MAX_WINNERS_PER_ROUND};
 
@@ -39,15 +39,14 @@ pub fn calculate_prize_amounts(prize_pool: i128, winner_count: u32) -> [i128; 10
         }
         2 => {
             amounts[0] = prize_pool * 7_000 / 10_000;
-            amounts[1] = prize_pool - amounts[0]; // remainder to 2nd
+            amounts[1] = prize_pool - amounts[0];
         }
         3 => {
             amounts[0] = prize_pool * 6_000 / 10_000;
             amounts[1] = prize_pool * 2_500 / 10_000;
-            amounts[2] = prize_pool - amounts[0] - amounts[1]; // remainder to 3rd
+            amounts[2] = prize_pool - amounts[0] - amounts[1];
         }
         _ => {
-            // 1st place gets 50%, rest split equally
             amounts[0] = prize_pool * 5_000 / 10_000;
             let remainder = prize_pool - amounts[0];
             let per_winner = remainder / (n as i128 - 1);
@@ -56,7 +55,6 @@ pub fn calculate_prize_amounts(prize_pool: i128, winner_count: u32) -> [i128; 10
                 amounts[i] = per_winner;
                 distributed += per_winner;
             }
-            // Last winner gets the remainder to avoid rounding loss
             amounts[n - 1] = prize_pool - distributed;
         }
     }
@@ -82,24 +80,24 @@ pub fn claim_prize(env: &Env, winner: &Address, round_id: u64, position: u32) {
         .storage()
         .persistent()
         .get(&DataKey::LotteryRound(round_id))
-        .unwrap_or_else(|| panic_with_error!(env, TipJarError::LotteryRoundNotFound));
+        .unwrap_or_else(|| panic_with_error!(env, LotteryError::LotteryRoundNotFound));
 
     if round.status != LotteryStatus::Completed {
-        panic_with_error!(env, TipJarError::LotteryRoundNotCompleted);
+        panic_with_error!(env, LotteryError::LotteryRoundNotCompleted);
     }
 
     let mut winner_record: LotteryWinner = env
         .storage()
         .persistent()
         .get(&DataKey::LotteryWinner(round_id, position))
-        .unwrap_or_else(|| panic_with_error!(env, TipJarError::LotteryWinnerNotFound));
+        .unwrap_or_else(|| panic_with_error!(env, LotteryError::LotteryWinnerNotFound));
 
     if winner_record.winner != *winner {
         panic_with_error!(env, TipJarError::Unauthorized);
     }
 
     if winner_record.claimed_at.is_some() {
-        panic_with_error!(env, TipJarError::LotteryPrizeAlreadyClaimed);
+        panic_with_error!(env, LotteryError::LotteryPrizeAlreadyClaimed);
     }
 
     let prize = winner_record.prize_amount;
@@ -107,13 +105,11 @@ pub fn claim_prize(env: &Env, winner: &Address, round_id: u64, position: u32) {
         panic_with_error!(env, TipJarError::NothingToWithdraw);
     }
 
-    // Mark as claimed
     winner_record.claimed_at = Some(env.ledger().timestamp());
     env.storage()
         .persistent()
         .set(&DataKey::LotteryWinner(round_id, position), &winner_record);
 
-    // Transfer prize to winner
     token::Client::new(env, &round.prize_token).transfer(
         &env.current_contract_address(),
         winner,
@@ -138,10 +134,10 @@ pub fn reclaim_unclaimed_prizes(env: &Env, admin: &Address, round_id: u64) -> i1
         .storage()
         .persistent()
         .get(&DataKey::LotteryRound(round_id))
-        .unwrap_or_else(|| panic_with_error!(env, TipJarError::LotteryRoundNotFound));
+        .unwrap_or_else(|| panic_with_error!(env, LotteryError::LotteryRoundNotFound));
 
     if round.status != LotteryStatus::Completed {
-        panic_with_error!(env, TipJarError::LotteryRoundNotCompleted);
+        panic_with_error!(env, LotteryError::LotteryRoundNotCompleted);
     }
 
     let mut total_reclaimed: i128 = 0;

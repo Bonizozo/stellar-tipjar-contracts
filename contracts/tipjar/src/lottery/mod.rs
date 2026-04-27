@@ -7,8 +7,11 @@
 //! - Prize distribution to winners
 //! - Multiple winners per round (configurable)
 
+/// Random winner selection using a seeded LCG.
 pub mod drawing;
+/// Lottery entry recording and active-round tracking.
 pub mod entries;
+/// Prize pool calculation and winner claim/reclaim logic.
 pub mod prizes;
 
 use soroban_sdk::{contracttype, Address};

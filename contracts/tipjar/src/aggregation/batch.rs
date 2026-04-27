@@ -16,7 +16,7 @@ pub fn get_config(env: &Env) -> AggregationConfig {
     env.storage()
         .instance()
         .get(&DataKey::AggregationConfig)
-        .unwrap_or_else(AggregationConfig::default)
+        .unwrap_or_default()
 }
 
 /// Persists the aggregation configuration. Admin only (caller must verify).

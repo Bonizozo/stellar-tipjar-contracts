@@ -6,7 +6,7 @@
 
 use soroban_sdk::{panic_with_error, Address, Env};
 
-use crate::{DataKey, TipJarError};
+use crate::{DataKey, AggregationError, TipJarError};
 
 use super::{
     batch::{self, clear_open_batch, is_ready_to_settle, save_batch},
@@ -43,14 +43,14 @@ pub fn settle_batch(env: &Env, caller: &Address, batch_id: u64) -> SettlementRes
         .storage()
         .persistent()
         .get(&DataKey::AggregationBatch(batch_id))
-        .unwrap_or_else(|| panic_with_error!(env, TipJarError::AggregationBatchNotFound));
+        .unwrap_or_else(|| panic_with_error!(env, AggregationError::AggregationBatchNotFound));
 
     if agg_batch.status != BatchStatus::Open {
-        panic_with_error!(env, TipJarError::AggregationBatchAlreadySettled);
+        panic_with_error!(env, AggregationError::AggregationBatchAlreadySettled);
     }
 
     if !is_ready_to_settle(env, &agg_batch) {
-        panic_with_error!(env, TipJarError::AggregationBatchNotReady);
+        panic_with_error!(env, AggregationError::AggregationBatchNotReady);
     }
 
     // Sum all non-refunded tips
@@ -178,10 +178,10 @@ pub fn cancel_batch(env: &Env, admin: &Address, batch_id: u64) -> u32 {
         .storage()
         .persistent()
         .get(&DataKey::AggregationBatch(batch_id))
-        .unwrap_or_else(|| panic_with_error!(env, TipJarError::AggregationBatchNotFound));
+        .unwrap_or_else(|| panic_with_error!(env, AggregationError::AggregationBatchNotFound));
 
     if agg_batch.status != BatchStatus::Open {
-        panic_with_error!(env, TipJarError::AggregationBatchAlreadySettled);
+        panic_with_error!(env, AggregationError::AggregationBatchAlreadySettled);
     }
 
     let token_client = soroban_sdk::token::Client::new(env, &agg_batch.token);

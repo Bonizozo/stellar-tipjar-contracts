@@ -4,9 +4,9 @@
 //! send a qualifying tip. Each qualifying tip grants one entry; larger tips
 //! grant additional entries proportional to the tip amount.
 
-use soroban_sdk::{panic_with_error, Address, Env, Vec};
+use soroban_sdk::{Address, Env, Vec};
 
-use crate::{DataKey, TipJarError};
+use crate::DataKey;
 
 use super::{LotteryEntry, LotteryStatus, MAX_ENTRIES_PER_TIPPER, MIN_TIP_FOR_ENTRY};
 

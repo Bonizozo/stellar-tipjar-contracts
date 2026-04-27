@@ -6,7 +6,7 @@
 
 use soroban_sdk::{panic_with_error, token, Address, Env, Vec};
 
-use crate::{DataKey, TipJarError};
+use crate::{DataKey, AggregationError, TipJarError};
 
 use super::{batch, QueuedTip};
 
@@ -50,7 +50,7 @@ pub fn queue_tip(
 
     let config = batch::get_config(env);
     if !config.enabled {
-        panic_with_error!(env, TipJarError::AggregationDisabled);
+        panic_with_error!(env, AggregationError::AggregationDisabled);
     }
 
     // Get or open a batch for this (token, creator) pair
@@ -58,7 +58,7 @@ pub fn queue_tip(
         .unwrap_or_else(|| batch::open_batch(env, token, creator));
 
     if current_batch.tip_count >= config.max_batch_size {
-        panic_with_error!(env, TipJarError::AggregationBatchFull);
+        panic_with_error!(env, AggregationError::AggregationBatchFull);
     }
 
     // Transfer tokens from tipper into contract escrow immediately
@@ -121,24 +121,24 @@ pub fn cancel_queued_tip(
         .storage()
         .persistent()
         .get(&DataKey::AggregationQueuedTip(batch_id, tip_index))
-        .unwrap_or_else(|| panic_with_error!(env, TipJarError::AggregationTipNotFound));
+        .unwrap_or_else(|| panic_with_error!(env, AggregationError::AggregationTipNotFound));
 
     if queued.tipper != *tipper {
         panic_with_error!(env, TipJarError::Unauthorized);
     }
 
     if queued.refunded {
-        panic_with_error!(env, TipJarError::AggregationTipAlreadyRefunded);
+        panic_with_error!(env, AggregationError::AggregationTipAlreadyRefunded);
     }
 
     let current_batch: super::AggregationBatch = env
         .storage()
         .persistent()
         .get(&DataKey::AggregationBatch(batch_id))
-        .unwrap_or_else(|| panic_with_error!(env, TipJarError::AggregationBatchNotFound));
+        .unwrap_or_else(|| panic_with_error!(env, AggregationError::AggregationBatchNotFound));
 
     if current_batch.status == super::BatchStatus::Settled {
-        panic_with_error!(env, TipJarError::AggregationBatchAlreadySettled);
+        panic_with_error!(env, AggregationError::AggregationBatchAlreadySettled);
     }
 
     // Mark as refunded

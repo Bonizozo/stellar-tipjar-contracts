@@ -18,8 +18,11 @@
 //! target is `OPTIMAL_BATCH_SIZE` tips; batches are also auto-settled when the
 //! time window `BATCH_WINDOW_SECONDS` elapses.
 
+/// Batch lifecycle: opening, saving, and readiness checks.
 pub mod batch;
+/// Tip queuing and per-tipper cancellation.
 pub mod queue;
+/// Batch settlement and admin force-cancel.
 pub mod settlement;
 
 use soroban_sdk::{contracttype, Address};
@@ -134,9 +137,9 @@ pub struct AggregationConfig {
     pub enabled: bool,
 }
 
-impl AggregationConfig {
-    /// Returns the default configuration.
-    pub fn default() -> Self {
+impl Default for AggregationConfig {
+    /// Returns the default aggregation configuration.
+    fn default() -> Self {
         AggregationConfig {
             optimal_batch_size: OPTIMAL_BATCH_SIZE,
             min_batch_size: MIN_BATCH_SIZE,

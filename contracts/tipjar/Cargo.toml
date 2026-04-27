@@ -8,6 +8,10 @@ publish = false
 [lib]
 crate-type = ["cdylib", "rlib"]
 
+[features]
+# Enables the extended security test suite (used by the security-audit CI job).
+security-tests = []
+
 [dependencies]
 soroban-sdk = { workspace = true }
 

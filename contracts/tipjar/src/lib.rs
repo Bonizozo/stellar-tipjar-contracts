@@ -1099,7 +1099,13 @@ pub enum CreditError {
     AmmInsufficientLiquidity = 141,
     /// Provider has insufficient LP shares.
     AmmInsufficientShares = 142,
-    // ── Lottery errors ────────────────────────────────────────────────────────
+}
+
+#[contracterror]
+#[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
+#[repr(u32)]
+/// Errors for the lottery system.
+pub enum LotteryError {
     /// Lottery round not found.
     LotteryRoundNotFound = 143,
     /// Lottery round is not in Open status.
@@ -1118,7 +1124,13 @@ pub enum CreditError {
     LotteryInvalidWinnerCount = 150,
     /// Lottery round duration is invalid (end_time must be after start_time).
     LotteryInvalidDuration = 151,
-    // ── Aggregation errors ────────────────────────────────────────────────────
+}
+
+#[contracterror]
+#[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
+#[repr(u32)]
+/// Errors for the tip aggregation protocol.
+pub enum AggregationError {
     /// Aggregation protocol is disabled.
     AggregationDisabled = 152,
     /// The open batch is full; wait for settlement before queuing more tips.
@@ -8319,18 +8331,18 @@ a
         }
 
         if winner_count == 0 || winner_count > lottery::MAX_WINNERS_PER_ROUND {
-            panic_with_error!(&env, TipJarError::LotteryInvalidWinnerCount);
+            panic_with_error!(&env, LotteryError::LotteryInvalidWinnerCount);
         }
         if prize_pool <= 0 {
             panic_with_error!(&env, TipJarError::InvalidAmount);
         }
         if end_time <= start_time {
-            panic_with_error!(&env, TipJarError::LotteryInvalidDuration);
+            panic_with_error!(&env, LotteryError::LotteryInvalidDuration);
         }
 
         // Only one active round at a time
         if lottery::entries::get_active_round_id(&env).is_some() {
-            panic_with_error!(&env, TipJarError::LotteryRoundAlreadyActive);
+            panic_with_error!(&env, LotteryError::LotteryRoundAlreadyActive);
         }
 
         // Assign round ID
