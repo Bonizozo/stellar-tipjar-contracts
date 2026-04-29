@@ -64,6 +64,12 @@ pub mod options;
 // Prediction markets
 pub mod prediction_market;
 
+// Stop loss orders for automatic position closure at trigger prices.
+pub mod stop_loss;
+
+// Automated market making for providing liquidity and earning fees.
+pub mod market_making;
+
 // Tip futures contracts
 pub mod futures;
 
@@ -988,6 +994,10 @@ pub enum DataKey {
     RepToken(reputation_tokens::RepTokenKey),
     /// Composable NFT sub-keys.
     Nft(composable_nft::NftKey),
+    /// Stop loss order sub-keys.
+    StopLoss(stop_loss::StopLossKey),
+    /// Market making sub-keys.
+    MarketMaking(market_making::MarketMakingKey),
 }
 
 #[contracterror]
@@ -11334,5 +11344,221 @@ impl TipJarContract {
     /// Get composition history for an NFT.
     pub fn nft_get_history(env: Env, nft_id: u64) -> Vec<composable_nft::CompositionEvent> {
         composable_nft::get_composition_history(&env, nft_id)
+    }
+
+    // ── Stop Loss Orders (#320) ───────────────────────────────────────────────
+
+    /// Places a stop loss order, escrowing `amount` of `token`.
+    ///
+    /// `kind` selects StopLoss, StopLimit, or TrailingStop.
+    /// `current_price` seeds the trailing-stop peak (pass 0 to use `stop_price`).
+    /// Returns the new order ID.
+    pub fn sl_place_order(
+        env: Env,
+        owner: Address,
+        token: Address,
+        amount: i128,
+        stop_price: i128,
+        limit_price: i128,
+        trail_amount: i128,
+        kind: stop_loss::StopOrderKind,
+        current_price: i128,
+    ) -> u64 {
+        Self::require_not_paused(&env);
+        let whitelisted: bool = env
+            .storage()
+            .instance()
+            .get(&DataKey::TokenWhitelist(token.clone()))
+            .unwrap_or(false);
+        if !whitelisted {
+            panic_with_error!(&env, TipJarError::TokenNotWhitelisted);
+        }
+        stop_loss::place_order(
+            &env,
+            &owner,
+            &token,
+            amount,
+            stop_price,
+            limit_price,
+            trail_amount,
+            kind,
+            current_price,
+        )
+    }
+
+    /// Updates the trailing stop peak for an order given the latest market price.
+    pub fn sl_update_price(env: Env, order_id: u64, current_price: i128) {
+        stop_loss::update_price(&env, order_id, current_price);
+    }
+
+    /// Checks whether `current_price` triggers the order; marks it Triggered if so.
+    /// Returns `true` when triggered.
+    pub fn sl_check_trigger(env: Env, order_id: u64, current_price: i128) -> bool {
+        stop_loss::check_trigger(&env, order_id, current_price)
+    }
+
+    /// Executes a triggered stop loss order, returning escrowed tokens to the owner.
+    pub fn sl_execute_order(env: Env, caller: Address, order_id: u64, execution_price: i128) {
+        Self::require_not_paused(&env);
+        stop_loss::execute_order(&env, &caller, order_id, execution_price);
+    }
+
+    /// Cancels an active stop loss order and refunds escrowed tokens to the owner.
+    pub fn sl_cancel_order(env: Env, owner: Address, order_id: u64) {
+        Self::require_not_paused(&env);
+        stop_loss::cancel_order(&env, &owner, order_id);
+    }
+
+    /// Returns a stop loss order by ID.
+    pub fn sl_get_order(env: Env, order_id: u64) -> Option<stop_loss::StopOrder> {
+        stop_loss::get_order(&env, order_id)
+    }
+
+    /// Returns all stop loss order IDs owned by `owner`.
+    pub fn sl_get_owner_orders(env: Env, owner: Address) -> Vec<u64> {
+        stop_loss::get_owner_orders(&env, &owner)
+    }
+
+    /// Returns all currently active stop loss order IDs.
+    pub fn sl_get_active_orders(env: Env) -> Vec<u64> {
+        stop_loss::get_active_orders(&env)
+    }
+
+    // ── Market Making (#321) ──────────────────────────────────────────────────
+
+    /// Registers a new market maker and deposits initial inventory.
+    ///
+    /// Returns the new maker_id.
+    pub fn mm_register(
+        env: Env,
+        maker: Address,
+        base_token: Address,
+        quote_token: Address,
+        spread_bps: u32,
+        base_deposit: i128,
+        quote_deposit: i128,
+        max_trade_size: i128,
+    ) -> u64 {
+        Self::require_not_paused(&env);
+        let base_wl: bool = env
+            .storage()
+            .instance()
+            .get(&DataKey::TokenWhitelist(base_token.clone()))
+            .unwrap_or(false);
+        let quote_wl: bool = env
+            .storage()
+            .instance()
+            .get(&DataKey::TokenWhitelist(quote_token.clone()))
+            .unwrap_or(false);
+        if !base_wl || !quote_wl {
+            panic_with_error!(&env, TipJarError::TokenNotWhitelisted);
+        }
+        market_making::register_maker(
+            &env,
+            &maker,
+            &base_token,
+            &quote_token,
+            spread_bps,
+            base_deposit,
+            quote_deposit,
+            max_trade_size,
+        )
+    }
+
+    /// Returns the current bid/ask quote for a market maker at `mid_price`.
+    pub fn mm_get_quote(env: Env, maker_id: u64, mid_price: i128) -> market_making::Quote {
+        market_making::get_quote(&env, maker_id, mid_price)
+    }
+
+    /// Executes a buy trade against a market maker (taker buys base, pays quote).
+    pub fn mm_buy(
+        env: Env,
+        taker: Address,
+        maker_id: u64,
+        base_amount: i128,
+        mid_price: i128,
+        max_quote: i128,
+    ) -> market_making::TradeResult {
+        Self::require_not_paused(&env);
+        market_making::execute_buy(&env, &taker, maker_id, base_amount, mid_price, max_quote)
+    }
+
+    /// Executes a sell trade against a market maker (taker sells base, receives quote).
+    pub fn mm_sell(
+        env: Env,
+        taker: Address,
+        maker_id: u64,
+        base_amount: i128,
+        mid_price: i128,
+        min_quote: i128,
+    ) -> market_making::TradeResult {
+        Self::require_not_paused(&env);
+        market_making::execute_sell(&env, &taker, maker_id, base_amount, mid_price, min_quote)
+    }
+
+    /// Deposits additional inventory into a market maker position.
+    pub fn mm_deposit(
+        env: Env,
+        maker: Address,
+        maker_id: u64,
+        base_amount: i128,
+        quote_amount: i128,
+    ) {
+        Self::require_not_paused(&env);
+        market_making::deposit_inventory(&env, &maker, maker_id, base_amount, quote_amount);
+    }
+
+    /// Withdraws inventory and fees from a market maker position.
+    pub fn mm_withdraw(
+        env: Env,
+        maker: Address,
+        maker_id: u64,
+        base_amount: i128,
+        quote_amount: i128,
+    ) {
+        Self::require_not_paused(&env);
+        market_making::withdraw_inventory(&env, &maker, maker_id, base_amount, quote_amount);
+    }
+
+    /// Updates the spread for a market maker.
+    pub fn mm_update_spread(env: Env, maker: Address, maker_id: u64, new_spread_bps: u32) {
+        Self::require_not_paused(&env);
+        market_making::update_spread(&env, &maker, maker_id, new_spread_bps);
+    }
+
+    /// Pauses (`active=false`) or resumes (`active=true`) a market maker.
+    pub fn mm_set_status(env: Env, maker: Address, maker_id: u64, active: bool) {
+        Self::require_not_paused(&env);
+        market_making::set_maker_status(&env, &maker, maker_id, active);
+    }
+
+    /// Closes a market maker and returns all inventory + fees to the owner.
+    pub fn mm_close(env: Env, maker: Address, maker_id: u64) {
+        Self::require_not_paused(&env);
+        market_making::close_maker(&env, &maker, maker_id);
+    }
+
+    /// Returns a market maker by ID.
+    pub fn mm_get_maker(env: Env, maker_id: u64) -> Option<market_making::MarketMaker> {
+        market_making::get_maker(&env, maker_id)
+    }
+
+    /// Returns all maker IDs owned by `maker`.
+    pub fn mm_get_owner_makers(env: Env, maker: Address) -> Vec<u64> {
+        market_making::get_owner_makers(&env, &maker)
+    }
+
+    /// Returns all active maker IDs.
+    pub fn mm_get_active_makers(env: Env) -> Vec<u64> {
+        market_making::get_active_makers(&env)
+    }
+
+    /// Returns maker IDs for a specific token pair.
+    pub fn mm_get_pair_makers(
+        env: Env,
+        base_token: Address,
+        quote_token: Address,
+    ) -> Vec<u64> {
+        market_making::get_pair_makers(&env, &base_token, &quote_token)
     }
 }
