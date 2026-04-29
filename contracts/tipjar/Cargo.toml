@@ -111,3 +111,7 @@ path = "tests/plasma_tests.rs"
 name = "identity_credentials_tests"
 path = "tests/identity_credentials_tests.rs"
 
+[[test]]
+name = "strategy_tests"
+path = "tests/strategy_tests.rs"
+

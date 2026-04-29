@@ -129,6 +129,9 @@ pub mod reputation_tokens;
 // Composable NFTs for tip receipts
 pub mod composable_nft;
 
+// Automated strategy execution for tip investments and yield optimization
+pub mod strategy;
+
 /// A tip record that includes an optional memo and timestamp.
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
