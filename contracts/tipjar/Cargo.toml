@@ -123,3 +123,11 @@ path = "tests/rental_tests.rs"
 name = "portfolio_rebalancing_tests"
 path = "tests/portfolio_rebalancing_tests.rs"
 
+[[test]]
+name = "stop_loss_tests"
+path = "tests/stop_loss_tests.rs"
+
+[[test]]
+name = "market_making_tests"
+path = "tests/market_making_tests.rs"
+
