@@ -132,6 +132,12 @@ pub mod composable_nft;
 // Automated strategy execution for tip investments and yield optimization
 pub mod strategy;
 
+// Tip rental: temporary access to tip-gated content
+pub mod rental;
+
+// Portfolio rebalancing: diversified tip investment management
+pub mod portfolio;
+
 /// A tip record that includes an optional memo and timestamp.
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
