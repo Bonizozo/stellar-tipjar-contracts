@@ -1,5 +1,5 @@
 /// Security utilities and guards for the TipJar contract.
-use soroban_sdk::{Env, Symbol};
+use soroban_sdk::Env;
 
 /// Reentrancy guard key
 pub const REENTRANCY_LOCK_KEY: &str = "reentrancy_lock";
@@ -11,6 +11,7 @@ pub const MAX_TIP_AMOUNT: i128 = 10_000_000_000_000_000;
 pub const MAX_BATCH_SIZE: u32 = 100;
 
 /// Reentrancy guard data key
+#[soroban_sdk::contracttype]
 #[derive(Clone)]
 pub enum SecurityKey {
     ReentrancyLock,

@@ -129,12 +129,17 @@ pub fn place_order(
         .instance()
         .get(&crate::DataKey::StopLoss(StopLossKey::Counter))
         .unwrap_or(0u64);
-    env.storage()
-        .instance()
-        .set(&crate::DataKey::StopLoss(StopLossKey::Counter), &(order_id + 1));
+    env.storage().instance().set(
+        &crate::DataKey::StopLoss(StopLossKey::Counter),
+        &(order_id + 1),
+    );
 
     let now = env.ledger().timestamp();
-    let peak = if current_price > 0 { current_price } else { stop_price };
+    let peak = if current_price > 0 {
+        current_price
+    } else {
+        stop_price
+    };
 
     let order = StopOrder {
         order_id,
@@ -152,9 +157,10 @@ pub fn place_order(
         executed_at: 0,
     };
 
-    env.storage()
-        .persistent()
-        .set(&crate::DataKey::StopLoss(StopLossKey::Order(order_id)), &order);
+    env.storage().persistent().set(
+        &crate::DataKey::StopLoss(StopLossKey::Order(order_id)),
+        &order,
+    );
 
     _add_owner_order(env, owner, order_id);
     _add_active_order(env, order_id);
@@ -164,7 +170,14 @@ pub fn place_order(
 
     env.events().publish(
         (symbol_short!("sl_place"),),
-        (order_id, owner.clone(), token.clone(), amount, stop_price, kind),
+        (
+            order_id,
+            owner.clone(),
+            token.clone(),
+            amount,
+            stop_price,
+            kind,
+        ),
     );
 
     order_id
@@ -250,17 +263,16 @@ pub fn execute_order(env: &Env, caller: &Address, order_id: u64, execution_price
     }
 
     // For stop-limit, verify execution price meets the limit
-    if matches!(order.kind, StopOrderKind::StopLimit) {
-        if execution_price < order.limit_price {
-            panic_with_error!(env, StopLossError::LimitPriceNotMet);
-        }
+    if matches!(order.kind, StopOrderKind::StopLimit) && execution_price < order.limit_price {
+        panic_with_error!(env, StopLossError::LimitPriceNotMet);
     }
 
     order.status = StopOrderStatus::Executed;
     order.executed_at = env.ledger().timestamp();
-    env.storage()
-        .persistent()
-        .set(&crate::DataKey::StopLoss(StopLossKey::Order(order_id)), &order);
+    env.storage().persistent().set(
+        &crate::DataKey::StopLoss(StopLossKey::Order(order_id)),
+        &order,
+    );
 
     _remove_active_order(env, order_id);
 
@@ -294,9 +306,10 @@ pub fn cancel_order(env: &Env, owner: &Address, order_id: u64) {
     }
 
     order.status = StopOrderStatus::Cancelled;
-    env.storage()
-        .persistent()
-        .set(&crate::DataKey::StopLoss(StopLossKey::Order(order_id)), &order);
+    env.storage().persistent().set(
+        &crate::DataKey::StopLoss(StopLossKey::Order(order_id)),
+        &order,
+    );
 
     _remove_active_order(env, order_id);
 
@@ -322,7 +335,9 @@ pub fn get_order(env: &Env, order_id: u64) -> Option<StopOrder> {
 pub fn get_owner_orders(env: &Env, owner: &Address) -> Vec<u64> {
     env.storage()
         .persistent()
-        .get(&crate::DataKey::StopLoss(StopLossKey::OwnerOrders(owner.clone())))
+        .get(&crate::DataKey::StopLoss(StopLossKey::OwnerOrders(
+            owner.clone(),
+        )))
         .unwrap_or_else(|| Vec::new(env))
 }
 
@@ -347,9 +362,11 @@ fn _add_owner_order(env: &Env, owner: &Address, order_id: u64) {
     let mut orders: Vec<u64> = env
         .storage()
         .persistent()
-        .get(&crate::DataKey::StopLoss(StopLossKey::OwnerOrders(owner.clone())))
+        .get(&crate::DataKey::StopLoss(StopLossKey::OwnerOrders(
+            owner.clone(),
+        )))
         .unwrap_or_else(|| Vec::new(env));
-    if !orders.contains(&order_id) {
+    if !orders.contains(order_id) {
         orders.push_back(order_id);
         env.storage().persistent().set(
             &crate::DataKey::StopLoss(StopLossKey::OwnerOrders(owner.clone())),
@@ -364,11 +381,12 @@ fn _add_active_order(env: &Env, order_id: u64) {
         .persistent()
         .get(&crate::DataKey::StopLoss(StopLossKey::ActiveOrders))
         .unwrap_or_else(|| Vec::new(env));
-    if !orders.contains(&order_id) {
+    if !orders.contains(order_id) {
         orders.push_back(order_id);
-        env.storage()
-            .persistent()
-            .set(&crate::DataKey::StopLoss(StopLossKey::ActiveOrders), &orders);
+        env.storage().persistent().set(
+            &crate::DataKey::StopLoss(StopLossKey::ActiveOrders),
+            &orders,
+        );
     }
 }
 
@@ -384,7 +402,8 @@ fn _remove_active_order(env: &Env, order_id: u64) {
             remaining.push_back(id);
         }
     }
-    env.storage()
-        .persistent()
-        .set(&crate::DataKey::StopLoss(StopLossKey::ActiveOrders), &remaining);
+    env.storage().persistent().set(
+        &crate::DataKey::StopLoss(StopLossKey::ActiveOrders),
+        &remaining,
+    );
 }

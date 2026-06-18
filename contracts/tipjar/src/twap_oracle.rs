@@ -186,11 +186,7 @@ fn collect_window(env: &Env, oracle: &TwapOracle, window_seconds: u64) -> Vec<Ob
         Some(o) => o,
         None => return result,
     };
-    let cutoff = if newest_obs.timestamp > window_seconds {
-        newest_obs.timestamp - window_seconds
-    } else {
-        0
-    };
+    let cutoff = newest_obs.timestamp.saturating_sub(window_seconds);
 
     // Collect into a temporary buffer (newest → oldest), then reverse
     let mut tmp: Vec<Observation> = Vec::new(env);
@@ -233,10 +229,10 @@ pub fn create_oracle(
 ) -> u64 {
     creator.require_auth();
 
-    if window_seconds < MIN_WINDOW_SECONDS || window_seconds > MAX_WINDOW_SECONDS {
+    if !(MIN_WINDOW_SECONDS..=MAX_WINDOW_SECONDS).contains(&window_seconds) {
         panic_with_error!(env, TipJarError::TwapInvalidWindow);
     }
-    if max_observations < MIN_OBSERVATIONS || max_observations > MAX_OBSERVATIONS {
+    if !(MIN_OBSERVATIONS..=MAX_OBSERVATIONS).contains(&max_observations) {
         panic_with_error!(env, TipJarError::TwapInvalidParams);
     }
     if initial_price <= 0 {
@@ -464,7 +460,7 @@ pub fn update_config(
     if oracle.updater != *updater {
         panic_with_error!(env, TipJarError::Unauthorized);
     }
-    if new_window_seconds < MIN_WINDOW_SECONDS || new_window_seconds > MAX_WINDOW_SECONDS {
+    if !(MIN_WINDOW_SECONDS..=MAX_WINDOW_SECONDS).contains(&new_window_seconds) {
         panic_with_error!(env, TipJarError::TwapInvalidWindow);
     }
 

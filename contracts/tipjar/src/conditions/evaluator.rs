@@ -47,8 +47,8 @@ pub fn evaluate_one(env: &Env, condition: &Condition) -> bool {
 mod tests {
     extern crate std;
 
-    use soroban_sdk::testutils::{Address as _, Ledger};
-    use soroban_sdk::{Address, BytesN, Env, Vec};
+    use soroban_sdk::testutils::Ledger;
+    use soroban_sdk::{BytesN, Env, Vec};
 
     use super::{evaluate_all, evaluate_one, set_offchain_approval};
     use crate::conditions::types::Condition;
@@ -87,25 +87,28 @@ mod tests {
     #[test]
     fn evaluates_offchain_approval() {
         let env = Env::default();
+        let contract_id = env.register(crate::TipJarContract, ());
         let condition_id = BytesN::from_array(&env, &[7; 32]);
 
-        assert!(!evaluate_one(
-            &env,
-            &Condition::OffchainApproved(condition_id.clone())
-        ));
+        env.as_contract(&contract_id, || {
+            assert!(!evaluate_one(
+                &env,
+                &Condition::OffchainApproved(condition_id.clone())
+            ));
 
-        set_offchain_approval(&env, &condition_id, true);
+            set_offchain_approval(&env, &condition_id, true);
 
-        assert!(evaluate_one(
-            &env,
-            &Condition::OffchainApproved(condition_id)
-        ));
+            assert!(evaluate_one(
+                &env,
+                &Condition::OffchainApproved(condition_id.clone())
+            ));
+        });
     }
 
     #[test]
     fn supports_condition_combinations() {
         let env = Env::default();
-        let _unused = Address::generate(&env);
+        let contract_id = env.register(crate::TipJarContract, ());
 
         env.ledger().with_mut(|li| {
             li.sequence_number = 500;
@@ -113,14 +116,17 @@ mod tests {
         });
 
         let condition_id = BytesN::from_array(&env, &[9; 32]);
-        set_offchain_approval(&env, &condition_id, true);
 
-        let mut conditions = Vec::new(&env);
-        conditions.push_back(Condition::Always);
-        conditions.push_back(Condition::MinLedger(500));
-        conditions.push_back(Condition::TimeBefore(5_100));
-        conditions.push_back(Condition::OffchainApproved(condition_id));
+        env.as_contract(&contract_id, || {
+            set_offchain_approval(&env, &condition_id, true);
 
-        assert!(evaluate_all(&env, &conditions));
+            let mut conditions = Vec::new(&env);
+            conditions.push_back(Condition::Always);
+            conditions.push_back(Condition::MinLedger(500));
+            conditions.push_back(Condition::TimeBefore(5_100));
+            conditions.push_back(Condition::OffchainApproved(condition_id.clone()));
+
+            assert!(evaluate_all(&env, &conditions));
+        });
     }
 }

@@ -211,20 +211,28 @@ pub fn record_tip_sent(env: &Env, account: &Address, amount: i128) {
     rep.total_tipped += amount;
     rep.last_updated = now;
 
-    push_history(env, account, RepHistoryEntry {
-        delta: gain,
-        score_after: rep.score,
-        reason: RepReason::TipSent,
-        timestamp: now,
-    });
+    push_history(
+        env,
+        account,
+        RepHistoryEntry {
+            delta: gain,
+            score_after: rep.score,
+            reason: RepReason::TipSent,
+            timestamp: now,
+        },
+    );
 
     if streak_updated {
-        push_history(env, account, RepHistoryEntry {
-            delta: 0,
-            score_after: rep.score,
-            reason: RepReason::StreakBonus,
-            timestamp: now,
-        });
+        push_history(
+            env,
+            account,
+            RepHistoryEntry {
+                delta: 0,
+                score_after: rep.score,
+                reason: RepReason::StreakBonus,
+                timestamp: now,
+            },
+        );
     }
 
     save_score(env, &rep);
@@ -244,12 +252,16 @@ pub fn record_tip_received(env: &Env, account: &Address, amount: i128) {
     rep.total_received += amount;
     rep.last_updated = now;
 
-    push_history(env, account, RepHistoryEntry {
-        delta: gain,
-        score_after: rep.score,
-        reason: RepReason::TipReceived,
-        timestamp: now,
-    });
+    push_history(
+        env,
+        account,
+        RepHistoryEntry {
+            delta: gain,
+            score_after: rep.score,
+            reason: RepReason::TipReceived,
+            timestamp: now,
+        },
+    );
 
     save_score(env, &rep);
 }
@@ -270,12 +282,16 @@ pub fn trigger_decay(env: &Env, account: &Address) {
     rep.last_updated = now;
 
     let delta = rep.score - old_score; // negative
-    push_history(env, account, RepHistoryEntry {
-        delta,
-        score_after: rep.score,
-        reason: RepReason::Decay,
-        timestamp: now,
-    });
+    push_history(
+        env,
+        account,
+        RepHistoryEntry {
+            delta,
+            score_after: rep.score,
+            reason: RepReason::Decay,
+            timestamp: now,
+        },
+    );
 
     save_score(env, &rep);
 }

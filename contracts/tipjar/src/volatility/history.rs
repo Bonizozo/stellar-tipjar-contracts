@@ -19,7 +19,7 @@ pub fn get_recent_snapshots(env: &Env, index_id: u64, limit: u32) -> Vec<Volatil
     for i in 0..count {
         let seq = total - 1 - i;
         if let Some(snap) = get_snapshot(env, index_id, seq) {
-            result.push_back(snap);
+            result.push_back(snap.clone());
         }
     }
 
@@ -58,7 +58,7 @@ pub fn get_snapshots_in_range(
         seq -= 1;
         if let Some(snap) = get_snapshot(env, index_id, seq) {
             if snap.timestamp >= start_ts && snap.timestamp <= end_ts {
-                result.push_back(snap);
+                result.push_back(snap.clone());
                 collected += 1;
             }
             // Once we go below start_ts we can stop

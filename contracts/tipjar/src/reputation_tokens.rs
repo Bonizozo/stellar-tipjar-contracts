@@ -81,30 +81,40 @@ pub fn mint(env: &Env, account: &Address, amount: i128) {
     token.total_minted += gain;
     token.last_updated = now;
 
-    push_history(env, account, RepTokenHistory {
-        delta: gain,
-        score_after: token.score,
-        timestamp: now,
-        is_decay: false,
-    });
+    push_history(
+        env,
+        account,
+        RepTokenHistory {
+            delta: gain,
+            score_after: token.score,
+            timestamp: now,
+            is_decay: false,
+        },
+    );
 
     if old_score != token.score - gain {
         let decay_delta = (token.score - gain) - old_score;
         if decay_delta != 0 {
-            push_history(env, account, RepTokenHistory {
-                delta: decay_delta,
-                score_after: token.score - gain,
-                timestamp: now,
-                is_decay: true,
-            });
+            push_history(
+                env,
+                account,
+                RepTokenHistory {
+                    delta: decay_delta,
+                    score_after: token.score - gain,
+                    timestamp: now,
+                    is_decay: true,
+                },
+            );
             token.total_decayed += decay_delta.abs();
         }
     }
 
     save_token(env, &token);
 
-    env.events()
-        .publish((symbol_short!("rep_mint"),), (account.clone(), gain, token.score));
+    env.events().publish(
+        (symbol_short!("rep_mint"),),
+        (account.clone(), gain, token.score),
+    );
 }
 
 /// Trigger explicit decay for an account.
@@ -123,17 +133,23 @@ pub fn decay(env: &Env, account: &Address) {
     token.total_decayed += delta.abs();
     token.last_updated = now;
 
-    push_history(env, account, RepTokenHistory {
-        delta,
-        score_after: token.score,
-        timestamp: now,
-        is_decay: true,
-    });
+    push_history(
+        env,
+        account,
+        RepTokenHistory {
+            delta,
+            score_after: token.score,
+            timestamp: now,
+            is_decay: true,
+        },
+    );
 
     save_token(env, &token);
 
-    env.events()
-        .publish((symbol_short!("rep_dcy"),), (account.clone(), delta, token.score));
+    env.events().publish(
+        (symbol_short!("rep_dcy"),),
+        (account.clone(), delta, token.score),
+    );
 }
 
 /// Get the current reputation score for an account.
@@ -174,9 +190,10 @@ fn load_token(env: &Env, account: &Address, now: u64) -> ReputationToken {
 }
 
 fn save_token(env: &Env, token: &ReputationToken) {
-    env.storage()
-        .persistent()
-        .set(&DataKey::RepToken(RepTokenKey::Token(token.owner.clone())), token);
+    env.storage().persistent().set(
+        &DataKey::RepToken(RepTokenKey::Token(token.owner.clone())),
+        token,
+    );
 }
 
 fn push_history(env: &Env, account: &Address, entry: RepTokenHistory) {
@@ -193,7 +210,8 @@ fn push_history(env: &Env, account: &Address, entry: RepTokenHistory) {
         hist = trimmed;
     }
     hist.push_back(entry);
-    env.storage()
-        .persistent()
-        .set(&DataKey::RepToken(RepTokenKey::History(account.clone())), &hist);
+    env.storage().persistent().set(
+        &DataKey::RepToken(RepTokenKey::History(account.clone())),
+        &hist,
+    );
 }

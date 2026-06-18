@@ -136,9 +136,7 @@ pub fn init_options(env: &Env) {
         .persistent()
         .set(&DataKey::PricingParams, &params);
 
-    env.storage()
-        .instance()
-        .set(&DataKey::Option(OptionKey::OptionCounter), &0u64);
+    env.storage().instance().set(&DataKey::OptionCounter, &0u64);
 }
 
 /// Get pricing parameters
@@ -225,7 +223,7 @@ pub fn add_written_option(env: &Env, writer: &Address, option_id: u64) {
         .get(&DataKey::WrittenOptions(writer.clone()))
         .unwrap_or_else(|| soroban_sdk::Vec::new(env));
 
-    if !options.contains(&option_id) {
+    if !options.contains(option_id) {
         options.push_back(option_id);
         env.storage()
             .persistent()
@@ -241,7 +239,7 @@ pub fn add_held_option(env: &Env, holder: &Address, option_id: u64) {
         .get(&DataKey::HeldOptions(holder.clone()))
         .unwrap_or_else(|| soroban_sdk::Vec::new(env));
 
-    if !options.contains(&option_id) {
+    if !options.contains(option_id) {
         options.push_back(option_id);
         env.storage()
             .persistent()
@@ -257,7 +255,7 @@ pub fn remove_held_option(env: &Env, holder: &Address, option_id: u64) {
         .get(&DataKey::HeldOptions(holder.clone()))
         .unwrap_or_else(|| soroban_sdk::Vec::new(env));
 
-    if let Some(index) = options.iter().position(|&id| id == option_id) {
+    if let Some(index) = options.iter().position(|id| id == option_id) {
         options.remove(index as u32);
         env.storage()
             .persistent()
@@ -273,7 +271,7 @@ pub fn add_active_option(env: &Env, option_id: u64) {
         .get(&DataKey::ActiveOptions)
         .unwrap_or_else(|| soroban_sdk::Vec::new(env));
 
-    if !options.contains(&option_id) {
+    if !options.contains(option_id) {
         options.push_back(option_id);
         env.storage()
             .persistent()
@@ -289,7 +287,7 @@ pub fn remove_active_option(env: &Env, option_id: u64) {
         .get(&DataKey::ActiveOptions)
         .unwrap_or_else(|| soroban_sdk::Vec::new(env));
 
-    if let Some(index) = options.iter().position(|&id| id == option_id) {
+    if let Some(index) = options.iter().position(|id| id == option_id) {
         options.remove(index as u32);
         env.storage()
             .persistent()

@@ -38,6 +38,7 @@ pub struct WithdrawEvent {
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum EventType {
+    None,
     Tip,
     TipWithMessage,
     TipLocked,
@@ -52,7 +53,7 @@ pub enum EventType {
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct EventFilter {
-    pub event_type: Option<EventType>,
+    pub event_type: EventType,
     pub sender: Option<Address>,
     pub creator: Option<Address>,
     pub token: Option<Address>,
@@ -180,11 +181,11 @@ pub fn query_events(env: &Env, query: &EventQuery) -> Vec<TipEvent> {
 pub fn get_events_by_creator(
     env: &Env,
     creator: &Address,
-    from_id: u64,
+    _from_id: u64,
     limit: u32,
 ) -> Vec<TipEvent> {
     let filter = EventFilter {
-        event_type: None,
+        event_type: EventType::None,
         sender: None,
         creator: Some(creator.clone()),
         token: None,
@@ -207,7 +208,7 @@ pub fn get_events_by_creator(
 /// Get events by time range
 pub fn get_events_by_timerange(env: &Env, start: u64, end: u64, limit: u32) -> Vec<TipEvent> {
     let filter = EventFilter {
-        event_type: None,
+        event_type: EventType::None,
         sender: None,
         creator: None,
         token: None,
@@ -230,7 +231,7 @@ pub fn get_events_by_timerange(env: &Env, start: u64, end: u64, limit: u32) -> V
 /// Get events by sender
 pub fn get_events_by_sender(env: &Env, sender: &Address, limit: u32) -> Vec<TipEvent> {
     let filter = EventFilter {
-        event_type: None,
+        event_type: EventType::None,
         sender: Some(sender.clone()),
         creator: None,
         token: None,
@@ -253,7 +254,7 @@ pub fn get_events_by_sender(env: &Env, sender: &Address, limit: u32) -> Vec<TipE
 /// Get events by token
 pub fn get_events_by_token(env: &Env, token: &Address, limit: u32) -> Vec<TipEvent> {
     let filter = EventFilter {
-        event_type: None,
+        event_type: EventType::None,
         sender: None,
         creator: None,
         token: Some(token.clone()),

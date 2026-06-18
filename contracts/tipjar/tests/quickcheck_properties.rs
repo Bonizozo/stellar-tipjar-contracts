@@ -4,7 +4,7 @@ use tipjar::{TipJarContract, TipJarContractClient};
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
-fn setup() -> (Env, TipJarContractClient, Address, Address) {
+fn setup() -> (Env, TipJarContractClient<'static>, Address, Address) {
     let env = Env::default();
     env.mock_all_auths();
 
@@ -33,7 +33,7 @@ fn qc_tip_amount_conservation() {
         }
         let amount = amount as i128;
 
-        let (env, client, token, token_admin) = setup();
+        let (env, client, token, _token_admin) = setup();
         let sender = Address::generate(&env);
         let creator = Address::generate(&env);
 
@@ -56,16 +56,16 @@ fn qc_withdraw_clears_balance() {
         }
         let amount = amount as i128;
 
-        let (env, client, token, token_admin) = setup();
+        let (env, client, token, _token_admin) = setup();
         let sender = Address::generate(&env);
         let creator = Address::generate(&env);
 
         token::StellarAssetClient::new(&env, &token).mint(&sender, &amount);
         client.tip(&sender, &creator, &token, &amount);
 
-        let balance_before = client.get_balance(&creator, &token);
+        let balance_before = client.get_withdrawable_balance(&creator, &token);
         client.withdraw(&creator, &token);
-        let balance_after = client.get_balance(&creator, &token);
+        let balance_after = client.get_withdrawable_balance(&creator, &token);
 
         TestResult::from_bool(balance_before == amount && balance_after == 0)
     }
@@ -79,7 +79,7 @@ fn qc_total_tips_monotonic() {
             return TestResult::discard();
         }
 
-        let (env, client, token, token_admin) = setup();
+        let (env, client, token, _token_admin) = setup();
         let sender = Address::generate(&env);
         let creator = Address::generate(&env);
 

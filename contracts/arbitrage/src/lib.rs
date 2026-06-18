@@ -53,13 +53,7 @@ pub struct ArbitrageContract;
 
 #[contractimpl]
 impl ArbitrageContract {
-    pub fn update_price(
-        env: Env,
-        caller: Address,
-        market_id: Symbol,
-        token: Address,
-        price: i128,
-    ) {
+    pub fn update_price(env: Env, caller: Address, market_id: Symbol, token: Address, price: i128) {
         caller.require_auth();
         if price <= 0 {
             panic_with_error!(&env, ArbitrageError::InvalidAmount);
@@ -279,7 +273,8 @@ mod tests {
         client.update_price(&feeder, &buy_market, &token, &1000i128);
         client.update_price(&feeder, &sell_market, &token, &1200i128);
 
-        let profit = client.execute_arbitrage(&executor, &token, &buy_market, &sell_market, &100i128);
+        let profit =
+            client.execute_arbitrage(&executor, &token, &buy_market, &sell_market, &100i128);
         assert!(profit > 0);
 
         let records = client.get_performance(&executor);

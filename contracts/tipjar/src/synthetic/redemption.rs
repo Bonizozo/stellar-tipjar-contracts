@@ -7,13 +7,7 @@ use super::events::emit_synthetic_tokens_redeemed;
 use super::oracle::get_oracle_price;
 use super::supply::{update_collateral, update_supply};
 use super::types::SyntheticAsset;
-use crate::{
-    AuctionError, AuctionKey, BridgeKey, CircuitBreakerKey, CoreError, CreditError, DataKey,
-    DelegationKey, DisputeKey, FeatureError, FeeKey, InsuranceKey, LimitKey, LockedTipKey,
-    MatchingKey, MilestoneKey, MultiSigKey, OptionKey, OtherError, PrivateTipKey, RoleKey,
-    SnapshotKey, StatsKey, StreamError, StreamKey, SyntheticKey, SystemError, TipJarError,
-    VestingError, VestingKey,
-};
+use crate::{CoreError, CreditError, DataKey, SyntheticKey, TipJarError};
 use soroban_sdk::{token, Address, Env};
 
 /// Calculates redemption value for a token amount
@@ -38,7 +32,7 @@ pub fn calculate_redemption_value(
 ) -> Result<i128, TipJarError> {
     // Validate amount is positive
     if amount <= 0 {
-        return Err(CoreError::InvalidAmount);
+        return Err(CoreError::InvalidAmount.into());
     }
 
     // Get current oracle price
@@ -73,7 +67,7 @@ pub fn redeem(
 ) -> Result<i128, TipJarError> {
     // Validate amount is positive
     if amount <= 0 {
-        return Err(CoreError::InvalidAmount);
+        return Err(CoreError::InvalidAmount.into());
     }
 
     // Retrieve the synthetic asset
@@ -89,7 +83,7 @@ pub fn redeem(
     let current_balance: i128 = env.storage().persistent().get(&balance_key).unwrap_or(0);
 
     if current_balance < amount {
-        return Err(CoreError::InsufficientBalance);
+        return Err(CoreError::InsufficientBalance.into());
     }
 
     // Calculate redemption value
@@ -105,7 +99,7 @@ pub fn redeem(
         .unwrap_or(0);
 
     if tip_pool_balance < redemption_value {
-        return Err(CreditError::InsufficientPoolBalance);
+        return Err(CreditError::InsufficientPoolBalance.into());
     }
 
     // Burn synthetic tokens from holder (update SyntheticBalance storage)

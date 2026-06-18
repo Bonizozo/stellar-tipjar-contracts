@@ -17,6 +17,7 @@
 //! A request is only valid when `request.nonce == stored_nonce`, after which
 //! the stored nonce is incremented.
 
+use soroban_sdk::xdr::ToXdr;
 use soroban_sdk::{contracttype, symbol_short, Address, Bytes, BytesN, Env, String};
 
 use crate::DataKey;
@@ -169,12 +170,12 @@ pub fn canonical_hash(env: &Env, req: &MetaTipRequest) -> BytesN<32> {
     let mut payload = Bytes::new(env);
 
     // Domain separator
-    payload.extend_from_array(&[b'M', b'E', b'T', b'A', b'T', b'I', b'P']);
+    payload.extend_from_array(b"METATIP");
 
     // Addresses as XDR bytes
-    payload.append(&req.from.to_xdr(env));
-    payload.append(&req.to.to_xdr(env));
-    payload.append(&req.token.to_xdr(env));
+    payload.append(&req.from.clone().to_xdr(env));
+    payload.append(&req.to.clone().to_xdr(env));
+    payload.append(&req.token.clone().to_xdr(env));
 
     // amount as 16-byte big-endian i128
     payload.extend_from_array(&req.amount.to_be_bytes());
@@ -185,7 +186,7 @@ pub fn canonical_hash(env: &Env, req: &MetaTipRequest) -> BytesN<32> {
     // valid_until as 8-byte big-endian u64
     payload.extend_from_array(&req.valid_until.to_be_bytes());
 
-    env.crypto().sha256(&payload)
+    env.crypto().sha256(&payload).to_bytes()
 }
 
 // ── Core verification ────────────────────────────────────────────────────────
@@ -213,7 +214,7 @@ pub fn verify(env: &Env, relayer: &Address, req: &MetaTipRequest) -> BytesN<32> 
 
     // Ed25519 signature verification
     env.crypto()
-        .ed25519_verify(&req.public_key, &hash.into(), &req.signature);
+        .ed25519_verify(&req.public_key, &hash.clone().into(), &req.signature);
 
     hash
 }

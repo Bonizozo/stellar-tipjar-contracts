@@ -1,9 +1,6 @@
 use soroban_sdk::{symbol_short, BytesN, Env};
 
-use crate::{
-    storage, AuctionError, CoreError, CreditError, FeatureError, OtherError, StreamError,
-    SystemError, TipJarError, VestingError,
-};
+use crate::{storage, SystemError};
 
 /// Performs an admin-authorized WASM upgrade and bumps the on-chain version.
 ///

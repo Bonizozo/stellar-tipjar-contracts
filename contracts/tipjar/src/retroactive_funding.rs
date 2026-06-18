@@ -150,7 +150,8 @@ pub fn create_round(
     if end_time <= start_time {
         panic_with_error!(env, RetroError::InvalidAmount);
     }
-    let weight_sum = criteria.tips_weight_bps + criteria.tip_count_weight_bps + criteria.vote_weight_bps;
+    let weight_sum =
+        criteria.tips_weight_bps + criteria.tip_count_weight_bps + criteria.vote_weight_bps;
     if weight_sum != 10_000 {
         panic_with_error!(env, RetroError::InvalidCriteria);
     }
@@ -218,9 +219,10 @@ pub fn nominate_creator(env: &Env, admin: &Address, round_id: u64, creator: &Add
         .unwrap_or_else(|| Vec::new(env));
     if !creators.contains(creator) {
         creators.push_back(creator.clone());
-        env.storage()
-            .persistent()
-            .set(&crate::DataKey::Retro(RetroKey::RoundCreators(round_id)), &creators);
+        env.storage().persistent().set(
+            &crate::DataKey::Retro(RetroKey::RoundCreators(round_id)),
+            &creators,
+        );
     }
 
     env.events()
@@ -266,7 +268,10 @@ pub fn cast_vote(env: &Env, voter: &Address, round_id: u64, creator: &Address) {
     let has_voted: bool = env
         .storage()
         .persistent()
-        .get(&crate::DataKey::Retro(RetroKey::HasVoted(round_id, voter.clone())))
+        .get(&crate::DataKey::Retro(RetroKey::HasVoted(
+            round_id,
+            voter.clone(),
+        )))
         .unwrap_or(false);
     if has_voted {
         panic_with_error!(env, RetroError::AlreadyVoted);
@@ -276,7 +281,10 @@ pub fn cast_vote(env: &Env, voter: &Address, round_id: u64, creator: &Address) {
     let voter_tips: i128 = env
         .storage()
         .persistent()
-        .get(&crate::DataKey::CreatorTotal(voter.clone(), round.token.clone()))
+        .get(&crate::DataKey::CreatorTotal(
+            voter.clone(),
+            round.token.clone(),
+        ))
         .unwrap_or(0);
     let weight = isqrt(voter_tips).max(1);
 
@@ -287,22 +295,28 @@ pub fn cast_vote(env: &Env, voter: &Address, round_id: u64, creator: &Address) {
         round_id,
         weight,
     };
-    env.storage()
-        .persistent()
-        .set(&crate::DataKey::Retro(RetroKey::Vote(round_id, voter.clone(), creator.clone())), &vote);
-    env.storage()
-        .persistent()
-        .set(&crate::DataKey::Retro(RetroKey::HasVoted(round_id, voter.clone())), &true);
+    env.storage().persistent().set(
+        &crate::DataKey::Retro(RetroKey::Vote(round_id, voter.clone(), creator.clone())),
+        &vote,
+    );
+    env.storage().persistent().set(
+        &crate::DataKey::Retro(RetroKey::HasVoted(round_id, voter.clone())),
+        &true,
+    );
 
     // Accumulate creator vote weight.
     let prev: i128 = env
         .storage()
         .persistent()
-        .get(&crate::DataKey::Retro(RetroKey::CreatorVotes(round_id, creator.clone())))
+        .get(&crate::DataKey::Retro(RetroKey::CreatorVotes(
+            round_id,
+            creator.clone(),
+        )))
         .unwrap_or(0);
-    env.storage()
-        .persistent()
-        .set(&crate::DataKey::Retro(RetroKey::CreatorVotes(round_id, creator.clone())), &(prev + weight));
+    env.storage().persistent().set(
+        &crate::DataKey::Retro(RetroKey::CreatorVotes(round_id, creator.clone())),
+        &(prev + weight),
+    );
 
     round.total_votes += weight;
     env.storage()
@@ -342,10 +356,8 @@ pub fn finalize_round(env: &Env, admin: &Address, round_id: u64) {
         .persistent()
         .set(&crate::DataKey::Retro(RetroKey::Round(round_id)), &round);
 
-    env.events().publish(
-        (symbol_short!("retro_fin"),),
-        (round_id, round.total_votes),
-    );
+    env.events()
+        .publish((symbol_short!("retro_fin"),), (round_id, round.total_votes));
 }
 
 /// Computes a creator's impact score for a finalized round.
@@ -362,7 +374,10 @@ pub fn compute_impact_score(env: &Env, round_id: u64, creator: &Address) -> i128
     let total_tips: i128 = env
         .storage()
         .persistent()
-        .get(&crate::DataKey::CreatorTotal(creator.clone(), round.token.clone()))
+        .get(&crate::DataKey::CreatorTotal(
+            creator.clone(),
+            round.token.clone(),
+        ))
         .unwrap_or(0);
 
     let tip_count: i128 = env
@@ -374,7 +389,10 @@ pub fn compute_impact_score(env: &Env, round_id: u64, creator: &Address) -> i128
     let votes: i128 = env
         .storage()
         .persistent()
-        .get(&crate::DataKey::Retro(RetroKey::CreatorVotes(round_id, creator.clone())))
+        .get(&crate::DataKey::Retro(RetroKey::CreatorVotes(
+            round_id,
+            creator.clone(),
+        )))
         .unwrap_or(0);
 
     let c = &round.criteria;
@@ -404,7 +422,10 @@ pub fn claim_reward(env: &Env, creator: &Address, round_id: u64) -> i128 {
     let claimed: bool = env
         .storage()
         .persistent()
-        .get(&crate::DataKey::Retro(RetroKey::Claimed(round_id, creator.clone())))
+        .get(&crate::DataKey::Retro(RetroKey::Claimed(
+            round_id,
+            creator.clone(),
+        )))
         .unwrap_or(false);
     if claimed {
         panic_with_error!(env, RetroError::AlreadyClaimed);
@@ -436,9 +457,10 @@ pub fn claim_reward(env: &Env, creator: &Address, round_id: u64) -> i128 {
         panic_with_error!(env, RetroError::NothingToClaim);
     }
 
-    env.storage()
-        .persistent()
-        .set(&crate::DataKey::Retro(RetroKey::Claimed(round_id, creator.clone())), &true);
+    env.storage().persistent().set(
+        &crate::DataKey::Retro(RetroKey::Claimed(round_id, creator.clone())),
+        &true,
+    );
 
     token::Client::new(env, &round.token).transfer(
         &env.current_contract_address(),
@@ -473,7 +495,10 @@ pub fn get_round_creators(env: &Env, round_id: u64) -> Vec<Address> {
 pub fn get_creator_votes(env: &Env, round_id: u64, creator: &Address) -> i128 {
     env.storage()
         .persistent()
-        .get(&crate::DataKey::Retro(RetroKey::CreatorVotes(round_id, creator.clone())))
+        .get(&crate::DataKey::Retro(RetroKey::CreatorVotes(
+            round_id,
+            creator.clone(),
+        )))
         .unwrap_or(0)
 }
 
@@ -481,6 +506,9 @@ pub fn get_creator_votes(env: &Env, round_id: u64, creator: &Address) -> i128 {
 pub fn has_voted(env: &Env, round_id: u64, voter: &Address) -> bool {
     env.storage()
         .persistent()
-        .get(&crate::DataKey::Retro(RetroKey::HasVoted(round_id, voter.clone())))
+        .get(&crate::DataKey::Retro(RetroKey::HasVoted(
+            round_id,
+            voter.clone(),
+        )))
         .unwrap_or(false)
 }

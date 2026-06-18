@@ -5,13 +5,7 @@
 
 use super::events::{emit_collateral_updated, emit_supply_updated};
 use super::types::SyntheticAsset;
-use crate::{
-    AuctionError, AuctionKey, BridgeKey, CircuitBreakerKey, CoreError, CreditError, DataKey,
-    DelegationKey, DisputeKey, FeatureError, FeeKey, InsuranceKey, LimitKey, LockedTipKey,
-    MatchingKey, MilestoneKey, MultiSigKey, OptionKey, OtherError, PrivateTipKey, RoleKey,
-    SnapshotKey, StatsKey, StreamError, StreamKey, SyntheticKey, SystemError, TipJarError,
-    VestingError, VestingKey,
-};
+use crate::{CoreError, CreditError, DataKey, SyntheticKey, TipJarError};
 use soroban_sdk::Env;
 
 /// Updates total supply after minting or redemption
@@ -25,7 +19,7 @@ use soroban_sdk::Env;
 /// - Validates: Requirements 3.5, 5.4, 6.1, 6.4, 6.9
 pub fn update_supply(env: &Env, asset_id: u64, delta: i128) -> Result<(), TipJarError> {
     // Retrieve the synthetic asset
-    let asset_key = DataKey(Key());
+    let asset_key = DataKey::Synthetic(SyntheticKey::SyntheticAsset(asset_id));
     let mut asset: SyntheticAsset = env
         .storage()
         .persistent()
@@ -58,7 +52,7 @@ pub fn update_supply(env: &Env, asset_id: u64, delta: i128) -> Result<(), TipJar
 /// - Validates: Requirements 3.6, 5.6, 6.2, 6.5, 6.10, 7.6
 pub fn update_collateral(env: &Env, asset_id: u64, delta: i128) -> Result<(), TipJarError> {
     // Retrieve the synthetic asset
-    let asset_key = DataKey(Key());
+    let asset_key = DataKey::Synthetic(SyntheticKey::SyntheticAsset(asset_id));
     let mut asset: SyntheticAsset = env
         .storage()
         .persistent()
@@ -97,7 +91,7 @@ pub fn update_collateral(env: &Env, asset_id: u64, delta: i128) -> Result<(), Ti
 /// - Validates: Requirements 6.3, 6.8
 pub fn get_collateralization_ratio(env: &Env, asset_id: u64) -> Result<u32, TipJarError> {
     // Retrieve the synthetic asset
-    let asset_key = DataKey(Key());
+    let asset_key = DataKey::Synthetic(SyntheticKey::SyntheticAsset(asset_id));
     let asset: SyntheticAsset = env
         .storage()
         .persistent()
@@ -154,7 +148,7 @@ pub fn get_collateralization_ratio(env: &Env, asset_id: u64) -> Result<u32, TipJ
 /// - Validates: Requirements 6.6, 9.4
 pub fn get_total_supply(env: &Env, asset_id: u64) -> Result<i128, TipJarError> {
     // Retrieve the synthetic asset
-    let asset_key = DataKey(Key());
+    let asset_key = DataKey::Synthetic(SyntheticKey::SyntheticAsset(asset_id));
     let asset: SyntheticAsset = env
         .storage()
         .persistent()
@@ -177,7 +171,7 @@ pub fn get_total_supply(env: &Env, asset_id: u64) -> Result<i128, TipJarError> {
 /// - Validates: Requirements 6.7, 9.4
 pub fn get_total_collateral(env: &Env, asset_id: u64) -> Result<i128, TipJarError> {
     // Retrieve the synthetic asset
-    let asset_key = DataKey(Key());
+    let asset_key = DataKey::Synthetic(SyntheticKey::SyntheticAsset(asset_id));
     let asset: SyntheticAsset = env
         .storage()
         .persistent()

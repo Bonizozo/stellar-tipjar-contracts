@@ -132,9 +132,10 @@ pub fn create_listing(
         .get(&RentalKey::CreatorListings(creator.clone()))
         .unwrap_or_else(|| Vec::new(env));
     creator_listings.push_back(listing_id);
-    env.storage()
-        .persistent()
-        .set(&RentalKey::CreatorListings(creator.clone()), &creator_listings);
+    env.storage().persistent().set(
+        &RentalKey::CreatorListings(creator.clone()),
+        &creator_listings,
+    );
 
     env.events().publish(
         (soroban_sdk::symbol_short!("rnt_list"),),
@@ -151,7 +152,7 @@ pub fn rent(
     env: &Env,
     renter: Address,
     listing_id: u64,
-    creator_balance_key_fn: impl Fn(&Address, &Address) -> soroban_sdk::Val,
+    _creator_balance_key_fn: impl Fn(&Address, &Address) -> soroban_sdk::Val,
 ) -> Result<u64, RentalError> {
     renter.require_auth();
 
@@ -211,11 +212,7 @@ pub fn rent(
         ),
         env,
     );
-    let current: i128 = env
-        .storage()
-        .persistent()
-        .get(&bal_key)
-        .unwrap_or(0i128);
+    let current: i128 = env.storage().persistent().get(&bal_key).unwrap_or(0i128);
     env.storage()
         .persistent()
         .set(&bal_key, &(current + listing.fee_per_period));
@@ -254,11 +251,7 @@ pub fn has_active_access(env: &Env, renter: &Address, listing_id: u64) -> bool {
 /// Deactivate a listing. Only the creator may call.
 ///
 /// Emits `("rental_deact",)` with data `listing_id`.
-pub fn deactivate_listing(
-    env: &Env,
-    creator: Address,
-    listing_id: u64,
-) -> Result<(), RentalError> {
+pub fn deactivate_listing(env: &Env, creator: Address, listing_id: u64) -> Result<(), RentalError> {
     creator.require_auth();
 
     let mut listing: RentalListing = env
@@ -333,9 +326,18 @@ mod tests {
 
     #[test]
     fn test_rental_error_uniqueness() {
-        assert_ne!(RentalError::ListingNotFound as u32, RentalError::RentalNotFound as u32);
-        assert_ne!(RentalError::RentalExpired as u32, RentalError::RentalStillActive as u32);
-        assert_ne!(RentalError::InvalidFee as u32, RentalError::InvalidDuration as u32);
+        assert_ne!(
+            RentalError::ListingNotFound as u32,
+            RentalError::RentalNotFound as u32
+        );
+        assert_ne!(
+            RentalError::RentalExpired as u32,
+            RentalError::RentalStillActive as u32
+        );
+        assert_ne!(
+            RentalError::InvalidFee as u32,
+            RentalError::InvalidDuration as u32
+        );
     }
 
     #[test]

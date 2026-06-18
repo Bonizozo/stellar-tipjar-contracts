@@ -88,7 +88,7 @@ pub fn calculate_conviction_multiplier(env: &Env, conviction_start: u64) -> i128
         1_000_000 // 1x multiplier
     } else {
         // Linear interpolation: multiplier = 1 + (time_locked / conviction_period) * (max - 1)
-        let progress = time_locked * 1_000_000 / config.conviction_period;
+        let progress = (time_locked as i128) * 1_000_000 / config.conviction_period as i128;
         let max_gain = config.max_conviction_multiplier - 1_000_000;
         1_000_000 + (progress * max_gain / 1_000_000)
     }
@@ -111,11 +111,12 @@ pub fn calculate_accumulated_conviction(env: &Env, conviction_vote: &ConvictionV
 
     // Conviction accumulates as: base_power * time_locked / conviction_period
     let config = get_conviction_config(env);
-    let time_locked = now.saturating_sub(conviction_vote.conviction_start);
+    let _time_locked = now.saturating_sub(conviction_vote.conviction_start);
 
     // Calculate conviction rate per second
-    let conviction_rate = conviction_vote.base_voting_power * 1_000_000 / config.conviction_period;
-    let new_conviction = conviction_rate * time_since_last_update / 1_000_000;
+    let conviction_rate =
+        conviction_vote.base_voting_power * 1_000_000 / config.conviction_period as i128;
+    let new_conviction = conviction_rate * time_since_last_update as i128 / 1_000_000;
 
     conviction_vote.accumulated_conviction + new_conviction
 }
@@ -181,7 +182,7 @@ pub fn update_conviction_vote(
     let mut conviction_vote = env
         .storage()
         .persistent()
-        .get(&vote_key)
+        .get::<_, ConvictionVote>(&vote_key)
         .expect("No conviction vote found");
 
     // Apply decay to accumulated conviction when vote changes
@@ -191,7 +192,9 @@ pub fn update_conviction_vote(
         .timestamp()
         .saturating_sub(conviction_vote.last_updated);
     let decay_amount =
-        conviction_vote.accumulated_conviction * decay_rate * time_since_vote / 10_000 / 1_000_000;
+        conviction_vote.accumulated_conviction * decay_rate * time_since_vote as i128
+            / 10_000
+            / 1_000_000;
     conviction_vote.accumulated_conviction = conviction_vote
         .accumulated_conviction
         .saturating_sub(decay_amount);

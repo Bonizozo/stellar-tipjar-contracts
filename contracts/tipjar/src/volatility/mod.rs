@@ -194,7 +194,7 @@ pub fn get_creator_indices(env: &Env, creator: &Address) -> Vec<u64> {
 
 pub fn add_creator_index(env: &Env, creator: &Address, index_id: u64) {
     let mut list = get_creator_indices(env, creator);
-    if !list.contains(&index_id) {
+    if !list.contains(index_id) {
         list.push_back(index_id);
         env.storage()
             .persistent()

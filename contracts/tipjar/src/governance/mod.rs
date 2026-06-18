@@ -81,7 +81,7 @@ pub enum DataKey {
     Proposal(u64),
     ProposalCounter,
     Vote(u64, Address),
-    VoterVotes(u64),
+    VoterVotes(Address),
     GovernanceConfig,
     ProposalThreshold,
     Quorum,

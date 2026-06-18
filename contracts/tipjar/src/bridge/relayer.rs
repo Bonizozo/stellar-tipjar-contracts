@@ -1,13 +1,7 @@
 use soroban_sdk::{symbol_short, token, Address, Env};
 
 use crate::bridge::{validator, BridgeDataKey, BridgeTip};
-use crate::{
-    AuctionError, AuctionKey, BridgeKey, CircuitBreakerKey, CoreError, CreditError, DataKey,
-    DelegationKey, DisputeKey, FeatureError, FeeKey, InsuranceKey, LimitKey, LockedTipKey,
-    MatchingKey, MilestoneKey, MultiSigKey, OptionKey, OtherError, PrivateTipKey, RoleKey,
-    SnapshotKey, StatsKey, StreamError, StreamKey, SyntheticKey, SystemError, TipJarError,
-    VestingError, VestingKey,
-};
+use crate::{BridgeKey, CoreError, DataKey, TipJarError};
 
 /// Processes a bridged tip submitted by an authorised relayer.
 ///
@@ -38,7 +32,7 @@ pub fn process_bridge_tip(
         .get(&BridgeDataKey::BridgeRelayer)
         .ok_or(CoreError::Unauthorized)?;
     if *relayer != stored_relayer {
-        return Err(CoreError::Unauthorized);
+        return Err(CoreError::Unauthorized.into());
     }
 
     // 3. Validate amount and replay guard.

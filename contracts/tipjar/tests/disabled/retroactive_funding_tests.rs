@@ -2,7 +2,7 @@
 
 extern crate std;
 
-use soroban_sdk::{testutils::Address as _, Address, Env};
+use soroban_sdk::{testutils::{Address as _, Ledger}, Address, Env};
 use tipjar::{
     retroactive_funding::{EvalCriteria, RetroRoundStatus},
     TipJarContract, TipJarContractClient,

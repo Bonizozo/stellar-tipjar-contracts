@@ -141,14 +141,19 @@ fn release_collateral(
 }
 
 /// Update holder's position after exercise
-fn update_holder_position_on_exercise(env: &Env, holder: &Address, payoff: i128) {
+fn update_holder_position_on_exercise(env: &Env, holder: &Address, _payoff: i128) {
     let mut position = get_position(env, holder);
     position.held_count = position.held_count.saturating_sub(1);
     update_position(env, &position);
 }
 
 /// Update writer's position after exercise
-fn update_writer_position_on_exercise(env: &Env, writer: &Address, payoff: i128, collateral: i128) {
+fn update_writer_position_on_exercise(
+    env: &Env,
+    writer: &Address,
+    _payoff: i128,
+    collateral: i128,
+) {
     let mut position = get_position(env, writer);
     position.total_collateral = position.total_collateral.saturating_sub(collateral);
     update_position(env, &position);

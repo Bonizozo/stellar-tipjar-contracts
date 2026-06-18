@@ -1,6 +1,6 @@
 //! Strategy execution history tracking
 
-use soroban_sdk::{contracterror, panic_with_error, Env, Vec};
+use soroban_sdk::{contracterror, Env, Vec};
 
 use super::DataKey;
 
@@ -32,7 +32,7 @@ pub struct HistoryEntry {
     /// Details about the event
     pub details: soroban_sdk::String,
     /// Performance snapshot at time of event
-    pub performance_snapshot: Option<PerformanceSnapshot>,
+    pub performance_snapshot: OptPerformanceSnapshot,
 }
 
 /// Types of history events
@@ -65,6 +65,14 @@ pub struct PerformanceSnapshot {
     pub period_fees: i128,
 }
 
+/// Optional wrapper for PerformanceSnapshot (contracttype-compatible replacement for Option<PerformanceSnapshot>)
+#[soroban_sdk::contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum OptPerformanceSnapshot {
+    Absent,
+    Present(PerformanceSnapshot),
+}
+
 /// Track a strategy execution event
 pub fn record_history_entry(
     env: &Env,
@@ -83,7 +91,7 @@ pub fn record_history_entry(
         timestamp: now,
         amount,
         details,
-        performance_snapshot: None,
+        performance_snapshot: OptPerformanceSnapshot::Absent,
     };
 
     env.storage()
@@ -112,7 +120,7 @@ pub fn record_history_with_performance(
         timestamp: now,
         amount,
         details,
-        performance_snapshot: Some(performance),
+        performance_snapshot: OptPerformanceSnapshot::Present(performance),
     };
 
     env.storage()
@@ -138,26 +146,25 @@ pub fn get_history_entry(
 fn generate_entry_id(env: &Env, strategy_id: u64) -> u64 {
     // Use timestamp + strategy_id as unique ID
     let now = env.ledger().timestamp();
-    ((now << 16) | (strategy_id & 0xFFFF))
+    (now << 16) | (strategy_id & 0xFFFF)
 }
 
 /// Get strategy execution statistics
 pub fn get_execution_statistics(
     env: &Env,
     strategy_id: u64,
-    event_types: &Vec<HistoryEventType>,
+    _event_types: &Vec<HistoryEventType>,
 ) -> Result<ExecutionStatistics, HistoryError> {
-    let strategy = super::get_strategy(env, strategy_id)
-        .ok_or(HistoryError::StrategyNotFound)?;
+    let strategy = super::get_strategy(env, strategy_id).ok_or(HistoryError::StrategyNotFound)?;
 
     let created_at = strategy.created_at;
     let now = env.ledger().timestamp();
 
-    let mut total_amount_allocated = 0i128;
-    let mut total_fees_collected = 0i128;
-    let mut num_allocations = 0u64;
-    let mut num_rebalances = 0u64;
-    let mut num_harvests = 0u64;
+    let total_amount_allocated = 0i128;
+    let total_fees_collected = 0i128;
+    let num_allocations = 0u64;
+    let num_rebalances = 0u64;
+    let num_harvests = 0u64;
 
     // In a real implementation, we would iterate through history entries
     // For now, we provide a structure that can be used
@@ -199,12 +206,8 @@ pub struct ExecutionStatistics {
 }
 
 /// Get total fees collected for a strategy
-pub fn get_total_fees(
-    env: &Env,
-    strategy_id: u64,
-) -> Result<i128, HistoryError> {
-    let _strategy = super::get_strategy(env, strategy_id)
-        .ok_or(HistoryError::StrategyNotFound)?;
+pub fn get_total_fees(env: &Env, strategy_id: u64) -> Result<i128, HistoryError> {
+    let _strategy = super::get_strategy(env, strategy_id).ok_or(HistoryError::StrategyNotFound)?;
 
     // In a real implementation, this would sum all fee collection entries
     Ok(0)
@@ -214,10 +217,9 @@ pub fn get_total_fees(
 pub fn get_audit_trail(
     env: &Env,
     strategy_id: u64,
-    max_entries: u32,
+    _max_entries: u32,
 ) -> Result<Vec<HistoryEntry>, HistoryError> {
-    let _strategy = super::get_strategy(env, strategy_id)
-        .ok_or(HistoryError::StrategyNotFound)?;
+    let _strategy = super::get_strategy(env, strategy_id).ok_or(HistoryError::StrategyNotFound)?;
 
     // In a real implementation, this would retrieve recent entries
     // For now, return empty vector
@@ -231,8 +233,14 @@ mod tests {
     #[test]
     fn test_history_event_types() {
         // Verify enum values are unique
-        assert_ne!(HistoryEventType::Allocation as u32, HistoryEventType::Rebalancing as u32);
-        assert_ne!(HistoryEventType::Harvest as u32, HistoryEventType::Modification as u32);
+        assert_ne!(
+            HistoryEventType::Allocation as u32,
+            HistoryEventType::Rebalancing as u32
+        );
+        assert_ne!(
+            HistoryEventType::Harvest as u32,
+            HistoryEventType::Modification as u32
+        );
     }
 
     #[test]
