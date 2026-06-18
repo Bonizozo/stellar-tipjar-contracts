@@ -160,7 +160,7 @@ pub fn compute_commitment(env: &Env, value: i128, salt: &BytesN<32>) -> BytesN<3
     let mut payload = Bytes::new(env);
     payload.extend_from_array(&value.to_be_bytes());
     payload.append(&salt.into());
-    env.crypto().sha256(&payload)
+    env.crypto().sha256(&payload).to_bytes()
 }
 
 // ── Core operations ──────────────────────────────────────────────────────────
@@ -249,7 +249,7 @@ pub fn commit(
     let commitment = Commitment {
         round_id,
         participant: participant.clone(),
-        commitment_hash,
+        commitment_hash: commitment_hash.clone(),
         committed_at: now,
         revealed: false,
     };
@@ -261,7 +261,7 @@ pub fn commit(
 
     env.events().publish(
         (symbol_short!("cr_cmt"),),
-        (round_id, participant.clone(), commitment_hash),
+        (round_id, participant.clone(), commitment_hash.clone()),
     );
 }
 

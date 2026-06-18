@@ -3,6 +3,7 @@
 //! Allows verifying tip transactions without full re-execution by generating
 //! and verifying compact proofs. Supports batching and aggregation.
 
+use soroban_sdk::xdr::ToXdr;
 use soroban_sdk::{contracttype, symbol_short, Address, Bytes, BytesN, Env, Vec};
 
 use crate::DataKey;
@@ -149,7 +150,7 @@ fn build_commitment(
     data.append(&token.to_xdr(env));
     data.append(&Bytes::from_array(env, &amount.to_le_bytes()));
     data.append(&Bytes::from_array(env, &nonce.to_le_bytes()));
-    env.crypto().sha256(&data)
+    env.crypto().sha256(&data).to_bytes()
 }
 
 // ── Public API ───────────────────────────────────────────────────────────────
@@ -181,7 +182,7 @@ pub fn generate_proof(
         creator: creator.clone(),
         token: token.clone(),
         amount,
-        commitment,
+        commitment: commitment.clone(),
         witness,
         validity: ProofValidity::Pending,
         generated_at: now,
@@ -199,7 +200,7 @@ pub fn generate_proof(
 
     env.events().publish(
         (symbol_short!("vp_gen"),),
-        (proof_id, tip_id, commitment),
+        (proof_id, tip_id, commitment.clone()),
     );
 
     proof_id
@@ -287,14 +288,14 @@ pub fn aggregate_proofs(env: &Env, proof_ids: Vec<u64>) -> u64 {
         combined.append(&commitment_bytes);
     }
 
-    let aggregate_root: BytesN<32> = env.crypto().sha256(&combined);
+    let aggregate_root: BytesN<32> = env.crypto().sha256(&combined).to_bytes();
     let agg_id = next_agg_id(env);
     let now = env.ledger().timestamp();
 
     let agg = AggregatedProof {
         id: agg_id,
         proof_ids: proof_ids.clone(),
-        aggregate_root,
+        aggregate_root: aggregate_root.clone(),
         validity: if valid_count == proof_ids.len() as u32 {
             ProofValidity::Valid
         } else {
@@ -311,7 +312,7 @@ pub fn aggregate_proofs(env: &Env, proof_ids: Vec<u64>) -> u64 {
 
     env.events().publish(
         (symbol_short!("vp_agg"),),
-        (agg_id, proof_ids.len(), valid_count, aggregate_root),
+        (agg_id, proof_ids.len(), valid_count, aggregate_root.clone()),
     );
 
     agg_id

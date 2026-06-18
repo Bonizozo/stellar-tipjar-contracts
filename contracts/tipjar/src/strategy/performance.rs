@@ -1,6 +1,6 @@
 //! Performance tracking and calculation for strategies
 
-use soroban_sdk::{contracterror, panic_with_error, Env};
+use soroban_sdk::{contracterror, panic_with_error, Env, Vec};
 
 use super::DataKey;
 

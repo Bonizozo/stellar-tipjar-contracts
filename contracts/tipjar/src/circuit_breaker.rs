@@ -2,7 +2,7 @@
 ///
 /// This module provides sophisticated automated protection against extreme market volatility,
 /// anomalous trading patterns, and potential attacks within the Stellar tipjar contracts.
-use soroban_sdk::{contracterror, contracttype};
+use soroban_sdk::{contracterror, contracttype, symbol_short, Symbol};
 
 /// Enhanced circuit breaker configuration with comprehensive protection parameters
 #[contracttype]
@@ -115,60 +115,60 @@ impl EnhancedCircuitBreakerConfig {
     pub fn validate(&self) -> Result<(), CircuitBreakerError> {
         // Validate single tip threshold
         if self.max_single_tip <= 0 {
-            return Err(CircuitBreakerError::InvalidSingleTipThreshold);
+            return Err(CircuitBreakerError::InvalidSingleTipThreshold.into());
         }
 
         // Validate volume thresholds
         if self.one_minute_threshold <= 0 {
-            return Err(CircuitBreakerError::InvalidVolumeThreshold);
+            return Err(CircuitBreakerError::InvalidVolumeThreshold.into());
         }
         if self.five_minute_threshold <= 0 {
-            return Err(CircuitBreakerError::InvalidVolumeThreshold);
+            return Err(CircuitBreakerError::InvalidVolumeThreshold.into());
         }
         if self.one_hour_threshold <= 0 {
-            return Err(CircuitBreakerError::InvalidVolumeThreshold);
+            return Err(CircuitBreakerError::InvalidVolumeThreshold.into());
         }
         if self.twenty_four_hour_threshold <= 0 {
-            return Err(CircuitBreakerError::InvalidVolumeThreshold);
+            return Err(CircuitBreakerError::InvalidVolumeThreshold.into());
         }
 
         // Validate logical ordering (longer windows should have higher thresholds)
         if self.five_minute_threshold < self.one_minute_threshold {
-            return Err(CircuitBreakerError::InvalidVolumeThreshold);
+            return Err(CircuitBreakerError::InvalidVolumeThreshold.into());
         }
         if self.one_hour_threshold < self.five_minute_threshold {
-            return Err(CircuitBreakerError::InvalidVolumeThreshold);
+            return Err(CircuitBreakerError::InvalidVolumeThreshold.into());
         }
         if self.twenty_four_hour_threshold < self.one_hour_threshold {
-            return Err(CircuitBreakerError::InvalidVolumeThreshold);
+            return Err(CircuitBreakerError::InvalidVolumeThreshold.into());
         }
 
         // Validate rate limits
         if self.max_tips_per_minute == 0 {
-            return Err(CircuitBreakerError::InvalidRateLimit);
+            return Err(CircuitBreakerError::InvalidRateLimit.into());
         }
         if self.max_tips_per_creator_per_min == 0 {
-            return Err(CircuitBreakerError::InvalidRateLimit);
+            return Err(CircuitBreakerError::InvalidRateLimit.into());
         }
 
         // Validate anomaly detection parameters
         if self.anomaly_confidence_threshold > 10000 {
-            return Err(CircuitBreakerError::InvalidConfidenceThreshold);
+            return Err(CircuitBreakerError::InvalidConfidenceThreshold.into());
         }
 
         // Validate cooldown configuration
         if self.base_cooldown_seconds == 0 {
-            return Err(CircuitBreakerError::InvalidCooldownDuration);
+            return Err(CircuitBreakerError::InvalidCooldownDuration.into());
         }
         if self.max_cooldown_seconds == 0 {
-            return Err(CircuitBreakerError::InvalidCooldownDuration);
+            return Err(CircuitBreakerError::InvalidCooldownDuration.into());
         }
         if self.max_cooldown_seconds < self.base_cooldown_seconds {
-            return Err(CircuitBreakerError::InvalidCooldownDuration);
+            return Err(CircuitBreakerError::InvalidCooldownDuration.into());
         }
 
         if self.exponential_backoff_enabled && self.backoff_multiplier <= 10000 {
-            return Err(CircuitBreakerError::InvalidBackoffMultiplier);
+            return Err(CircuitBreakerError::InvalidBackoffMultiplier.into());
         }
 
         Ok(())
@@ -202,27 +202,27 @@ impl VolumeThresholds {
     /// Validates volume threshold configuration
     pub fn validate(&self) -> Result<(), CircuitBreakerError> {
         if self.one_minute_threshold <= 0 {
-            return Err(CircuitBreakerError::InvalidVolumeThreshold);
+            return Err(CircuitBreakerError::InvalidVolumeThreshold.into());
         }
         if self.five_minute_threshold <= 0 {
-            return Err(CircuitBreakerError::InvalidVolumeThreshold);
+            return Err(CircuitBreakerError::InvalidVolumeThreshold.into());
         }
         if self.one_hour_threshold <= 0 {
-            return Err(CircuitBreakerError::InvalidVolumeThreshold);
+            return Err(CircuitBreakerError::InvalidVolumeThreshold.into());
         }
         if self.twenty_four_hour_threshold <= 0 {
-            return Err(CircuitBreakerError::InvalidVolumeThreshold);
+            return Err(CircuitBreakerError::InvalidVolumeThreshold.into());
         }
 
         // Validate logical ordering (longer windows should have higher thresholds)
         if self.five_minute_threshold < self.one_minute_threshold {
-            return Err(CircuitBreakerError::InvalidVolumeThreshold);
+            return Err(CircuitBreakerError::InvalidVolumeThreshold.into());
         }
         if self.one_hour_threshold < self.five_minute_threshold {
-            return Err(CircuitBreakerError::InvalidVolumeThreshold);
+            return Err(CircuitBreakerError::InvalidVolumeThreshold.into());
         }
         if self.twenty_four_hour_threshold < self.one_hour_threshold {
-            return Err(CircuitBreakerError::InvalidVolumeThreshold);
+            return Err(CircuitBreakerError::InvalidVolumeThreshold.into());
         }
 
         Ok(())
@@ -245,17 +245,17 @@ impl CooldownConfig {
     /// Validates cooldown configuration parameters
     pub fn validate(&self) -> Result<(), CircuitBreakerError> {
         if self.base_cooldown_seconds == 0 {
-            return Err(CircuitBreakerError::InvalidCooldownDuration);
+            return Err(CircuitBreakerError::InvalidCooldownDuration.into());
         }
         if self.max_cooldown_seconds == 0 {
-            return Err(CircuitBreakerError::InvalidCooldownDuration);
+            return Err(CircuitBreakerError::InvalidCooldownDuration.into());
         }
         if self.max_cooldown_seconds < self.base_cooldown_seconds {
-            return Err(CircuitBreakerError::InvalidCooldownDuration);
+            return Err(CircuitBreakerError::InvalidCooldownDuration.into());
         }
 
         if self.exponential_backoff_enabled && self.backoff_multiplier <= 10000 {
-            return Err(CircuitBreakerError::InvalidBackoffMultiplier);
+            return Err(CircuitBreakerError::InvalidBackoffMultiplier.into());
         }
 
         Ok(())
@@ -564,7 +564,7 @@ pub mod trigger_engine {
     }
 
     /// Calculates cooldown period based on severity and trigger history
-    fn calculate_cooldown(
+    pub fn calculate_cooldown(
         config: &EnhancedCircuitBreakerConfig,
         severity: TriggerSeverity,
         trigger_count: u32,
@@ -925,7 +925,7 @@ pub mod anomaly_detector {
         if z_score > 300 {
             10000 // Maximum anomaly
         } else if z_score > 200 {
-            ((z_score - 200) * 10000 / 100).min(10000)
+            (((z_score - 200) * 10000 / 100).min(10000)) as u32
         } else {
             0
         }
@@ -1346,7 +1346,7 @@ pub mod halt_manager {
         current_time: u64,
     ) -> Result<(), CircuitBreakerError> {
         if !state.is_halted(current_time) {
-            return Err(CircuitBreakerError::InvalidConfiguration);
+            return Err(CircuitBreakerError::InvalidConfiguration.into());
         }
 
         state.halted_until = state.halted_until.saturating_add(additional_seconds);
@@ -1531,18 +1531,18 @@ pub mod error_handler {
     ) -> Result<(), CircuitBreakerError> {
         // Check for logical consistency
         if state.halted_until > 0 && state.halt_reason.is_none() {
-            return Err(CircuitBreakerError::InvalidConfiguration);
+            return Err(CircuitBreakerError::InvalidConfiguration.into());
         }
 
         // Validate volume windows
         if state.one_minute_window.current_volume < 0 {
-            return Err(CircuitBreakerError::InvalidConfiguration);
+            return Err(CircuitBreakerError::InvalidConfiguration.into());
         }
 
         // Validate trigger count
         if state.trigger_count > 1000000 {
             // Unreasonably high trigger count suggests corruption
-            return Err(CircuitBreakerError::InvalidConfiguration);
+            return Err(CircuitBreakerError::InvalidConfiguration.into());
         }
 
         Ok(())
@@ -1594,7 +1594,7 @@ pub mod admin {
         // Store configuration
         env.storage()
             .instance()
-            .set(&super::CircuitBreakerKey::EnhancedConfig, config);
+            .set(&crate::CircuitBreakerKey::EnhancedConfig, config);
 
         // Emit configuration update event
         env.events().publish(
@@ -1609,7 +1609,7 @@ pub mod admin {
     pub fn get_enhanced_config(env: &Env) -> Option<EnhancedCircuitBreakerConfig> {
         env.storage()
             .instance()
-            .get(&super::CircuitBreakerKey::EnhancedConfig)
+            .get(&crate::CircuitBreakerKey::EnhancedConfig)
     }
 
     /// Sets creator-specific limit override
@@ -1622,11 +1622,11 @@ pub mod admin {
         admin.require_auth();
 
         if limit <= 0 {
-            return Err(CircuitBreakerError::InvalidSingleTipThreshold);
+            return Err(CircuitBreakerError::InvalidSingleTipThreshold.into());
         }
 
         env.storage().persistent().set(
-            &super::CircuitBreakerKey::CreatorOverrides(creator.clone()),
+            &crate::CircuitBreakerKey::CreatorOverrides(creator.clone()),
             &limit,
         );
 
@@ -1644,7 +1644,7 @@ pub mod admin {
 
         env.storage()
             .persistent()
-            .remove(&super::CircuitBreakerKey::CreatorOverrides(creator.clone()));
+            .remove(&crate::CircuitBreakerKey::CreatorOverrides(creator.clone()));
 
         env.events()
             .publish((soroban_sdk::symbol_short!("cb_crrm"), creator.clone()), ());
@@ -1654,7 +1654,7 @@ pub mod admin {
     pub fn get_creator_limit(env: &Env, creator: &Address) -> Option<i128> {
         env.storage()
             .persistent()
-            .get(&super::CircuitBreakerKey::CreatorOverrides(creator.clone()))
+            .get(&crate::CircuitBreakerKey::CreatorOverrides(creator.clone()))
     }
 
     /// Sets token-specific limit
@@ -1667,11 +1667,11 @@ pub mod admin {
         admin.require_auth();
 
         if limit <= 0 {
-            return Err(CircuitBreakerError::InvalidSingleTipThreshold);
+            return Err(CircuitBreakerError::InvalidSingleTipThreshold.into());
         }
 
         env.storage().persistent().set(
-            &super::CircuitBreakerKey::TokenLimits(token.clone()),
+            &crate::CircuitBreakerKey::TokenLimits(token.clone()),
             &limit,
         );
 
@@ -1687,7 +1687,7 @@ pub mod admin {
     pub fn get_token_limit(env: &Env, token: &Address) -> Option<i128> {
         env.storage()
             .persistent()
-            .get(&super::CircuitBreakerKey::TokenLimits(token.clone()))
+            .get(&crate::CircuitBreakerKey::TokenLimits(token.clone()))
     }
 }
 
@@ -1748,7 +1748,7 @@ pub mod manual_override {
             ) / 2;
 
             if elapsed < min_elapsed {
-                return Err(CircuitBreakerError::InvalidConfiguration);
+                return Err(CircuitBreakerError::InvalidConfiguration.into());
             }
         }
 
@@ -1805,7 +1805,7 @@ pub mod emergency_mode {
 
         env.storage()
             .instance()
-            .set(&super::CircuitBreakerKey::EnhancedConfig, config);
+            .set(&crate::CircuitBreakerKey::EnhancedConfig, config);
 
         env.events().publish(
             (soroban_sdk::symbol_short!("cb_emerg"), admin.clone()),
@@ -1825,7 +1825,7 @@ pub mod emergency_mode {
 
         env.storage()
             .instance()
-            .set(&super::CircuitBreakerKey::EnhancedConfig, config);
+            .set(&crate::CircuitBreakerKey::EnhancedConfig, config);
 
         env.events()
             .publish((soroban_sdk::symbol_short!("cb_emoff"), admin.clone()), ());
@@ -1843,7 +1843,7 @@ pub mod emergency_mode {
 
         env.storage()
             .instance()
-            .set(&super::CircuitBreakerKey::EnhancedConfig, config);
+            .set(&crate::CircuitBreakerKey::EnhancedConfig, config);
 
         env.events()
             .publish((soroban_sdk::symbol_short!("cb_maint"), admin.clone()), ());
@@ -1861,7 +1861,7 @@ pub mod emergency_mode {
 
         env.storage()
             .instance()
-            .set(&super::CircuitBreakerKey::EnhancedConfig, config);
+            .set(&crate::CircuitBreakerKey::EnhancedConfig, config);
 
         env.events()
             .publish((soroban_sdk::symbol_short!("cb_mtoff"), admin.clone()), ());
@@ -2338,9 +2338,9 @@ pub mod audit {
         let entry = AuditEntry {
             entry_id,
             timestamp,
-            action,
+            action: action.clone(),
             admin: admin.cloned(),
-            details,
+            details: details.clone(),
         };
 
         // Store audit entry (using temporary storage for recent entries)
@@ -2349,7 +2349,7 @@ pub mod audit {
             .set(&(symbol_short!("audit"), entry_id), &entry);
 
         // Emit audit event
-        super::events::emit_audit_event(env, action, admin, details);
+        super::events::emit_audit_event(env, action.clone(), admin, details.clone());
 
         entry_id
     }
@@ -2395,7 +2395,7 @@ pub mod audit {
     }
 
     /// Gets current audit ID without incrementing
-    fn get_current_audit_id(env: &Env) -> u64 {
+    pub fn get_current_audit_id(env: &Env) -> u64 {
         env.storage()
             .instance()
             .get(&symbol_short!("aud_ctr"))
@@ -2819,7 +2819,7 @@ pub mod guard {
             // Emit periodic status if needed
             periodic_status::check_and_emit_status(env, &state, None);
 
-            return Err(CircuitBreakerError::InvalidConfiguration); // Map to appropriate error
+            return Err(CircuitBreakerError::InvalidConfiguration.into()); // Map to appropriate error
         }
 
         // Perform optimized check sequence
@@ -2858,7 +2858,7 @@ pub mod guard {
             // Update state cache
             cache::update_state_cache(env, &state);
 
-            return Err(CircuitBreakerError::InvalidConfiguration); // Map to appropriate error
+            return Err(CircuitBreakerError::InvalidConfiguration.into()); // Map to appropriate error
         }
 
         // Update state with new tip data

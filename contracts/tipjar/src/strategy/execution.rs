@@ -93,11 +93,11 @@ pub fn execute_allocations(
     let now = env.ledger().timestamp();
 
     for (i, target) in strategy.allocations.iter().enumerate() {
-        if i >= distribution.len() {
+        if i as u32 >= distribution.len() {
             break;
         }
 
-        let amount = distribution.get(i).ok_or(ExecutionError::ExecutionFailed)?;
+        let amount = distribution.get(i as u32).ok_or(ExecutionError::ExecutionFailed)?;
 
         if amount <= 0 {
             continue;

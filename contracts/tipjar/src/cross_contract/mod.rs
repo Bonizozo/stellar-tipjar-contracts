@@ -317,7 +317,7 @@ fn execute_call(env: &Env, call_type: &CallType, _target: &Address, args: &Bytes
 
     // Return value is a SHA-256 digest of the args as a deterministic receipt.
     let return_value: Bytes = if success {
-        let hash: BytesN<32> = env.crypto().sha256(args);
+        let hash: BytesN<32> = env.crypto().sha256(args).to_bytes();
         hash.into()
     } else {
         Bytes::new(env)

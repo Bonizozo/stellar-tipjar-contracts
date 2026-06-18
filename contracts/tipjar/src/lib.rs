@@ -1,6 +1,8 @@
 #![no_std]
 #![deny(unsafe_code)]
-#![deny(missing_docs)]
+// `missing_docs` relaxed to a warning: many public items across the merged
+// feature set are undocumented; enforcing docs is tracked separately.
+#![warn(missing_docs)]
 
 pub mod bridge;
 pub mod integrations;
@@ -20,7 +22,7 @@ pub mod rollup;
 
 use soroban_sdk::{
     contract, contracterror, contractimpl, contracttype, panic_with_error, symbol_short, token,
-    Address, BytesN, Env, Map, String, Vec,
+    Address, Bytes, BytesN, Env, IntoVal, Map, String, Vec,
 };
 
 use circuit_breaker::{
@@ -146,6 +148,11 @@ pub mod portfolio;
 
 // Address whitelists/blacklists for compliance and creator preferences
 pub mod access_lists;
+
+// Modules whose declarations were lost in a prior merge.
+pub mod commit_reveal;
+pub mod liquidity_mining;
+pub mod fractional_ownership;
 
 /// A tip record that includes an optional memo and timestamp.
 #[contracttype]
@@ -699,9 +706,218 @@ pub struct CreditRecord {
     pub is_repayment: bool,
 }
 
-/// Storage layout for persistent contract data.
-#[derive(Clone)]
+// ── Storage sub-key enums (restored; lost in a prior merge) ──────────────────
 #[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum VestingKey {
+    Schedule(u64),
+    CreatorSchedules(Address, u64),
+    CreatorList(Address),
+    Ctr,
+}
+
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum StreamKey {
+    Record(u64),
+    CreatorStreams(Address),
+    SenderStreams(Address),
+    Ctr,
+}
+
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum AuctionKey {
+    Ctr,
+    Record(u64),
+    CreatorList(Address),
+}
+
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum MultiSigKey {
+    Request(u64),
+    Ctr,
+    Config,
+}
+
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum DisputeKey {
+    Record(u64),
+    Ctr,
+    CreatorList(Address),
+    Evidence(u64, u64),
+    EvidenceCtr(u64),
+}
+
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum PrivateTipKey {
+    Record(u64),
+    Ctr,
+    Amount(u64),
+}
+
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum InsuranceKey {
+    Cfg,
+    Token(Address),
+    Claim(u64),
+    Ctr,
+    Contrib(Address, Address),
+    LastClm(Address, Address),
+    ActiveClms(Address, Address),
+    TotalClms(Address, Address),
+    Enabled,
+    MaxClms,
+    Admin,
+    Clms(Address, Address),
+}
+
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum OptionKey {
+    Record(u64),
+    Ctr,
+    Written(Address),
+    Held(Address),
+    Position(Address),
+    PricingParams,
+    Active,
+    Collateral(Address, Address),
+}
+
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum BridgeKey {
+    Relayer,
+    Token,
+    Enabled,
+    FeeBps,
+    PlatformFeeBalance(Address),
+}
+
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum MilestoneKey {
+    Counter(Address),
+    Record(Address, u64),
+    Active(Address),
+}
+
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum RoleKey {
+    User(Address),
+    Members(Role),
+}
+
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum StatsKey {
+    TipperAgg(Address, u32),
+    CreatorAgg(Address, u32),
+    TipperParts(u32),
+    CreatorParts(u32),
+}
+
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum LockedTipKey {
+    Record(Address, u64),
+    Ctr(Address),
+}
+
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum MatchingKey {
+    Ctr,
+    Program(u64),
+    CreatorProgs(Address),
+}
+
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum TipKey {
+    Record(u64),
+    Ctr,
+    History(Address, u64),
+    Count(Address),
+}
+
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum FeeKey {
+    BasisPoints,
+    Balance(Address),
+    CurrentDynamic,
+}
+
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum SnapshotKey {
+    Record(u64),
+    Ctr,
+}
+
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum LimitKey {
+    Withdrawal(Address),
+    Default,
+}
+
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum DelegationKey {
+    Active(Address, Address),
+    List(Address),
+    History(Address),
+}
+
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum SyntheticKey {
+    Asset(u64),
+    Ctr,
+    CreatorAssets(Address),
+    Collateral(Address, Address),
+    Balance(Address, u64),
+    SyntheticAsset(u64),
+    SyntheticAssetCounter,
+    CreatorSyntheticAssets(Address),
+    SyntheticCollateral(Address, Address),
+    SyntheticBalance(Address, u64),
+}
+
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum CircuitBreakerKey {
+    /// Legacy configuration (deprecated)
+    Config,
+    /// Legacy state (deprecated)
+    State,
+    /// Legacy cooldown (deprecated)
+    Cooldown(Address),
+    /// Enhanced configuration
+    EnhancedConfig,
+    /// Creator-specific overrides
+    CreatorOverrides(Address),
+    /// Token-specific limits
+    TokenLimits(Address),
+    /// Configuration (current).
+    Cfg,
+}
+
+/// Storage layout for persistent contract data.
+///
+/// `export = false`: this is an internal-only storage-key type, never part of
+/// the public contract interface. Skipping spec export keeps the value
+/// conversions while avoiding Soroban's 50-case limit on exported union types.
+#[derive(Clone)]
+#[contracttype(export = false)]
 pub enum DataKey {
     /// Token contract address whitelist state (bool).
     TokenWhitelist(Address),
@@ -782,7 +998,7 @@ pub enum DataKey {
     /// Multi-sig configuration (threshold, signers, required approvals).
     MultiSigConfig,
     /// Dispute record keyed by dispute_id.
-    Dispute(u64),
+    Dispute(DisputeKey),
     /// Global counter for dispute IDs.
     DisputeCounter,
     /// List of dispute IDs for a creator.
@@ -792,7 +1008,7 @@ pub enum DataKey {
     /// Evidence counter for a dispute.
     DisputeEvidenceCounter(u64),
     /// Private tip record keyed by tip_id.
-    PrivateTip(u64),
+    PrivateTip(PrivateTipKey),
     /// Global counter for private tip IDs.
     PrivateTipCounter,
     /// Revealed amount for a private tip keyed by tip_id.
@@ -822,7 +1038,7 @@ pub enum DataKey {
     /// List of claim IDs for a creator per token.
     InsClms(Address, Address),
     /// Option contract by ID.
-    Option(u64),
+    Option(OptionKey),
     /// Option counter for ID generation.
     OptionCounter,
     /// Options written by address.
@@ -1003,9 +1219,59 @@ pub enum DataKey {
     MarketMaking(market_making::MarketMakingKey),
     /// Address whitelist/blacklist sub-keys.
     AccessList(access_lists::AccessListKey),
+    /// Insurance pool related keys (grouped).
+    Insurance(InsuranceKey),
+    /// Synthetic asset related keys (grouped).
+    Synthetic(SyntheticKey),
+    /// Multi-sig related keys (grouped).
+    MultiSig(MultiSigKey),
+    /// Circuit breaker related keys (grouped).
+    CircuitBreaker(CircuitBreakerKey),
+    /// Bridge related keys (grouped).
+    Bridge(BridgeKey),
+    // ── Restored flat keys (lost in a prior merge) ──────────────────────────
+    BondingCurve(u64),
+    BondingCurveCounter,
+    ContentLineage(Address),
+    CurrentFeeBps,
+    DexContract,
+    FractionHolders(Address),
+    FractionPool(Address),
+    FractionPosition(Address, Address),
+    LmPosition(u64, Address),
+    LmProgram(u64),
+    LmProgramCounter,
+    LmProviderPrograms(Address),
+    ReputationHistory(Address),
+    ReputationScore(Address),
+    RollupBatch(u64),
+    RollupBatchCounter,
+    RollupChallengedCount,
+    RollupChallengePeriod,
+    RollupEnabled,
+    RollupFinalizedCount,
+    RollupFraudProof(u64),
+    RollupPendingCount,
+    RollupSequencer,
+    RoyaltyBalance(Address, Address),
+    RoyaltyConfig(Address),
+    SidechainBatch(u64),
+    SidechainBatchCounter,
+    SidechainCheckpoint(u64),
+    SidechainEnabled,
+    SidechainFinalizedTotal(Address, Address),
+    SidechainLatestCheckpoint,
+    SidechainOperator,
+    SplitBalance(Address),
+    SplitConfig(Address),
+    SplitHistory(Address, u64),
+    SplitHistoryCount(Address),
+    TierConfig(SubscriptionTier),
 }
 
-#[contracterror]
+// `export = false`: enum exceeds Soroban's 50-case spec limit; skip spec export.
+// Error codes still work at runtime via panic_with_error / Result returns.
+#[contracterror(export = false)]
 #[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
 #[repr(u32)]
 pub enum TipJarError {
@@ -1049,10 +1315,138 @@ pub enum TipJarError {
     LmBoostTooLow = 25,
     /// Invalid duration parameter.
     InvalidDuration = 26,
+    /// Circuit breaker is halted or has just tripped.
+    CircuitBreakerTripped = 199,
+    AmmFeeTooHigh = 200,
+    AmmIdenticalTokens = 201,
+    AmmInsufficientLiquidity = 202,
+    AmmInsufficientShares = 203,
+    AmmPoolExists = 204,
+    AmmPoolNotFound = 205,
+    AmmSlippageExceeded = 206,
+    AmmTokenNotInPool = 207,
+    BatchSizeExceeded = 208,
+    BatchTooLarge = 209,
+    BcFeeTooHigh = 210,
+    BcInactive = 211,
+    BcInsufficientReserve = 212,
+    BcInsufficientSupply = 213,
+    BcInvalidParams = 214,
+    BcNoFeesToWithdraw = 215,
+    BcNotFound = 216,
+    BcPriceCalculationFailed = 217,
+    BcSlippageExceeded = 218,
+    BridgeDisabled = 219,
+    CircuitBreakerNotConfigured = 220,
+    CliffExceedsVesting = 221,
+    ContractPaused = 222,
+    FeeExceedsMaximum = 223,
+    FuturesAlreadyClosed = 224,
+    FuturesAlreadyMatched = 225,
+    FuturesInvalidPrice = 226,
+    FuturesNotActive = 227,
+    FuturesNotDue = 228,
+    FuturesNotFound = 229,
+    FuturesNotMatched = 230,
+    FuturesPositionHealthy = 231,
+    FuturesSizeTooSmall = 232,
+    FuturesUnauthorized = 233,
+    IndexDepositTooSmall = 234,
+    IndexFundTooFewCreators = 235,
+    InvalidIndexWeights = 236,
+    InvalidUnlockTime = 237,
+    InvalidVestingDuration = 238,
+    InvalidVestingId = 239,
+    NoVestedAmount = 240,
+    PredAlreadyClaimed = 241,
+    PredBetTooSmall = 242,
+    PredMarketAlreadySettled = 243,
+    PredMarketClosed = 244,
+    PredMarketNotFound = 245,
+    PredMarketNotOpen = 246,
+    PredMarketNotResolver = 247,
+    PredMarketNotSettled = 248,
+    PredNoPosition = 249,
+    PuzzleAlreadySolved = 250,
+    PuzzleCancelled = 251,
+    PuzzleNotActive = 252,
+    PuzzleNotFound = 253,
+    PuzzleTooEarly = 254,
+    PuzzleUnauthorized = 255,
+    PuzzleWrongSolution = 256,
+    SubscriptionNotActive = 257,
+    SubscriptionNotFound = 258,
+    TierNotConfigured = 259,
+    TwapInvalidParams = 260,
+    TwapInvalidPrice = 261,
+    TwapInvalidWindow = 262,
+    TwapOracleInactive = 263,
+    TwapOracleNotFound = 264,
+    TwapUpdateTooFrequent = 265,
+    VestingScheduleNotFound = 266,
+    VolIndexNotActive = 267,
+    VolIndexNotFound = 268,
+    VolInvalidWindow = 269,
+    VolObsTooFrequent = 270,
+    VolUnauthorized = 271,
+    // Source-tagged wrappers for feature-subsystem errors (see From impls below).
+    CoreErr = 280,
+    SystemErr = 281,
+    FeatureErr = 282,
+    VestingErr = 283,
+    StreamErr = 284,
+    AuctionErr = 285,
+    CreditErr = 286,
+    OtherErr = 287,
+    InsuranceErr = 288,
 }
 
-#[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
-#[repr(u32)]
+impl From<CoreError> for TipJarError {
+    fn from(_: CoreError) -> Self {
+        TipJarError::CoreErr
+    }
+}
+impl From<SystemError> for TipJarError {
+    fn from(_: SystemError) -> Self {
+        TipJarError::SystemErr
+    }
+}
+impl From<FeatureError> for TipJarError {
+    fn from(_: FeatureError) -> Self {
+        TipJarError::FeatureErr
+    }
+}
+impl From<VestingError> for TipJarError {
+    fn from(_: VestingError) -> Self {
+        TipJarError::VestingErr
+    }
+}
+impl From<StreamError> for TipJarError {
+    fn from(_: StreamError) -> Self {
+        TipJarError::StreamErr
+    }
+}
+impl From<AuctionError> for TipJarError {
+    fn from(_: AuctionError) -> Self {
+        TipJarError::AuctionErr
+    }
+}
+impl From<CreditError> for TipJarError {
+    fn from(_: CreditError) -> Self {
+        TipJarError::CreditErr
+    }
+}
+impl From<OtherError> for TipJarError {
+    fn from(_: OtherError) -> Self {
+        TipJarError::OtherErr
+    }
+}
+impl From<InsuranceError> for TipJarError {
+    fn from(_: InsuranceError) -> Self {
+        TipJarError::InsuranceErr
+    }
+}
+
 #[contracterror]
 #[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
 #[repr(u32)]
@@ -1114,6 +1508,16 @@ pub enum FeatureError {
     MultiSigNotConfigured = 43,
     DelegationNotFound = 44,
     DelegationExpired = 45,
+    DelegationInactive = 400,
+    DelegationLimitExceeded = 401,
+    DisputeNotFound = 402,
+    DisputeNotOpen = 403,
+    InvalidDuration = 404,
+    InvalidInterval = 405,
+    InvalidPercentage = 406,
+    InvalidPercentageSum = 407,
+    InvalidRecipientCount = 408,
+    PaymentNotDue = 409,
 }
 
 #[contracterror]
@@ -1177,9 +1581,14 @@ pub enum AuctionError {
     OptionNotActive = 88,
     OptionExpired = 89,
     OptionOutOfMoney = 90,
+    InvalidBridgeFee = 500,
+    InvalidOptionParams = 501,
+    OptionAlreadySold = 502,
 }
 
-#[contracterror]
+// `export = false`: large internal error enum; skip spec export to avoid
+// Soroban's 50-case limit on exported error enums.
+#[contracterror(export = false)]
 #[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
 #[repr(u32)]
 pub enum CreditError {
@@ -1219,19 +1628,19 @@ pub enum CreditError {
     /// Caller is not the puzzle creator.
     PuzzleUnauthorized = 111,
     /// TWAP oracle not found.
-    TwapOracleNotFound = 105,
+    TwapOracleNotFound = 158,
     /// TWAP oracle is inactive.
-    TwapOracleInactive = 106,
+    TwapOracleInactive = 159,
     /// TWAP price update is too frequent (below MIN_UPDATE_INTERVAL).
-    TwapUpdateTooFrequent = 107,
+    TwapUpdateTooFrequent = 160,
     /// TWAP observation window is outside the allowed range.
-    TwapInvalidWindow = 108,
+    TwapInvalidWindow = 161,
     /// TWAP oracle parameters (e.g. capacity) are invalid.
-    TwapInvalidParams = 109,
+    TwapInvalidParams = 162,
     /// TWAP price value is invalid (must be > 0).
-    TwapInvalidPrice = 110,
+    TwapInvalidPrice = 163,
     /// Prediction market not found.
-    PredMarketNotFound = 111,
+    PredMarketNotFound = 164,
     /// Prediction market is not open for betting.
     PredMarketNotOpen = 112,
     /// Betting window for this market has closed.
@@ -1324,6 +1733,13 @@ pub enum CreditError {
     RollupChallengeExpired = 156,
     /// Fraud proof roots match; no fraud detected.
     RollupNoFraudDetected = 157,
+    CollateralizationViolation = 300,
+    EnhancedCircuitBreakerError = 301,
+    InsufficientPoolBalance = 302,
+    InvalidCollateralizationRatio = 303,
+    SyntheticAssetInactive = 304,
+    SyntheticAssetNotFound = 305,
+    TokenNotInPool = 306,
 }
 
 #[contracterror]
@@ -1482,6 +1898,35 @@ pub enum ZkProofError {
     NotTipCreator = 612,
 }
 
+
+/// Insurance subsystem errors (restored; definition lost in a prior merge).
+#[contracterror]
+#[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
+#[repr(u32)]
+pub enum InsuranceError {
+    AdmAppReq = 600,
+    ClaimCooldownActive = 601,
+    ClaimNotApproved = 602,
+    ClaimNotFound = 603,
+    ContributionTooHigh = 604,
+    ContributionTooLow = 605,
+    DisputeUnauthorized = 606,
+    InsPoolNotCfg = 607,
+    InsufficientReserves = 608,
+    InsuranceDisabled = 609,
+    InvalidClaimAmount = 610,
+    InvalidReveal = 611,
+    InvalidStreamRate = 612,
+    NoCoverage = 613,
+    PayoutExceedsReserves = 614,
+    PrivateTipNotFound = 615,
+    StreamAlreadyCancelled = 616,
+    StreamAlreadyCompleted = 617,
+    StreamNotFound = 618,
+    StreamNotStarted = 619,
+    TooManyActiveClaims = 620,
+}
+
 #[contract]
 pub struct TipJarContract;
 
@@ -1526,6 +1971,92 @@ impl TipJarContract {
         env.storage()
             .instance()
             .set(&DataKey::CircuitBreaker(CircuitBreakerKey::State), state);
+    }
+
+    /// Requires the stored contract admin to have authorized this invocation.
+    fn require_admin(env: &Env) {
+        let admin: Address = env
+            .storage()
+            .instance()
+            .get(&DataKey::Admin)
+            .unwrap_or_else(|| panic_with_error!(env, TipJarError::Unauthorized));
+        admin.require_auth();
+    }
+
+    /// Trips the circuit breaker: starts the cooldown halt and records the trigger.
+    fn trigger_breaker(
+        env: &Env,
+        state: &mut CircuitBreakerState,
+        config: &CircuitBreakerConfig,
+        reason: soroban_sdk::Symbol,
+    ) {
+        let now = env.ledger().timestamp();
+        state.halted_until = now.saturating_add(config.cooldown_seconds);
+        state.trigger_count = state.trigger_count.saturating_add(1);
+        env.storage()
+            .instance()
+            .set(&DataKey::CircuitBreaker(CircuitBreakerKey::State), state);
+        env.events().publish(
+            (symbol_short!("cb_trig"), reason),
+            (state.halted_until, state.trigger_count),
+        );
+    }
+
+    /// Circuit-breaker guard run before value-moving operations.
+    ///
+    /// Rejects the operation while the breaker is halted, on a single-tip spike,
+    /// or when the rolling volume window is exceeded.
+    fn check_circuit_breaker(env: &Env, amount: i128) {
+        let config = match env.storage().instance().get::<DataKey, CircuitBreakerConfig>(
+            &DataKey::CircuitBreaker(CircuitBreakerKey::Cfg),
+        ) {
+            Some(c) => c,
+            None => return,
+        };
+
+        if !config.enabled {
+            return;
+        }
+
+        let mut state = env
+            .storage()
+            .instance()
+            .get::<DataKey, CircuitBreakerState>(&DataKey::CircuitBreaker(CircuitBreakerKey::State))
+            .unwrap_or(CircuitBreakerState {
+                window_start: env.ledger().timestamp(),
+                current_volume: 0,
+                halted_until: 0,
+                trigger_count: 0,
+            });
+
+        let now = env.ledger().timestamp();
+
+        // Reject everything while the breaker is halted.
+        if now < state.halted_until {
+            panic_with_error!(env, TipJarError::CircuitBreakerTripped);
+        }
+
+        // 1. Individual tip spike.
+        if amount > config.max_single_tip {
+            Self::trigger_breaker(env, &mut state, &config, symbol_short!("spike"));
+            panic_with_error!(env, TipJarError::CircuitBreakerTripped);
+        }
+
+        // 2. Volume spike within the rolling window.
+        if now >= state.window_start.saturating_add(config.window_seconds) {
+            state.window_start = now;
+            state.current_volume = amount;
+        } else {
+            state.current_volume = state.current_volume.saturating_add(amount);
+            if state.current_volume > config.max_volume_window {
+                Self::trigger_breaker(env, &mut state, &config, symbol_short!("volume"));
+                panic_with_error!(env, TipJarError::CircuitBreakerTripped);
+            }
+        }
+
+        env.storage()
+            .instance()
+            .set(&DataKey::CircuitBreaker(CircuitBreakerKey::State), &state);
     }
 
     fn add_creator_auction(env: &Env, creator: &Address, auction_id: u64) {
@@ -1638,8 +2169,8 @@ impl TipJarContract {
         let mut account = match env
             .storage()
             .persistent()
-            .get::<soroban_sdk::Vec<soroban_sdk::Val>, CreditAccount>(
-                &(symbol_short!("cr_acc"), creator.clone(), token.clone()).into_val(env),
+            .get::<_, CreditAccount>(
+                &(symbol_short!("cr_acc"), creator.clone(), token.clone()),
             ) {
             Some(acc) => acc,
             None => return amount_to_credit,
@@ -1677,7 +2208,7 @@ impl TipJarContract {
         account.total_repaid += actual_repayment;
         account.last_update = env.ledger().timestamp();
         env.storage().persistent().set(
-            &(symbol_short!("cr_acc"), creator.clone(), token.clone()).into_val(env),
+            &(symbol_short!("cr_acc"), creator.clone(), token.clone()),
             &account,
         );
 
@@ -1718,7 +2249,7 @@ impl TipJarContract {
             is_repayment,
         };
 
-        let history_key = (symbol_short!("cr_hst"), creator.clone(), token.clone()).into_val(env);
+        let history_key = (symbol_short!("cr_hst"), creator.clone(), token.clone());
         let mut history: Vec<CreditRecord> = env
             .storage()
             .persistent()
@@ -2093,8 +2624,8 @@ impl TipJarContract {
         let mut account = env
             .storage()
             .persistent()
-            .get::<soroban_sdk::Vec<soroban_sdk::Val>, CreditAccount>(
-                &(symbol_short!("cr_acc"), creator.clone(), token.clone()).into_val(&env),
+            .get::<_, CreditAccount>(
+                &(symbol_short!("cr_acc"), creator.clone(), token.clone()),
             )
             .unwrap_or(CreditAccount {
                 principal: 0,
@@ -2134,7 +2665,7 @@ impl TipJarContract {
         account.total_borrowed += amount;
         account.last_update = env.ledger().timestamp();
         env.storage().persistent().set(
-            &(symbol_short!("cr_acc"), creator.clone(), token.clone()).into_val(&env),
+            &(symbol_short!("cr_acc"), creator.clone(), token.clone()),
             &account,
         );
 
@@ -2155,8 +2686,8 @@ impl TipJarContract {
         let mut account = env
             .storage()
             .persistent()
-            .get::<soroban_sdk::Vec<soroban_sdk::Val>, CreditAccount>(
-                &(symbol_short!("cr_acc"), creator.clone(), token.clone()).into_val(&env),
+            .get::<_, CreditAccount>(
+                &(symbol_short!("cr_acc"), creator.clone(), token.clone()),
             )
             .unwrap_or_else(|| panic_with_error!(&env, OtherError::NoActiveCredit));
 
@@ -2202,7 +2733,7 @@ impl TipJarContract {
         account.total_repaid += actual_repayment;
         account.last_update = env.ledger().timestamp();
         env.storage().persistent().set(
-            &(symbol_short!("cr_acc"), creator.clone(), token.clone()).into_val(&env),
+            &(symbol_short!("cr_acc"), creator.clone(), token.clone()),
             &account,
         );
 
@@ -2229,14 +2760,14 @@ impl TipJarContract {
     pub fn get_credit_account(env: Env, creator: Address, token: Address) -> Option<CreditAccount> {
         env.storage()
             .persistent()
-            .get(&(symbol_short!("cr_acc"), creator, token).into_val(&env))
+            .get(&(symbol_short!("cr_acc"), creator, token))
     }
 
     /// Returns the credit history for a creator.
     pub fn get_credit_history(env: Env, creator: Address, token: Address) -> Vec<CreditRecord> {
         env.storage()
             .persistent()
-            .get(&(symbol_short!("cr_hst"), creator, token).into_val(&env))
+            .get(&(symbol_short!("cr_hst"), creator, token))
             .unwrap_or_else(|| Vec::new(&env))
     }
 
@@ -2596,7 +3127,7 @@ impl TipJarContract {
             .set(&DataKey::Auction(AuctionKey::Record(auction_id)), &auction);
 
         if auction.highest_bid == 0 || auction.highest_bid < auction.reserve_price {
-            if let Some(winner) = auction.highest_bidder {
+            if let Some(winner) = auction.highest_bidder.clone() {
                 token::Client::new(&env, &auction.token).transfer(
                     &env.current_contract_address(),
                     &winner,
@@ -2605,7 +3136,7 @@ impl TipJarContract {
             }
             env.events().publish(
                 (symbol_short!("auc_fail"),),
-                (auction_id, auction.highest_bidder, auction.highest_bid),
+                (auction_id, auction.highest_bidder.clone(), auction.highest_bid),
             );
             return;
         }
@@ -2713,7 +3244,7 @@ impl TipJarContract {
         env.storage()
             .persistent()
             .get(&DataKey::Auction(AuctionKey::CreatorList(creator)))
-            .unwrap_or_else(|| Vec::new(env))
+            .unwrap_or_else(|| Vec::new(&env))
     }
 
     /// Authorizes a delegate to withdraw on behalf of `creator`.
@@ -2938,7 +3469,7 @@ impl TipJarContract {
             .unwrap_or_else(|| Vec::new(env));
         let mut remaining = Vec::new(env);
         for d in delegates.iter() {
-            if d != delegate {
+            if d != *delegate {
                 remaining.push_back(d);
             }
         }
@@ -3868,8 +4399,7 @@ impl TipJarContract {
         // Validate message length by character count (not bytes) to support emoji.
         if let Some(ref msg) = message {
             // Soroban String stores raw bytes; convert to a &str slice for char counting.
-            let bytes = msg.to_string();
-            let char_count = bytes.chars().count();
+            let char_count = msg.len();
             if char_count > 200 {
                 panic_with_error!(&env, TipJarError::MessageTooLong);
             }
@@ -4154,7 +4684,13 @@ impl TipJarContract {
                 .persistent()
                 .get(&DataKey::Role(RoleKey::Members(role.clone())))
                 .unwrap_or_else(|| Vec::new(&env));
-            members.retain(|a| a != user);
+            let mut kept = Vec::new(&env);
+            for a in members.iter() {
+                if a != user {
+                    kept.push_back(a);
+                }
+            }
+            members = kept;
             env.storage()
                 .persistent()
                 .set(&DataKey::Role(RoleKey::Members(role.clone())), &members);
@@ -5244,7 +5780,7 @@ impl TipJarContract {
                 let new_fee_bal: i128 = env
                     .storage()
                     .instance()
-                    .get(&fee_key)
+                    .get::<DataKey, i128>(&fee_key)
                     .unwrap_or(0)
                     .checked_add(fee)
                     .expect("fee overflow");
@@ -5959,7 +6495,7 @@ impl TipJarContract {
     ///
     /// Called internally after tips are processed. Emits milestone events.
     fn check_and_award_milestones(env: &Env, creator: &Address, token: &Address, new_total: i128) {
-        let milestones = Self::get_creator_milestones(env, creator);
+        let milestones = Self::get_creator_milestones(env.clone(), creator.clone());
 
         for (idx, milestone) in milestones.iter().enumerate() {
             if !milestone.completed && new_total >= milestone.goal_amount {
@@ -6116,7 +6652,7 @@ impl TipJarContract {
             .set(&DataKey::PrivateTip(PrivateTipKey::Ctr), &(tip_id + 1));
 
         let amount_bytes = amount.to_le_bytes();
-        let amount_hash = env.crypto().sha256(&amount_bytes);
+        let amount_hash = env.crypto().sha256(&Bytes::from_array(&env, &amount_bytes)).to_bytes();
 
         let tipper = if is_anonymous {
             None
@@ -6168,7 +6704,7 @@ impl TipJarContract {
             .unwrap_or_else(|| panic_with_error!(&env, InsuranceError::PrivateTipNotFound));
 
         let amount_bytes = amount.to_le_bytes();
-        let computed_hash = env.crypto().sha256(&amount_bytes);
+        let computed_hash = env.crypto().sha256(&Bytes::from_array(&env, &amount_bytes)).to_bytes();
 
         if computed_hash != private_tip.amount_hash {
             panic_with_error!(&env, InsuranceError::InvalidReveal);

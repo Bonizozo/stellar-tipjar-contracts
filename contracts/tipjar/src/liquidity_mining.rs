@@ -186,7 +186,7 @@ fn compute_rewards(amount: i128, rate_bps: u32, elapsed: u64) -> i128 {
 }
 
 /// Applies the boost multiplier to a raw reward amount.
-fn apply_boost(raw: i128, boost: i128) -> i128 {
+fn apply_boost_factor(raw: i128, boost: i128) -> i128 {
     raw * boost / PRECISION
 }
 
@@ -206,7 +206,7 @@ fn accrue(program: &MiningProgram, position: &mut MiningPosition, now: u64) {
     }
     let elapsed = effective_now - position.last_update;
     let raw = compute_rewards(position.staked_amount, program.reward_rate_bps, elapsed);
-    let boosted = apply_boost(raw, position.boost_multiplier);
+    let boosted = apply_boost_factor(raw, position.boost_multiplier);
     position.pending_rewards += boosted;
     position.total_earned += boosted;
     position.last_update = effective_now;

@@ -162,7 +162,7 @@ pub fn rent(
         .ok_or(RentalError::ListingNotFound)?;
 
     if !listing.active {
-        return Err(RentalError::ListingNotFound);
+        return Err(RentalError::ListingNotFound.into());
     }
 
     let now = env.ledger().timestamp();

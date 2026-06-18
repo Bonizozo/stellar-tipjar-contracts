@@ -5,6 +5,7 @@
 //! is handled via shard transfer records. Rebalancing redistributes
 //! load when shards become uneven.
 
+use soroban_sdk::xdr::ToXdr;
 use soroban_sdk::{contracttype, symbol_short, Address, BytesN, Bytes, Env, Vec};
 
 use crate::DataKey;
@@ -156,7 +157,7 @@ fn next_transfer_id(env: &Env) -> u64 {
 pub fn assign_shard(env: &Env, addr: &Address) -> u32 {
     let config = get_config(env);
     let addr_bytes = addr.to_xdr(env);
-    let hash: BytesN<32> = env.crypto().sha256(&addr_bytes);
+    let hash: BytesN<32> = env.crypto().sha256(&addr_bytes).to_bytes();
     // Read first 4 bytes as big-endian u32.
     let b0 = hash.get(0).unwrap_or(0) as u32;
     let b1 = hash.get(1).unwrap_or(0) as u32;

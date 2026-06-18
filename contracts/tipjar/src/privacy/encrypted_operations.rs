@@ -258,6 +258,7 @@ pub fn reveal_encrypted_tip(
     Ok(())
 }
 
+#[soroban_sdk::contracttype]
 /// Encrypted tip record.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct EncryptedTip {

@@ -122,7 +122,7 @@ pub fn aggregate_encrypted_amounts(
     }
 
     // Verify all amounts use same key version
-    let key_version = amounts.get(0).key_version;
+    let key_version = amounts.get(0).unwrap().key_version;
     for amount in amounts.iter() {
         if amount.key_version != key_version {
             return Err("mismatched key versions in aggregation");
@@ -130,16 +130,16 @@ pub fn aggregate_encrypted_amounts(
     }
 
     // Aggregate ciphertexts via XOR (simplified homomorphic operation)
-    let mut aggregated = amounts.get(0).ciphertext.clone();
+    let mut aggregated = amounts.get(0).unwrap().ciphertext.clone();
     for i in 1..amounts.len() {
-        let current = amounts.get(i).ciphertext;
+        let current = amounts.get(i).unwrap().ciphertext;
         aggregated = xor_bytes(&aggregated, &current);
     }
 
     // Aggregate randomness commitments
-    let mut agg_randomness = amounts.get(0).randomness_commitment.clone();
+    let mut agg_randomness = amounts.get(0).unwrap().randomness_commitment.clone();
     for i in 1..amounts.len() {
-        let current = amounts.get(i).randomness_commitment;
+        let current = amounts.get(i).unwrap().randomness_commitment;
         agg_randomness = xor_bytes(&agg_randomness, &current);
     }
 
@@ -147,7 +147,7 @@ pub fn aggregate_encrypted_amounts(
         ciphertext: aggregated,
         randomness_commitment: agg_randomness,
         key_version,
-        bit_length: amounts.get(0).bit_length,
+        bit_length: amounts.get(0).unwrap().bit_length,
     })
 }
 
@@ -252,9 +252,7 @@ pub fn verify_decryption_proof(
 ) -> Result<(), &'static str> {
     // Verify value commitment matches decrypted value
     let mut commitment_data = soroban_sdk::Bytes::new(env);
-    commitment_data.append(&soroban_sdk::Bytes::from(
-        decrypted_value.to_le_bytes().to_vec(),
-    ));
+    commitment_data.append(&soroban_sdk::Bytes::from_slice(env, &decrypted_value.to_le_bytes()));
 
     let recomputed_commitment = env.crypto().sha256(&commitment_data);
 
@@ -309,14 +307,14 @@ pub fn encrypt_amount(
     // Generate randomness from seed
     let mut randomness_data = soroban_sdk::Bytes::new(env);
     randomness_data.append(&soroban_sdk::Bytes::from(randomness_seed.clone()));
-    randomness_data.append(&soroban_sdk::Bytes::from(amount.to_le_bytes().to_vec()));
+    randomness_data.append(&soroban_sdk::Bytes::from_slice(env, &amount.to_le_bytes()));
 
     let randomness = env.crypto().sha256(&randomness_data);
 
     // Compute ciphertext: hash(public_key || amount || randomness)
     let mut ciphertext_data = soroban_sdk::Bytes::new(env);
     ciphertext_data.append(&soroban_sdk::Bytes::from(public_key.n.clone()));
-    ciphertext_data.append(&soroban_sdk::Bytes::from(amount.to_le_bytes().to_vec()));
+    ciphertext_data.append(&soroban_sdk::Bytes::from_slice(env, &amount.to_le_bytes()));
     ciphertext_data.append(&soroban_sdk::Bytes::from(randomness.clone()));
 
     let ciphertext = env.crypto().sha256(&ciphertext_data);
@@ -338,7 +336,7 @@ fn xor_bytes(a: &BytesN<32>, b: &BytesN<32>) -> BytesN<32> {
     for i in 0..32 {
         result[i] = a.get(i as u32).unwrap_or(0) ^ b.get(i as u32).unwrap_or(0);
     }
-    BytesN::from_array(&soroban_sdk::Env::new(), &result)
+    BytesN::from_array(a.env(), &result)
 }
 
 /// Multiply bytes by scalar (simplified scalar multiplication).
@@ -353,7 +351,7 @@ fn multiply_bytes_by_scalar(bytes: &BytesN<32>, scalar: u64) -> BytesN<32> {
         result[i] = byte_val.wrapping_mul(scalar_byte);
     }
 
-    BytesN::from_array(&soroban_sdk::Env::new(), &result)
+    BytesN::from_array(bytes.env(), &result)
 }
 
 #[cfg(test)]
@@ -362,8 +360,8 @@ mod tests {
 
     #[test]
     fn test_xor_bytes() {
-        let a = BytesN::from_array(&soroban_sdk::Env::new(), &[0xAA; 32]);
-        let b = BytesN::from_array(&soroban_sdk::Env::new(), &[0x55; 32]);
+        let a = BytesN::from_array(&soroban_sdk::Env::default(), &[0xAA; 32]);
+        let b = BytesN::from_array(&soroban_sdk::Env::default(), &[0x55; 32]);
         let result = xor_bytes(&a, &b);
 
         for i in 0..32 {

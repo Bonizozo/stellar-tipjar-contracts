@@ -112,7 +112,7 @@ pub fn change_conviction_vote(
     let old_vote = env
         .storage()
         .persistent()
-        .get(&vote_key)
+        .get::<_, Vote>(&vote_key)
         .expect("No vote found to change");
 
     // Get existing conviction vote

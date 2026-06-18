@@ -27,7 +27,7 @@ pub fn process_bridge_tip(
         .get(&BridgeDataKey::BridgeEnabled)
         .unwrap_or(false);
     if !enabled {
-        return Err(TipJarError::BridgeDisabled);
+        return Err(TipJarError::BridgeDisabled.into());
     }
 
     // 2. Authenticate relayer.
@@ -38,7 +38,7 @@ pub fn process_bridge_tip(
         .get(&BridgeDataKey::BridgeRelayer)
         .ok_or(CoreError::Unauthorized)?;
     if *relayer != stored_relayer {
-        return Err(CoreError::Unauthorized);
+        return Err(CoreError::Unauthorized.into());
     }
 
     // 3. Validate amount and replay guard.

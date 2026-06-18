@@ -28,7 +28,7 @@ pub fn execute_proposal(env: &Env, executor: &Address, proposal_id: u64) {
 
     // Execute actions
     for action in proposal.actions.iter() {
-        execute_action(env, action);
+        execute_action(env, &action);
     }
 
     // Mark as executed

@@ -32,7 +32,7 @@ use soroban_sdk::Env;
 /// - Validates: Requirements 4.1, 4.2, 4.3, 4.4, 4.5, 4.6, 4.7
 pub fn update_oracle_price(env: &Env, asset_id: u64) -> Result<i128, TipJarError> {
     // Retrieve the synthetic asset
-    let asset_key = DataKey(Key());
+    let asset_key = DataKey::Synthetic(SyntheticKey::SyntheticAsset(asset_id));
     let mut asset: SyntheticAsset = env
         .storage()
         .persistent()
@@ -86,7 +86,7 @@ pub fn update_oracle_price(env: &Env, asset_id: u64) -> Result<i128, TipJarError
 /// - Validates: Requirements 4.1, 9.3
 pub fn get_oracle_price(env: &Env, asset_id: u64) -> Result<i128, TipJarError> {
     // Retrieve the synthetic asset
-    let asset_key = DataKey(Key());
+    let asset_key = DataKey::Synthetic(SyntheticKey::SyntheticAsset(asset_id));
     let asset: SyntheticAsset = env
         .storage()
         .persistent()

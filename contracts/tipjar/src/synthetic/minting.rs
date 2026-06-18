@@ -39,7 +39,7 @@ pub fn calculate_required_collateral(
 ) -> Result<i128, TipJarError> {
     // Validate amount is positive
     if amount <= 0 {
-        return Err(CoreError::InvalidAmount);
+        return Err(CoreError::InvalidAmount.into());
     }
 
     // Retrieve the synthetic asset
@@ -81,7 +81,7 @@ pub fn calculate_required_collateral(
 pub fn mint(env: &Env, user: &Address, asset_id: u64, amount: i128) -> Result<i128, TipJarError> {
     // Validate amount is positive
     if amount <= 0 {
-        return Err(CoreError::InvalidAmount);
+        return Err(CoreError::InvalidAmount.into());
     }
 
     // Verify synthetic asset exists and is active
@@ -93,7 +93,7 @@ pub fn mint(env: &Env, user: &Address, asset_id: u64, amount: i128) -> Result<i1
         .ok_or(CreditError::SyntheticAssetNotFound)?;
 
     if !asset.active {
-        return Err(CreditError::SyntheticAssetInactive);
+        return Err(CreditError::SyntheticAssetInactive.into());
     }
 
     // Calculate required collateral

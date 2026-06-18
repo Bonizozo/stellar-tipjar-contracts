@@ -236,7 +236,7 @@ pub fn needs_rebalance(
 
     let now = env.ledger().timestamp();
     if now < portfolio.last_rebalance.saturating_add(portfolio.rebalance_frequency_seconds) {
-        return Err(PortfolioError::RebalanceTooFrequent);
+        return Err(PortfolioError::RebalanceTooFrequent.into());
     }
 
     let total_value: i128 = current_values.iter().fold(0i128, |acc, v| acc.saturating_add(v));

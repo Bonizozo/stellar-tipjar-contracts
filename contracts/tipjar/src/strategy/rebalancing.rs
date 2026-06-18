@@ -28,7 +28,7 @@ pub fn should_rebalance(env: &Env, strategy_id: u64) -> Result<bool, Rebalancing
 
     // Check frequency constraint
     if now < strategy.last_rebalance + strategy.rebalance_frequency_seconds {
-        return Err(RebalancingError::TooFrequentRebalancing);
+        return Err(RebalancingError::TooFrequentRebalancing.into());
     }
 
     Ok(true)
@@ -51,12 +51,12 @@ pub fn calculate_rebalancing(
     let mut adjustments = Vec::new(env);
 
     for (i, target) in strategy.allocations.iter().enumerate() {
-        if i >= current_allocations.len() {
+        if i as u32 >= current_allocations.len() {
             break;
         }
 
         let current_amount = current_allocations
-            .get(i)
+            .get(i as u32)
             .ok_or(RebalancingError::CalculationFailed)?;
 
         // Calculate target amount
@@ -186,12 +186,12 @@ fn calculate_max_drift(
     let mut max_drift = 0u32;
 
     for (i, target) in strategy.allocations.iter().enumerate() {
-        if i >= current_allocations.len() {
+        if i as u32 >= current_allocations.len() {
             break;
         }
 
         let current_amount = current_allocations
-            .get(i)
+            .get(i as u32)
             .ok_or(RebalancingError::CalculationFailed)?;
 
         let target_amount = (total_aum as u128)

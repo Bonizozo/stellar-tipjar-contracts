@@ -36,7 +36,7 @@ pub fn create_synthetic_asset(
 ) -> Result<u64, TipJarError> {
     // Verify collateralization ratio is between 10000 and 50000 bps (100%-500%)
     if collateralization_ratio < 10000 || collateralization_ratio > 50000 {
-        return Err(CreditError::InvalidCollateralizationRatio);
+        return Err(CreditError::InvalidCollateralizationRatio.into());
     }
 
     // Verify backing token exists in creator's tip pool
@@ -48,13 +48,13 @@ pub fn create_synthetic_asset(
         .unwrap_or(0);
 
     if tip_pool_balance == 0 {
-        return Err(CreditError::TokenNotInPool);
+        return Err(CreditError::TokenNotInPool.into());
     }
 
     // Verify creator has sufficient tip pool balance (at least some minimum)
     // For now, we just check that balance > 0, but in practice might want a minimum threshold
     if tip_pool_balance <= 0 {
-        return Err(CreditError::InsufficientCollateral);
+        return Err(CreditError::InsufficientCollateral.into());
     }
 
     // Generate unique asset_id using SyntheticAssetCounter
@@ -130,7 +130,7 @@ pub fn pause_synthetic_asset(
 
     // Verify caller is asset creator
     if asset.creator != *creator {
-        return Err(CoreError::Unauthorized);
+        return Err(CoreError::Unauthorized.into());
     }
 
     // Set active status to false
@@ -167,13 +167,13 @@ pub fn resume_synthetic_asset(
 
     // Verify caller is asset creator
     if asset.creator != *creator {
-        return Err(CoreError::Unauthorized);
+        return Err(CoreError::Unauthorized.into());
     }
 
     // Verify collateralization requirements are met
     let current_ratio = get_collateralization_ratio(env, asset_id)?;
     if current_ratio < asset.collateralization_ratio {
-        return Err(CreditError::CollateralizationViolation);
+        return Err(CreditError::CollateralizationViolation.into());
     }
 
     // Set active status to true
@@ -204,7 +204,7 @@ pub fn update_collateralization_ratio(
 ) -> Result<(), TipJarError> {
     // Verify new ratio is between 10000 and 50000 bps
     if new_ratio < 10000 || new_ratio > 50000 {
-        return Err(CreditError::InvalidCollateralizationRatio);
+        return Err(CreditError::InvalidCollateralizationRatio.into());
     }
 
     // Retrieve the synthetic asset
@@ -217,7 +217,7 @@ pub fn update_collateralization_ratio(
 
     // Verify caller is asset creator
     if asset.creator != *creator {
-        return Err(CoreError::Unauthorized);
+        return Err(CoreError::Unauthorized.into());
     }
 
     // Update collateralization_ratio field
@@ -248,7 +248,7 @@ pub fn add_collateral(
 ) -> Result<(), TipJarError> {
     // Validate amount is positive
     if amount <= 0 {
-        return Err(CoreError::InvalidAmount);
+        return Err(CoreError::InvalidAmount.into());
     }
 
     // Retrieve the synthetic asset
@@ -261,7 +261,7 @@ pub fn add_collateral(
 
     // Verify caller is asset creator
     if asset.creator != *creator {
-        return Err(CoreError::Unauthorized);
+        return Err(CoreError::Unauthorized.into());
     }
 
     // Transfer collateral from creator to tip pool (this is essentially adding to their own pool)

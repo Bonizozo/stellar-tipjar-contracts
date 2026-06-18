@@ -138,7 +138,7 @@ pub fn init_options(env: &Env) {
 
     env.storage()
         .instance()
-        .set(&DataKey::Option(OptionKey::OptionCounter), &0u64);
+        .set(&DataKey::OptionCounter, &0u64);
 }
 
 /// Get pricing parameters
@@ -257,7 +257,7 @@ pub fn remove_held_option(env: &Env, holder: &Address, option_id: u64) {
         .get(&DataKey::HeldOptions(holder.clone()))
         .unwrap_or_else(|| soroban_sdk::Vec::new(env));
 
-    if let Some(index) = options.iter().position(|&id| id == option_id) {
+    if let Some(index) = options.iter().position(|id| id == option_id) {
         options.remove(index as u32);
         env.storage()
             .persistent()
@@ -289,7 +289,7 @@ pub fn remove_active_option(env: &Env, option_id: u64) {
         .get(&DataKey::ActiveOptions)
         .unwrap_or_else(|| soroban_sdk::Vec::new(env));
 
-    if let Some(index) = options.iter().position(|&id| id == option_id) {
+    if let Some(index) = options.iter().position(|id| id == option_id) {
         options.remove(index as u32);
         env.storage()
             .persistent()
