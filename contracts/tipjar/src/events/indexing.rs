@@ -1,7 +1,7 @@
 //! Event indexing for efficient querying
 
 use super::{DataKey, EventFilter, TipEvent};
-use soroban_sdk::{Address, Env, String, Vec};
+use soroban_sdk::{Env, Vec};
 
 /// Update event indexes for efficient querying
 pub fn update_event_index(env: &Env, event: &TipEvent) {
@@ -126,7 +126,7 @@ pub fn get_event_ids(env: &Env, filter: &EventFilter) -> Vec<u64> {
             day += 86400;
         }
     } else if let Some(ref tags) = filter.tags {
-        if tags.len() > 0 {
+        if !tags.is_empty() {
             // Use first tag for initial filtering
             let first_tag = tags.get(0).unwrap();
             let tag_key = DataKey::TagEvents(first_tag);

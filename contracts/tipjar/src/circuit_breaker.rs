@@ -2,7 +2,7 @@
 ///
 /// This module provides sophisticated automated protection against extreme market volatility,
 /// anomalous trading patterns, and potential attacks within the Stellar tipjar contracts.
-use soroban_sdk::{contracterror, contracttype, symbol_short, Symbol};
+use soroban_sdk::{contracterror, contracttype, symbol_short};
 
 /// Enhanced circuit breaker configuration with comprehensive protection parameters
 #[contracttype]
@@ -115,60 +115,60 @@ impl EnhancedCircuitBreakerConfig {
     pub fn validate(&self) -> Result<(), CircuitBreakerError> {
         // Validate single tip threshold
         if self.max_single_tip <= 0 {
-            return Err(CircuitBreakerError::InvalidSingleTipThreshold.into());
+            return Err(CircuitBreakerError::InvalidSingleTipThreshold);
         }
 
         // Validate volume thresholds
         if self.one_minute_threshold <= 0 {
-            return Err(CircuitBreakerError::InvalidVolumeThreshold.into());
+            return Err(CircuitBreakerError::InvalidVolumeThreshold);
         }
         if self.five_minute_threshold <= 0 {
-            return Err(CircuitBreakerError::InvalidVolumeThreshold.into());
+            return Err(CircuitBreakerError::InvalidVolumeThreshold);
         }
         if self.one_hour_threshold <= 0 {
-            return Err(CircuitBreakerError::InvalidVolumeThreshold.into());
+            return Err(CircuitBreakerError::InvalidVolumeThreshold);
         }
         if self.twenty_four_hour_threshold <= 0 {
-            return Err(CircuitBreakerError::InvalidVolumeThreshold.into());
+            return Err(CircuitBreakerError::InvalidVolumeThreshold);
         }
 
         // Validate logical ordering (longer windows should have higher thresholds)
         if self.five_minute_threshold < self.one_minute_threshold {
-            return Err(CircuitBreakerError::InvalidVolumeThreshold.into());
+            return Err(CircuitBreakerError::InvalidVolumeThreshold);
         }
         if self.one_hour_threshold < self.five_minute_threshold {
-            return Err(CircuitBreakerError::InvalidVolumeThreshold.into());
+            return Err(CircuitBreakerError::InvalidVolumeThreshold);
         }
         if self.twenty_four_hour_threshold < self.one_hour_threshold {
-            return Err(CircuitBreakerError::InvalidVolumeThreshold.into());
+            return Err(CircuitBreakerError::InvalidVolumeThreshold);
         }
 
         // Validate rate limits
         if self.max_tips_per_minute == 0 {
-            return Err(CircuitBreakerError::InvalidRateLimit.into());
+            return Err(CircuitBreakerError::InvalidRateLimit);
         }
         if self.max_tips_per_creator_per_min == 0 {
-            return Err(CircuitBreakerError::InvalidRateLimit.into());
+            return Err(CircuitBreakerError::InvalidRateLimit);
         }
 
         // Validate anomaly detection parameters
         if self.anomaly_confidence_threshold > 10000 {
-            return Err(CircuitBreakerError::InvalidConfidenceThreshold.into());
+            return Err(CircuitBreakerError::InvalidConfidenceThreshold);
         }
 
         // Validate cooldown configuration
         if self.base_cooldown_seconds == 0 {
-            return Err(CircuitBreakerError::InvalidCooldownDuration.into());
+            return Err(CircuitBreakerError::InvalidCooldownDuration);
         }
         if self.max_cooldown_seconds == 0 {
-            return Err(CircuitBreakerError::InvalidCooldownDuration.into());
+            return Err(CircuitBreakerError::InvalidCooldownDuration);
         }
         if self.max_cooldown_seconds < self.base_cooldown_seconds {
-            return Err(CircuitBreakerError::InvalidCooldownDuration.into());
+            return Err(CircuitBreakerError::InvalidCooldownDuration);
         }
 
         if self.exponential_backoff_enabled && self.backoff_multiplier <= 10000 {
-            return Err(CircuitBreakerError::InvalidBackoffMultiplier.into());
+            return Err(CircuitBreakerError::InvalidBackoffMultiplier);
         }
 
         Ok(())
@@ -202,27 +202,27 @@ impl VolumeThresholds {
     /// Validates volume threshold configuration
     pub fn validate(&self) -> Result<(), CircuitBreakerError> {
         if self.one_minute_threshold <= 0 {
-            return Err(CircuitBreakerError::InvalidVolumeThreshold.into());
+            return Err(CircuitBreakerError::InvalidVolumeThreshold);
         }
         if self.five_minute_threshold <= 0 {
-            return Err(CircuitBreakerError::InvalidVolumeThreshold.into());
+            return Err(CircuitBreakerError::InvalidVolumeThreshold);
         }
         if self.one_hour_threshold <= 0 {
-            return Err(CircuitBreakerError::InvalidVolumeThreshold.into());
+            return Err(CircuitBreakerError::InvalidVolumeThreshold);
         }
         if self.twenty_four_hour_threshold <= 0 {
-            return Err(CircuitBreakerError::InvalidVolumeThreshold.into());
+            return Err(CircuitBreakerError::InvalidVolumeThreshold);
         }
 
         // Validate logical ordering (longer windows should have higher thresholds)
         if self.five_minute_threshold < self.one_minute_threshold {
-            return Err(CircuitBreakerError::InvalidVolumeThreshold.into());
+            return Err(CircuitBreakerError::InvalidVolumeThreshold);
         }
         if self.one_hour_threshold < self.five_minute_threshold {
-            return Err(CircuitBreakerError::InvalidVolumeThreshold.into());
+            return Err(CircuitBreakerError::InvalidVolumeThreshold);
         }
         if self.twenty_four_hour_threshold < self.one_hour_threshold {
-            return Err(CircuitBreakerError::InvalidVolumeThreshold.into());
+            return Err(CircuitBreakerError::InvalidVolumeThreshold);
         }
 
         Ok(())
@@ -245,17 +245,17 @@ impl CooldownConfig {
     /// Validates cooldown configuration parameters
     pub fn validate(&self) -> Result<(), CircuitBreakerError> {
         if self.base_cooldown_seconds == 0 {
-            return Err(CircuitBreakerError::InvalidCooldownDuration.into());
+            return Err(CircuitBreakerError::InvalidCooldownDuration);
         }
         if self.max_cooldown_seconds == 0 {
-            return Err(CircuitBreakerError::InvalidCooldownDuration.into());
+            return Err(CircuitBreakerError::InvalidCooldownDuration);
         }
         if self.max_cooldown_seconds < self.base_cooldown_seconds {
-            return Err(CircuitBreakerError::InvalidCooldownDuration.into());
+            return Err(CircuitBreakerError::InvalidCooldownDuration);
         }
 
         if self.exponential_backoff_enabled && self.backoff_multiplier <= 10000 {
-            return Err(CircuitBreakerError::InvalidBackoffMultiplier.into());
+            return Err(CircuitBreakerError::InvalidBackoffMultiplier);
         }
 
         Ok(())
@@ -348,6 +348,7 @@ pub struct AnomalyDetectionState {
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum TriggerType {
+    None,
     SingleTipSpike,
     VolumeSpike(TimeWindow),
     RateLimit,
@@ -361,10 +362,19 @@ pub enum TriggerType {
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq, Copy)]
 pub enum TriggerSeverity {
+    None,
     Low,
     Medium,
     High,
     Critical,
+}
+
+/// Optional wrapper for AnomalyDetectionState (contracttype-compatible replacement for Option<AnomalyDetectionState>)
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum OptAnomalyDetectionState {
+    Absent,
+    Present(AnomalyDetectionState),
 }
 
 /// Record of a circuit breaker trigger event
@@ -390,9 +400,9 @@ pub struct EnhancedCircuitBreakerState {
     /// Timestamp until which operations are halted (0 if not halted)
     pub halted_until: u64,
     /// Reason for current halt (if any)
-    pub halt_reason: Option<TriggerType>,
+    pub halt_reason: TriggerType,
     /// Severity of current halt (if any)
-    pub halt_severity: Option<TriggerSeverity>,
+    pub halt_severity: TriggerSeverity,
 
     /// Volume tracking for 1-minute window
     pub one_minute_window: VolumeWindow,
@@ -412,7 +422,7 @@ pub struct EnhancedCircuitBreakerState {
     pub last_trigger_time: u64,
 
     /// Anomaly detection state (optional, only if enabled)
-    pub anomaly_state: Option<AnomalyDetectionState>,
+    pub anomaly_state: OptAnomalyDetectionState,
 
     /// Total number of halts
     pub total_halts: u32,
@@ -425,8 +435,8 @@ impl EnhancedCircuitBreakerState {
     pub fn new(timestamp: u64) -> Self {
         Self {
             halted_until: 0,
-            halt_reason: None,
-            halt_severity: None,
+            halt_reason: TriggerType::None,
+            halt_severity: TriggerSeverity::None,
             one_minute_window: VolumeWindow {
                 window_start: timestamp,
                 current_volume: 0,
@@ -461,7 +471,7 @@ impl EnhancedCircuitBreakerState {
             },
             trigger_count: 0,
             last_trigger_time: 0,
-            anomaly_state: None,
+            anomaly_state: OptAnomalyDetectionState::Absent,
             total_halts: 0,
             total_halt_duration: 0,
         }
@@ -474,11 +484,7 @@ impl EnhancedCircuitBreakerState {
 
     /// Gets remaining cooldown time in seconds
     pub fn remaining_cooldown(&self, current_time: u64) -> u64 {
-        if self.halted_until > current_time {
-            self.halted_until - current_time
-        } else {
-            0
-        }
+        self.halted_until.saturating_sub(current_time)
     }
 }
 
@@ -555,8 +561,8 @@ pub mod trigger_engine {
         let cooldown = calculate_cooldown(config, severity, state.trigger_count);
 
         state.halted_until = current_time.saturating_add(cooldown);
-        state.halt_reason = Some(trigger_type);
-        state.halt_severity = Some(severity);
+        state.halt_reason = trigger_type;
+        state.halt_severity = severity;
         state.trigger_count = state.trigger_count.saturating_add(1);
         state.last_trigger_time = current_time;
         state.total_halts = state.total_halts.saturating_add(1);
@@ -570,7 +576,7 @@ pub mod trigger_engine {
         trigger_count: u32,
     ) -> u64 {
         let base_cooldown = match severity {
-            TriggerSeverity::Low => config.base_cooldown_seconds / 2,
+            TriggerSeverity::None | TriggerSeverity::Low => config.base_cooldown_seconds / 2,
             TriggerSeverity::Medium => config.base_cooldown_seconds,
             TriggerSeverity::High => config.base_cooldown_seconds * 2,
             TriggerSeverity::Critical => config.base_cooldown_seconds * 4,
@@ -601,7 +607,6 @@ pub mod trigger_engine {
 /// Volume tracking and monitoring module
 pub mod volume_tracker {
     use super::*;
-    use soroban_sdk::Address;
 
     /// Updates volume window with new tip data
     pub fn update_volume_window(
@@ -933,11 +938,11 @@ pub mod anomaly_detector {
 
     /// Updates anomaly detection state with new tip data
     pub fn update_anomaly_state(
-        state: &mut Option<AnomalyDetectionState>,
+        state: &mut OptAnomalyDetectionState,
         amount: i128,
         current_time: u64,
     ) {
-        if let Some(anomaly_state) = state {
+        if let OptAnomalyDetectionState::Present(anomaly_state) = state {
             // Update historical statistics
             let stats = &mut anomaly_state.historical_stats;
 
@@ -979,14 +984,14 @@ pub mod anomaly_detector {
 
     /// Checks if anomaly detection should trigger circuit breaker
     pub fn check_anomaly_trigger(
-        state: &Option<AnomalyDetectionState>,
+        state: &OptAnomalyDetectionState,
         config: &EnhancedCircuitBreakerConfig,
     ) -> Option<(TriggerType, TriggerSeverity)> {
         if !config.anomaly_detection_enabled {
             return None;
         }
 
-        if let Some(anomaly_state) = state {
+        if let OptAnomalyDetectionState::Present(anomaly_state) = state {
             if anomaly_state.overall_confidence > config.anomaly_confidence_threshold {
                 // Determine severity based on confidence level
                 let severity = if anomaly_state.overall_confidence > 9000 {
@@ -1263,7 +1268,6 @@ pub mod pattern_analyzer {
 /// Halt state management module
 pub mod halt_manager {
     use super::*;
-    use soroban_sdk::Env;
 
     /// Activates halt with specified severity and trigger type
     pub fn activate_halt(
@@ -1277,8 +1281,8 @@ pub mod halt_manager {
             super::trigger_engine::calculate_cooldown(config, severity, state.trigger_count);
 
         state.halted_until = current_time.saturating_add(cooldown);
-        state.halt_reason = Some(trigger_type);
-        state.halt_severity = Some(severity);
+        state.halt_reason = trigger_type;
+        state.halt_severity = severity;
         state.trigger_count = state.trigger_count.saturating_add(1);
         state.last_trigger_time = current_time;
         state.total_halts = state.total_halts.saturating_add(1);
@@ -1296,8 +1300,8 @@ pub mod halt_manager {
     /// Performs automatic recovery after cooldown expires
     pub fn perform_automatic_recovery(state: &mut EnhancedCircuitBreakerState, current_time: u64) {
         state.halted_until = 0;
-        state.halt_reason = None;
-        state.halt_severity = None;
+        state.halt_reason = TriggerType::None;
+        state.halt_severity = TriggerSeverity::None;
 
         // Reset volume counters
         super::volume_tracker::reset_volume_counters(state, current_time);
@@ -1327,7 +1331,7 @@ pub mod halt_manager {
     pub fn get_halt_status(
         state: &EnhancedCircuitBreakerState,
         current_time: u64,
-    ) -> (bool, Option<TriggerType>, Option<TriggerSeverity>, u64) {
+    ) -> (bool, TriggerType, TriggerSeverity, u64) {
         let is_halted = state.is_halted(current_time);
         let remaining = state.remaining_cooldown(current_time);
 
@@ -1346,7 +1350,7 @@ pub mod halt_manager {
         current_time: u64,
     ) -> Result<(), CircuitBreakerError> {
         if !state.is_halted(current_time) {
-            return Err(CircuitBreakerError::InvalidConfiguration.into());
+            return Err(CircuitBreakerError::InvalidConfiguration);
         }
 
         state.halted_until = state.halted_until.saturating_add(additional_seconds);
@@ -1370,7 +1374,7 @@ pub mod cooldown_manager {
     ) -> u64 {
         // Base cooldown based on severity
         let base_cooldown = match severity {
-            TriggerSeverity::Low => config.base_cooldown_seconds / 2,
+            TriggerSeverity::None | TriggerSeverity::Low => config.base_cooldown_seconds / 2,
             TriggerSeverity::Medium => config.base_cooldown_seconds,
             TriggerSeverity::High => config.base_cooldown_seconds * 2,
             TriggerSeverity::Critical => config.base_cooldown_seconds * 4,
@@ -1507,21 +1511,19 @@ pub mod error_handler {
         }
 
         match &state.halt_reason {
-            Some(TriggerType::SingleTipSpike) => HaltErrorCode::SingleTipSpike,
-            Some(TriggerType::VolumeSpike(TimeWindow::OneMinute)) => HaltErrorCode::VolumeSpike1Min,
-            Some(TriggerType::VolumeSpike(TimeWindow::FiveMinutes)) => {
-                HaltErrorCode::VolumeSpike5Min
-            }
-            Some(TriggerType::VolumeSpike(TimeWindow::OneHour)) => HaltErrorCode::VolumeSpike1Hour,
-            Some(TriggerType::VolumeSpike(TimeWindow::TwentyFourHours)) => {
+            TriggerType::None => HaltErrorCode::ManualHalt,
+            TriggerType::SingleTipSpike => HaltErrorCode::SingleTipSpike,
+            TriggerType::VolumeSpike(TimeWindow::OneMinute) => HaltErrorCode::VolumeSpike1Min,
+            TriggerType::VolumeSpike(TimeWindow::FiveMinutes) => HaltErrorCode::VolumeSpike5Min,
+            TriggerType::VolumeSpike(TimeWindow::OneHour) => HaltErrorCode::VolumeSpike1Hour,
+            TriggerType::VolumeSpike(TimeWindow::TwentyFourHours) => {
                 HaltErrorCode::VolumeSpike24Hour
             }
-            Some(TriggerType::RateLimit) => HaltErrorCode::RateLimitExceeded,
-            Some(TriggerType::AnomalyDetection) => HaltErrorCode::AnomalyDetected,
-            Some(TriggerType::PatternAnalysis) => HaltErrorCode::SuspiciousPattern,
-            Some(TriggerType::PriceVolatility) => HaltErrorCode::PriceVolatility,
-            Some(TriggerType::Manual) => HaltErrorCode::ManualHalt,
-            None => HaltErrorCode::ManualHalt,
+            TriggerType::RateLimit => HaltErrorCode::RateLimitExceeded,
+            TriggerType::AnomalyDetection => HaltErrorCode::AnomalyDetected,
+            TriggerType::PatternAnalysis => HaltErrorCode::SuspiciousPattern,
+            TriggerType::PriceVolatility => HaltErrorCode::PriceVolatility,
+            TriggerType::Manual => HaltErrorCode::ManualHalt,
         }
     }
 
@@ -1530,19 +1532,19 @@ pub mod error_handler {
         state: &EnhancedCircuitBreakerState,
     ) -> Result<(), CircuitBreakerError> {
         // Check for logical consistency
-        if state.halted_until > 0 && state.halt_reason.is_none() {
-            return Err(CircuitBreakerError::InvalidConfiguration.into());
+        if state.halted_until > 0 && state.halt_reason == TriggerType::None {
+            return Err(CircuitBreakerError::InvalidConfiguration);
         }
 
         // Validate volume windows
         if state.one_minute_window.current_volume < 0 {
-            return Err(CircuitBreakerError::InvalidConfiguration.into());
+            return Err(CircuitBreakerError::InvalidConfiguration);
         }
 
         // Validate trigger count
         if state.trigger_count > 1000000 {
             // Unreasonably high trigger count suggests corruption
-            return Err(CircuitBreakerError::InvalidConfiguration.into());
+            return Err(CircuitBreakerError::InvalidConfiguration);
         }
 
         Ok(())
@@ -1622,7 +1624,7 @@ pub mod admin {
         admin.require_auth();
 
         if limit <= 0 {
-            return Err(CircuitBreakerError::InvalidSingleTipThreshold.into());
+            return Err(CircuitBreakerError::InvalidSingleTipThreshold);
         }
 
         env.storage().persistent().set(
@@ -1667,7 +1669,7 @@ pub mod admin {
         admin.require_auth();
 
         if limit <= 0 {
-            return Err(CircuitBreakerError::InvalidSingleTipThreshold.into());
+            return Err(CircuitBreakerError::InvalidSingleTipThreshold);
         }
 
         env.storage().persistent().set(
@@ -1741,14 +1743,14 @@ pub mod manual_override {
             let elapsed = current_time.saturating_sub(state.last_trigger_time);
             let min_elapsed = super::cooldown_manager::calculate_cooldown_period(
                 &EnhancedCircuitBreakerConfig::default_config(),
-                state.halt_severity.unwrap_or(TriggerSeverity::Medium),
+                state.halt_severity,
                 0,
                 0,
                 0,
             ) / 2;
 
             if elapsed < min_elapsed {
-                return Err(CircuitBreakerError::InvalidConfiguration.into());
+                return Err(CircuitBreakerError::InvalidConfiguration);
             }
         }
 
@@ -1883,8 +1885,8 @@ pub mod query {
     #[derive(Clone, Debug, Eq, PartialEq)]
     pub struct HaltStatusResult {
         pub is_halted: bool,
-        pub halt_reason: Option<TriggerType>,
-        pub halt_severity: Option<TriggerSeverity>,
+        pub halt_reason: TriggerType,
+        pub halt_severity: TriggerSeverity,
         pub remaining_cooldown: u64,
         pub halted_until: u64,
     }
@@ -1942,14 +1944,16 @@ pub mod query {
 
     /// Gets anomaly scores if anomaly detection is enabled
     pub fn get_anomaly_scores(state: &EnhancedCircuitBreakerState) -> Option<(u32, u32, u32, u32)> {
-        state.anomaly_state.as_ref().map(|anomaly| {
-            (
+        if let OptAnomalyDetectionState::Present(anomaly) = &state.anomaly_state {
+            Some((
                 anomaly.sender_clustering_score,
                 anomaly.velocity_anomaly_score,
                 anomaly.amount_deviation_score,
                 anomaly.overall_confidence,
-            )
-        })
+            ))
+        } else {
+            None
+        }
     }
 
     /// Gets trigger history statistics
@@ -2049,7 +2053,7 @@ pub mod estimation {
         }
 
         // Check anomaly confidence
-        if let Some(anomaly) = &state.anomaly_state {
+        if let OptAnomalyDetectionState::Present(anomaly) = &state.anomaly_state {
             if anomaly.overall_confidence > 5000 {
                 risk_score += 2000;
             }
@@ -2375,11 +2379,7 @@ pub mod audit {
         let mut entries = Vec::new(env);
         let current_id = get_current_audit_id(env);
 
-        let start_id = if current_id > limit as u64 {
-            current_id - limit as u64
-        } else {
-            0
-        };
+        let start_id = current_id.saturating_sub(limit as u64);
 
         for id in start_id..=current_id {
             if let Some(entry) = env
@@ -2561,6 +2561,12 @@ pub mod optimization {
         updates_pending: bool,
     }
 
+    impl Default for StateBatch {
+        fn default() -> Self {
+            Self::new()
+        }
+    }
+
     impl StateBatch {
         pub fn new() -> Self {
             Self {
@@ -2628,10 +2634,7 @@ pub mod optimization {
 
         // Fast path: check if already halted
         if state.is_halted(current_time) {
-            return Some((
-                state.halt_reason.clone().unwrap_or(TriggerType::Manual),
-                state.halt_severity.unwrap_or(TriggerSeverity::Medium),
-            ));
+            return Some((state.halt_reason.clone(), state.halt_severity));
         }
 
         // Fast path: skip if disabled
@@ -2740,11 +2743,7 @@ pub mod gas_optimization {
     /// Validates gas estimation accuracy
     pub fn validate_gas_estimates(estimated: u64, actual: u64, tolerance_percent: u32) -> bool {
         let tolerance = (estimated * tolerance_percent as u64) / 100;
-        let diff = if actual > estimated {
-            actual - estimated
-        } else {
-            estimated - actual
-        };
+        let diff = actual.abs_diff(estimated);
 
         diff <= tolerance
     }
@@ -2814,12 +2813,12 @@ pub mod guard {
 
         // Check if operations should be blocked
         if halt_manager::should_block_operations(&state, &config, current_time) {
-            let error_code = error_handler::get_halt_error_code(&state, &config);
+            let _error_code = error_handler::get_halt_error_code(&state, &config);
 
             // Emit periodic status if needed
             periodic_status::check_and_emit_status(env, &state, None);
 
-            return Err(CircuitBreakerError::InvalidConfiguration.into()); // Map to appropriate error
+            return Err(CircuitBreakerError::InvalidConfiguration); // Map to appropriate error
         }
 
         // Perform optimized check sequence
@@ -2858,7 +2857,7 @@ pub mod guard {
             // Update state cache
             cache::update_state_cache(env, &state);
 
-            return Err(CircuitBreakerError::InvalidConfiguration.into()); // Map to appropriate error
+            return Err(CircuitBreakerError::InvalidConfiguration); // Map to appropriate error
         }
 
         // Update state with new tip data

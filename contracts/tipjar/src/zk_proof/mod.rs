@@ -217,8 +217,10 @@ pub fn register_circuit(
         .persistent()
         .set(&DataKey::ZkOwnerCircuits(owner.clone()), &owner_circuits);
 
-    env.events()
-        .publish((symbol_short!("zk_reg"),), (id, owner.clone(), vk_hash.clone()));
+    env.events().publish(
+        (symbol_short!("zk_reg"),),
+        (id, owner.clone(), vk_hash.clone()),
+    );
 
     id
 }

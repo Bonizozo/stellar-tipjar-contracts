@@ -5,7 +5,7 @@
 pub mod distribution;
 pub mod rewards;
 
-use soroban_sdk::{contracttype, token, Address, Env};
+use soroban_sdk::{contracttype, Address, Env};
 
 /// Stake information for a user
 #[contracttype]

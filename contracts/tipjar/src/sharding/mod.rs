@@ -6,7 +6,7 @@
 //! load when shards become uneven.
 
 use soroban_sdk::xdr::ToXdr;
-use soroban_sdk::{contracttype, symbol_short, Address, BytesN, Bytes, Env, Vec};
+use soroban_sdk::{contracttype, symbol_short, Address, BytesN, Env};
 
 use crate::DataKey;
 
@@ -206,10 +206,8 @@ pub fn init_sharding(env: &Env, admin: &Address, shard_count: u32, auto_rebalanc
         save_shard_state(env, &state);
     }
 
-    env.events().publish(
-        (symbol_short!("sh_init"),),
-        (shard_count, auto_rebalance),
-    );
+    env.events()
+        .publish((symbol_short!("sh_init"),), (shard_count, auto_rebalance));
 }
 
 /// Record a tip being processed by the appropriate shard.
@@ -229,10 +227,8 @@ pub fn record_tip_in_shard(env: &Env, sender: &Address, amount: i128, tip_id: u6
     state.last_active = env.ledger().timestamp();
     save_shard_state(env, &state);
 
-    env.events().publish(
-        (symbol_short!("sh_tip"),),
-        (shard_id, tip_id, amount),
-    );
+    env.events()
+        .publish((symbol_short!("sh_tip"),), (shard_id, tip_id, amount));
 
     // Trigger rebalance check if auto-rebalance is enabled.
     let config = get_config(env);
@@ -303,10 +299,8 @@ pub fn finalize_transfer(env: &Env, transfer_id: u64) {
     transfer.finalized = true;
     env.storage().persistent().set(&key, &transfer);
 
-    env.events().publish(
-        (symbol_short!("sh_fin"),),
-        (transfer_id, transfer.to_shard),
-    );
+    env.events()
+        .publish((symbol_short!("sh_fin"),), (transfer_id, transfer.to_shard));
 }
 
 /// Rebalance shards by marking overloaded shards as Draining.
@@ -351,19 +345,15 @@ fn maybe_rebalance(env: &Env, config: &ShardConfig) {
     }
 
     let avg = total_tips / n as u64;
-    let threshold = avg
-        .saturating_mul(config.rebalance_threshold_bps as u64)
-        / 10000;
+    let threshold = avg.saturating_mul(config.rebalance_threshold_bps as u64) / 10000;
 
     for i in 0..n {
         let mut s = get_shard_state(env, i);
         if s.tip_count > threshold && matches!(s.status, ShardStatus::Active) {
             s.status = ShardStatus::Draining;
             save_shard_state(env, &s);
-            env.events().publish(
-                (symbol_short!("sh_drain"),),
-                (i, s.tip_count, avg),
-            );
+            env.events()
+                .publish((symbol_short!("sh_drain"),), (i, s.tip_count, avg));
         } else if s.tip_count <= avg && matches!(s.status, ShardStatus::Draining) {
             s.status = ShardStatus::Active;
             save_shard_state(env, &s);

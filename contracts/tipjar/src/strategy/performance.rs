@@ -89,11 +89,7 @@ pub fn calculate_performance(
     };
 
     // Calculate fees
-    let performance_over_zero = if gross_return > 0 {
-        gross_return
-    } else {
-        0
-    };
+    let performance_over_zero = if gross_return > 0 { gross_return } else { 0 };
 
     let performance_fees = (performance_over_zero as u128)
         .checked_mul(performance_fee_bps as u128)
@@ -152,10 +148,7 @@ pub fn calculate_performance(
 }
 
 /// Store performance metrics
-pub fn store_performance_metrics(
-    env: &Env,
-    metrics: &PerformanceMetrics,
-) {
+pub fn store_performance_metrics(env: &Env, metrics: &PerformanceMetrics) {
     env.storage()
         .persistent()
         .set(&DataKey::StrategyPerformance(metrics.strategy_id), metrics);
@@ -174,7 +167,7 @@ pub fn get_performance_metrics(
 
 /// Calculate Sharpe ratio (simplified - no volatility calculation)
 pub fn calculate_risk_adjusted_return(
-    env: &Env,
+    _env: &Env,
     total_return: i128,
     risk_free_rate_bps: u32,
     num_days: u64,
@@ -208,7 +201,7 @@ pub fn compare_strategies(
     for strategy_id in strategy_ids {
         if let Ok(metrics) = get_performance_metrics(env, strategy_id) {
             comparisons.push_back(StrategyComparison {
-                strategy_id: strategy_id,
+                strategy_id,
                 return_percentage_bps: metrics.return_percentage_bps,
                 annualized_return_bps: metrics.annualized_return_bps,
                 total_fees: metrics.total_fees,

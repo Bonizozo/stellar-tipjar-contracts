@@ -1,7 +1,7 @@
 //! Timelock mechanism for governance
 
-use super::{DataKey, ProposalAction};
-use soroban_sdk::{Address, Env, String, Vec};
+use super::ProposalAction;
+use soroban_sdk::{Address, Env};
 
 /// Execute a proposal after timelock
 pub fn execute_proposal(env: &Env, executor: &Address, proposal_id: u64) {
@@ -129,11 +129,7 @@ pub fn get_timelock_remaining(env: &Env, proposal_id: u64) -> u64 {
     let now = env.ledger().timestamp();
 
     let timelock_end = proposal.end_time + config.timelock_period;
-    if now >= timelock_end {
-        0
-    } else {
-        timelock_end - now
-    }
+    timelock_end.saturating_sub(now)
 }
 
 /// Check if proposal can be executed

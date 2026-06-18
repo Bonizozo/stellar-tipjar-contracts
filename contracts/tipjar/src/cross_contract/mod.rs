@@ -137,7 +137,11 @@ fn save_call(env: &Env, call: &CrossCall) {
 
 fn track_caller_call(env: &Env, caller: &Address, call_id: u64) {
     let key = DataKey::CrossCall(CrossCallKey::CallerCalls(caller.clone()));
-    let mut ids: Vec<u64> = env.storage().persistent().get(&key).unwrap_or(Vec::new(env));
+    let mut ids: Vec<u64> = env
+        .storage()
+        .persistent()
+        .get(&key)
+        .unwrap_or(Vec::new(env));
     ids.push_back(call_id);
     env.storage().persistent().set(&key, &ids);
 }

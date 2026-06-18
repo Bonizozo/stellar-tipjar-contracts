@@ -3,22 +3,29 @@
 extern crate std;
 
 use soroban_sdk::{testutils::Address as _, Address, Env};
-use tipjar::{
-    market_making::MakerStatus,
-    TipJarContract, TipJarContractClient,
-};
+use tipjar::{market_making::MakerStatus, TipJarContract, TipJarContractClient};
 
-fn setup() -> (Env, TipJarContractClient<'static>, Address, Address, Address) {
+fn setup() -> (
+    Env,
+    TipJarContractClient<'static>,
+    Address,
+    Address,
+    Address,
+) {
     let env = Env::default();
     env.mock_all_auths();
 
-    let contract_id = env.register_contract(None, TipJarContract);
+    let contract_id = env.register(TipJarContract, ());
     let client = TipJarContractClient::new(&env, &contract_id);
 
     let admin = Address::generate(&env);
     let token_admin = Address::generate(&env);
-    let base_token = env.register_stellar_asset_contract(token_admin.clone());
-    let quote_token = env.register_stellar_asset_contract(token_admin.clone());
+    let base_token = env
+        .register_stellar_asset_contract_v2(token_admin.clone())
+        .address();
+    let quote_token = env
+        .register_stellar_asset_contract_v2(token_admin.clone())
+        .address();
 
     client.init(&admin);
     client.add_token(&admin, &base_token);
@@ -48,10 +55,10 @@ fn test_register_maker_and_get_quote() {
         &maker,
         &base,
         &quote,
-        &100u32,       // 1% spread
-        &500_000i128,  // base deposit
-        &500_000i128,  // quote deposit
-        &100_000i128,  // max trade size
+        &100u32,      // 1% spread
+        &500_000i128, // base deposit
+        &500_000i128, // quote deposit
+        &100_000i128, // max trade size
     );
 
     let mm = client.mm_get_maker(&maker_id).unwrap();
@@ -80,8 +87,13 @@ fn test_buy_trade() {
     mint(&env, &quote, &taker, 2_000_000);
 
     let maker_id = client.mm_register(
-        &maker_addr, &base, &quote,
-        &100u32, &1_000_000i128, &2_000_000i128, &500_000i128,
+        &maker_addr,
+        &base,
+        &quote,
+        &100u32,
+        &1_000_000i128,
+        &2_000_000i128,
+        &500_000i128,
     );
 
     let mid_price = 1_000_000i128;
@@ -117,8 +129,13 @@ fn test_sell_trade() {
     mint(&env, &base, &taker, 500_000);
 
     let maker_id = client.mm_register(
-        &maker_addr, &base, &quote,
-        &100u32, &1_000_000i128, &2_000_000i128, &500_000i128,
+        &maker_addr,
+        &base,
+        &quote,
+        &100u32,
+        &1_000_000i128,
+        &2_000_000i128,
+        &500_000i128,
     );
 
     let mid_price = 1_000_000i128;
@@ -148,8 +165,13 @@ fn test_deposit_and_withdraw_inventory() {
     mint(&env, &quote, &maker_addr, 2_000_000);
 
     let maker_id = client.mm_register(
-        &maker_addr, &base, &quote,
-        &50u32, &500_000i128, &500_000i128, &100_000i128,
+        &maker_addr,
+        &base,
+        &quote,
+        &50u32,
+        &500_000i128,
+        &500_000i128,
+        &100_000i128,
     );
 
     // Deposit more
@@ -174,8 +196,13 @@ fn test_update_spread() {
     mint(&env, &quote, &maker_addr, 1_000_000);
 
     let maker_id = client.mm_register(
-        &maker_addr, &base, &quote,
-        &100u32, &500_000i128, &500_000i128, &100_000i128,
+        &maker_addr,
+        &base,
+        &quote,
+        &100u32,
+        &500_000i128,
+        &500_000i128,
+        &100_000i128,
     );
 
     client.mm_update_spread(&maker_addr, &maker_id, &200u32);
@@ -192,8 +219,13 @@ fn test_pause_and_resume_maker() {
     mint(&env, &quote, &maker_addr, 1_000_000);
 
     let maker_id = client.mm_register(
-        &maker_addr, &base, &quote,
-        &100u32, &500_000i128, &500_000i128, &100_000i128,
+        &maker_addr,
+        &base,
+        &quote,
+        &100u32,
+        &500_000i128,
+        &500_000i128,
+        &100_000i128,
     );
 
     client.mm_set_status(&maker_addr, &maker_id, &false);
@@ -214,8 +246,13 @@ fn test_close_maker_returns_inventory() {
     mint(&env, &quote, &maker_addr, 1_000_000);
 
     let maker_id = client.mm_register(
-        &maker_addr, &base, &quote,
-        &100u32, &500_000i128, &500_000i128, &100_000i128,
+        &maker_addr,
+        &base,
+        &quote,
+        &100u32,
+        &500_000i128,
+        &500_000i128,
+        &100_000i128,
     );
 
     client.mm_close(&maker_addr, &maker_id);
@@ -231,7 +268,7 @@ fn test_close_maker_returns_inventory() {
 
     // No longer in active list
     let active = client.mm_get_active_makers();
-    assert!(!active.contains(&maker_id));
+    assert!(!active.contains(maker_id));
 }
 
 #[test]
@@ -246,13 +283,25 @@ fn test_get_pair_makers() {
     mint(&env, &quote, &maker2, 1_000_000);
 
     let id1 = client.mm_register(
-        &maker1, &base, &quote, &100u32, &500_000i128, &500_000i128, &100_000i128,
+        &maker1,
+        &base,
+        &quote,
+        &100u32,
+        &500_000i128,
+        &500_000i128,
+        &100_000i128,
     );
     let id2 = client.mm_register(
-        &maker2, &base, &quote, &200u32, &500_000i128, &500_000i128, &100_000i128,
+        &maker2,
+        &base,
+        &quote,
+        &200u32,
+        &500_000i128,
+        &500_000i128,
+        &100_000i128,
     );
 
     let pair_makers = client.mm_get_pair_makers(&base, &quote);
-    assert!(pair_makers.contains(&id1));
-    assert!(pair_makers.contains(&id2));
+    assert!(pair_makers.contains(id1));
+    assert!(pair_makers.contains(id2));
 }

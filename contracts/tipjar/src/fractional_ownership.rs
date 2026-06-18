@@ -69,9 +69,10 @@ fn load_position(env: &Env, creator: &Address, holder: &Address) -> FractionPosi
 }
 
 fn save_position(env: &Env, creator: &Address, holder: &Address, pos: &FractionPosition) {
-    env.storage()
-        .persistent()
-        .set(&DataKey::FractionPosition(creator.clone(), holder.clone()), pos);
+    env.storage().persistent().set(
+        &DataKey::FractionPosition(creator.clone(), holder.clone()),
+        pos,
+    );
 }
 
 fn load_holders(env: &Env, creator: &Address) -> Vec<Address> {
@@ -102,7 +103,10 @@ pub fn mint_fractions(
 ) {
     creator.require_auth();
 
-    assert!(total_supply > 0 && total_supply <= MAX_FRACTIONS, "invalid supply");
+    assert!(
+        total_supply > 0 && total_supply <= MAX_FRACTIONS,
+        "invalid supply"
+    );
     assert!(load_pool(env, creator).is_none(), "pool already exists");
 
     let pool = FractionPool {
@@ -173,13 +177,7 @@ pub fn claim_revenue(env: &Env, creator: &Address, holder: &Address) -> i128 {
 /// Transfer `amount` fractions from `from` to `to`.
 ///
 /// Panics if `from` has insufficient fractions or no pool exists.
-pub fn transfer_fractions(
-    env: &Env,
-    creator: &Address,
-    from: &Address,
-    to: &Address,
-    amount: u64,
-) {
+pub fn transfer_fractions(env: &Env, creator: &Address, from: &Address, to: &Address, amount: u64) {
     from.require_auth();
 
     let pool = load_pool(env, creator).expect("no pool");
@@ -188,8 +186,7 @@ pub fn transfer_fractions(
     assert!(from_pos.amount >= amount, "insufficient fractions");
 
     // Settle any pending revenue for `from` before changing their balance.
-    let from_owed =
-        (pool.revenue_per_fraction - from_pos.revenue_debt) * from_pos.amount as i128;
+    let from_owed = (pool.revenue_per_fraction - from_pos.revenue_debt) * from_pos.amount as i128;
     if from_owed > 0 {
         // Revenue stays in the pool; debt is updated so it isn't lost.
         from_pos.revenue_debt = pool.revenue_per_fraction;

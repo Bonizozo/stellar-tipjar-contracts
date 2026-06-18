@@ -164,9 +164,10 @@ pub fn create_portfolio(
         .get(&PortfolioKey::OwnerPortfolios(owner.clone()))
         .unwrap_or_else(|| Vec::new(env));
     owner_portfolios.push_back(portfolio_id);
-    env.storage()
-        .persistent()
-        .set(&PortfolioKey::OwnerPortfolios(owner.clone()), &owner_portfolios);
+    env.storage().persistent().set(
+        &PortfolioKey::OwnerPortfolios(owner.clone()),
+        &owner_portfolios,
+    );
 
     env.events().publish(
         (soroban_sdk::symbol_short!("port_new"),),
@@ -191,7 +192,9 @@ pub fn calculate_optimal_allocations(
         .get(&PortfolioKey::Record(portfolio_id))
         .ok_or(PortfolioError::PortfolioNotFound)?;
 
-    let total_value: i128 = current_values.iter().fold(0i128, |acc, v| acc.saturating_add(v));
+    let total_value: i128 = current_values
+        .iter()
+        .fold(0i128, |acc, v| acc.saturating_add(v));
 
     let mut adjustments = Vec::new(env);
 
@@ -204,7 +207,8 @@ pub fn calculate_optimal_allocations(
             .ok_or(PortfolioError::CalculationOverflow)? as i128;
 
         let delta = target - current;
-        let tx_cost = (delta.abs() as u128)
+        let tx_cost = delta
+            .unsigned_abs()
             .checked_mul(portfolio.tx_cost_bps as u128)
             .ok_or(PortfolioError::CalculationOverflow)?
             .checked_div(10_000)
@@ -235,11 +239,17 @@ pub fn needs_rebalance(
         .ok_or(PortfolioError::PortfolioNotFound)?;
 
     let now = env.ledger().timestamp();
-    if now < portfolio.last_rebalance.saturating_add(portfolio.rebalance_frequency_seconds) {
-        return Err(PortfolioError::RebalanceTooFrequent.into());
+    if now
+        < portfolio
+            .last_rebalance
+            .saturating_add(portfolio.rebalance_frequency_seconds)
+    {
+        return Err(PortfolioError::RebalanceTooFrequent);
     }
 
-    let total_value: i128 = current_values.iter().fold(0i128, |acc, v| acc.saturating_add(v));
+    let total_value: i128 = current_values
+        .iter()
+        .fold(0i128, |acc, v| acc.saturating_add(v));
     if total_value == 0 {
         return Ok(false);
     }
@@ -251,11 +261,7 @@ pub fn needs_rebalance(
             .checked_div(total_value as u128)
             .unwrap_or(0)) as u32;
 
-        let drift = if current_bps > asset.target_bps {
-            current_bps - asset.target_bps
-        } else {
-            asset.target_bps - current_bps
-        };
+        let drift = current_bps.abs_diff(asset.target_bps);
 
         if drift > portfolio.drift_tolerance_bps {
             return Ok(true);
@@ -319,9 +325,10 @@ pub fn execute_rebalance(
     env.storage()
         .persistent()
         .set(&PortfolioKey::History(portfolio_id, entry_index), &entry);
-    env.storage()
-        .persistent()
-        .set(&PortfolioKey::HistoryCount(portfolio_id), &(entry_index + 1));
+    env.storage().persistent().set(
+        &PortfolioKey::HistoryCount(portfolio_id),
+        &(entry_index + 1),
+    );
 
     // Update portfolio state
     portfolio.last_rebalance = now;
@@ -407,8 +414,17 @@ mod tests {
 
     #[test]
     fn test_portfolio_error_uniqueness() {
-        assert_ne!(PortfolioError::PortfolioNotFound as u32, PortfolioError::InvalidWeights as u32);
-        assert_ne!(PortfolioError::RebalanceTooFrequent as u32, PortfolioError::DriftWithinTolerance as u32);
-        assert_ne!(PortfolioError::Unauthorized as u32, PortfolioError::EmptyPortfolio as u32);
+        assert_ne!(
+            PortfolioError::PortfolioNotFound as u32,
+            PortfolioError::InvalidWeights as u32
+        );
+        assert_ne!(
+            PortfolioError::RebalanceTooFrequent as u32,
+            PortfolioError::DriftWithinTolerance as u32
+        );
+        assert_ne!(
+            PortfolioError::Unauthorized as u32,
+            PortfolioError::EmptyPortfolio as u32
+        );
     }
 }

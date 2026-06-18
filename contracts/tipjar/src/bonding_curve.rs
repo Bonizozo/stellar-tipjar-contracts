@@ -675,20 +675,14 @@ mod math_tests {
     use super::*;
 
     fn linear_curve() -> BondingCurve {
+        use soroban_sdk::testutils::Address as _;
+        let env = soroban_sdk::Env::default();
+        let addr = soroban_sdk::Address::generate(&env);
         BondingCurve {
             id: 1,
-            creator: soroban_sdk::Address::from_string(&soroban_sdk::String::from_str(
-                &soroban_sdk::Env::default(),
-                "GAAZI4TCR3TY5OJHCTJC2A4QSY6CJWJH5IAJTGKIN2ER7LBNVKOCCWN",
-            )),
-            tip_token: soroban_sdk::Address::from_string(&soroban_sdk::String::from_str(
-                &soroban_sdk::Env::default(),
-                "GAAZI4TCR3TY5OJHCTJC2A4QSY6CJWJH5IAJTGKIN2ER7LBNVKOCCWN",
-            )),
-            reserve_token: soroban_sdk::Address::from_string(&soroban_sdk::String::from_str(
-                &soroban_sdk::Env::default(),
-                "GAAZI4TCR3TY5OJHCTJC2A4QSY6CJWJH5IAJTGKIN2ER7LBNVKOCCWN",
-            )),
+            creator: addr.clone(),
+            tip_token: addr.clone(),
+            reserve_token: addr.clone(),
             curve_type: CurveType::Linear,
             base_price: PRECISION, // 1.0
             slope: PRECISION / 10, // 0.1 per token

@@ -94,8 +94,10 @@ pub fn issue_credential(
         &issuer_creds,
     );
 
-    env.events()
-        .publish((symbol_short!("vc_issue"),), (id, issuer.clone(), subject.clone()));
+    env.events().publish(
+        (symbol_short!("vc_issue"),),
+        (id, issuer.clone(), subject.clone()),
+    );
 
     id
 }

@@ -3,10 +3,10 @@
 extern crate std;
 
 use soroban_sdk::{
-    testutils::{Address as _, BytesN as _, Ledger},
-    Address, BytesN, Env, Vec,
+    testutils::{Address as _, Ledger, LedgerInfo, Address},
+    Env,
 };
-use tipjar::{TipJarContract, TipJarContractClient, TipJarError};
+use tipjar::{TipJarContract, TipJarContractClient};
 
 fn setup() -> (
     Env,
@@ -25,7 +25,7 @@ fn setup() -> (
     let token_admin = Address::generate(&env);
     let token_id = env.register_stellar_asset_contract(token_admin.clone());
 
-    client.init(&admin, &0u32, &0u64);
+    client.init(&admin);
     client.add_token(&admin, &token_id);
 
     (env, client, admin, token_admin, token_id)
@@ -51,14 +51,14 @@ fn test_auction_bid_and_settle_success() {
     assert_eq!(token_client.balance(&bidder1), 1_000_000);
 
     let current_timestamp = env.ledger().timestamp();
-    env.ledger().set(Ledger {
+    env.ledger().set(LedgerInfo {
         timestamp: current_timestamp + 20,
         sequence_number: env.ledger().sequence_number() + 1,
         ..Default::default()
     });
 
     client.settle_auction(&creator, &auction_id);
-    let creator_balance = client.get_creator_balance(&creator, &token);
+    let creator_balance = client.get_split_balance(&creator);
     assert_eq!(creator_balance, 200);
 
     let auction = client.get_auction(&auction_id).unwrap();

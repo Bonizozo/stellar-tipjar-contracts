@@ -4,15 +4,12 @@
 //! pause, resume, and parameter adjustments.
 
 use super::events::{
-    emit_collateral_updated, emit_collateralization_updated, emit_synthetic_asset_created,
-    emit_synthetic_asset_paused, emit_synthetic_asset_resumed,
+    emit_collateralization_updated, emit_synthetic_asset_created, emit_synthetic_asset_paused,
+    emit_synthetic_asset_resumed,
 };
 use super::supply::{get_collateralization_ratio, update_collateral};
 use super::types::SyntheticAsset;
-use crate::{
-    AuctionError, CoreError, CreditError, DataKey, FeatureError, OtherError, StreamError,
-    SyntheticKey, SystemError, TipJarError, VestingError,
-};
+use crate::{CoreError, CreditError, DataKey, SyntheticKey, TipJarError};
 use soroban_sdk::{token, Address, Env, Vec};
 
 /// Creates a new synthetic asset
@@ -35,7 +32,7 @@ pub fn create_synthetic_asset(
     collateralization_ratio: u32,
 ) -> Result<u64, TipJarError> {
     // Verify collateralization ratio is between 10000 and 50000 bps (100%-500%)
-    if collateralization_ratio < 10000 || collateralization_ratio > 50000 {
+    if !(10000..=50000).contains(&collateralization_ratio) {
         return Err(CreditError::InvalidCollateralizationRatio.into());
     }
 
@@ -203,7 +200,7 @@ pub fn update_collateralization_ratio(
     new_ratio: u32,
 ) -> Result<(), TipJarError> {
     // Verify new ratio is between 10000 and 50000 bps
-    if new_ratio < 10000 || new_ratio > 50000 {
+    if !(10000..=50000).contains(&new_ratio) {
         return Err(CreditError::InvalidCollateralizationRatio.into());
     }
 

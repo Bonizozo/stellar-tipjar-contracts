@@ -1,5 +1,5 @@
 /// Security utilities and guards for the TipJar contract.
-use soroban_sdk::{Env, Symbol};
+use soroban_sdk::Env;
 
 /// Reentrancy guard key
 pub const REENTRANCY_LOCK_KEY: &str = "reentrancy_lock";

@@ -128,11 +128,7 @@ impl LimitOrdersContract {
         let amount_out = fill_amount * order.limit_price / current_price;
 
         let token_out_client = token::Client::new(&env, &order.token_out);
-        token_out_client.transfer(
-            &env.current_contract_address(),
-            &order.owner,
-            &amount_out,
-        );
+        token_out_client.transfer(&env.current_contract_address(), &order.owner, &amount_out);
 
         order.filled += fill_amount;
         env.storage()

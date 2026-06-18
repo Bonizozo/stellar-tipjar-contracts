@@ -2,7 +2,7 @@
 
 use soroban_sdk::{contracterror, panic_with_error, Address, Env, Vec};
 
-use super::{AllocationInstance, AllocationTarget, DataKey, StrategyConfig, StrategyType};
+use super::{AllocationInstance, AllocationTarget, StrategyConfig, StrategyType};
 
 #[contracterror]
 #[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
@@ -29,8 +29,7 @@ pub fn execute_strategy(
     total_amount: i128,
 ) -> Result<Vec<i128>, ExecutionError> {
     // Get strategy
-    let strategy = super::get_strategy(env, strategy_id)
-        .ok_or(ExecutionError::StrategyNotFound)?;
+    let strategy = super::get_strategy(env, strategy_id).ok_or(ExecutionError::StrategyNotFound)?;
 
     if !strategy.active {
         panic_with_error!(env, ExecutionError::StrategyNotActive);
@@ -90,14 +89,16 @@ pub fn execute_allocations(
     owner: Address,
     distribution: &Vec<i128>,
 ) -> Result<(), ExecutionError> {
-    let now = env.ledger().timestamp();
+    let _now = env.ledger().timestamp();
 
     for (i, target) in strategy.allocations.iter().enumerate() {
         if i as u32 >= distribution.len() {
             break;
         }
 
-        let amount = distribution.get(i as u32).ok_or(ExecutionError::ExecutionFailed)?;
+        let amount = distribution
+            .get(i as u32)
+            .ok_or(ExecutionError::ExecutionFailed)?;
 
         if amount <= 0 {
             continue;
@@ -130,7 +131,7 @@ pub fn execute_allocations(
 
 /// Execute yield farming allocation
 fn execute_yield_farming(
-    env: &Env,
+    _env: &Env,
     _owner: &Address,
     _target: &AllocationTarget,
     _amount: i128,
@@ -145,7 +146,7 @@ fn execute_yield_farming(
 
 /// Execute staking allocation
 fn execute_staking(
-    env: &Env,
+    _env: &Env,
     _owner: &Address,
     _target: &AllocationTarget,
     _amount: i128,
@@ -160,7 +161,7 @@ fn execute_staking(
 
 /// Execute liquidity providing allocation
 fn execute_liquidity_providing(
-    env: &Env,
+    _env: &Env,
     _owner: &Address,
     _target: &AllocationTarget,
     _amount: i128,
@@ -185,8 +186,8 @@ fn allocate_to_target(
     let now = env.ledger().timestamp();
 
     // Get or create allocation instance
-    let mut allocation = super::get_allocation_instance(env, strategy_id, owner)
-        .unwrap_or(AllocationInstance {
+    let mut allocation =
+        super::get_allocation_instance(env, strategy_id, owner).unwrap_or(AllocationInstance {
             strategy_id,
             owner: owner.clone(),
             amount: 0,
@@ -212,8 +213,7 @@ pub fn get_strategy_distribution(
     strategy_id: u64,
     total_amount: i128,
 ) -> Result<Vec<i128>, ExecutionError> {
-    let strategy = super::get_strategy(env, strategy_id)
-        .ok_or(ExecutionError::StrategyNotFound)?;
+    let strategy = super::get_strategy(env, strategy_id).ok_or(ExecutionError::StrategyNotFound)?;
 
     calculate_distribution(env, &strategy, total_amount)
 }

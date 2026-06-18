@@ -170,7 +170,7 @@ pub fn canonical_hash(env: &Env, req: &MetaTipRequest) -> BytesN<32> {
     let mut payload = Bytes::new(env);
 
     // Domain separator
-    payload.extend_from_array(&[b'M', b'E', b'T', b'A', b'T', b'I', b'P']);
+    payload.extend_from_array(b"METATIP");
 
     // Addresses as XDR bytes
     payload.append(&req.from.clone().to_xdr(env));

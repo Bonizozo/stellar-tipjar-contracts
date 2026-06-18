@@ -385,7 +385,8 @@ pub fn check_allowed(env: &Env, creator: &Address, subject: &Address) {
     }
 
     // 2. Whitelist-only mode (global, then creator).
-    if is_whitelist_mode(env, &ListScope::Global) && !is_whitelisted(env, &ListScope::Global, subject)
+    if is_whitelist_mode(env, &ListScope::Global)
+        && !is_whitelisted(env, &ListScope::Global, subject)
     {
         panic_with_error!(env, AccessListError::NotWhitelisted);
     }
@@ -403,7 +404,8 @@ pub fn is_allowed(env: &Env, creator: &Address, subject: &Address) -> bool {
     {
         return false;
     }
-    if is_whitelist_mode(env, &ListScope::Global) && !is_whitelisted(env, &ListScope::Global, subject)
+    if is_whitelist_mode(env, &ListScope::Global)
+        && !is_whitelisted(env, &ListScope::Global, subject)
     {
         return false;
     }

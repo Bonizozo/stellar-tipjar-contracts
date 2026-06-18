@@ -7,7 +7,7 @@
 //! - Rotating encryption keys
 //! - Revealing encrypted amounts
 
-use soroban_sdk::{contract, contractimpl, Address, BytesN, Env, Symbol, Vec};
+use soroban_sdk::{Address, BytesN, Env, Symbol, Vec};
 
 use super::encrypted_operations::{
     aggregate_encrypted_tips, compute_encrypted_fee, create_encrypted_tip, get_encrypted_balance,
@@ -18,7 +18,6 @@ use super::key_management::{
     get_current_public_key, initialize_homomorphic, is_homomorphic_enabled, rotate_key,
     KeyManagementConfig,
 };
-use crate::DataKey;
 
 /// Initialize homomorphic encryption for the contract.
 ///

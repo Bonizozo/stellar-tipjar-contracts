@@ -144,10 +144,9 @@ fn get_tree_internal(env: &Env, tree_id: u64) -> VerkleTree {
 }
 
 fn save_leaf(env: &Env, tree_id: u64, leaf: &VerkleLeaf) {
-    env.storage().persistent().set(
-        &DataKey::Verkle(VerkleKey::Leaf(tree_id, leaf.index)),
-        leaf,
-    );
+    env.storage()
+        .persistent()
+        .set(&DataKey::Verkle(VerkleKey::Leaf(tree_id, leaf.index)), leaf);
 }
 
 fn get_leaf_internal(env: &Env, tree_id: u64, index: u32) -> Option<VerkleLeaf> {
@@ -158,7 +157,11 @@ fn get_leaf_internal(env: &Env, tree_id: u64, index: u32) -> Option<VerkleLeaf> 
 
 fn track_owner_tree(env: &Env, owner: &Address, tree_id: u64) {
     let key = DataKey::Verkle(VerkleKey::OwnerTrees(owner.clone()));
-    let mut ids: Vec<u64> = env.storage().persistent().get(&key).unwrap_or(Vec::new(env));
+    let mut ids: Vec<u64> = env
+        .storage()
+        .persistent()
+        .get(&key)
+        .unwrap_or(Vec::new(env));
     ids.push_back(tree_id);
     env.storage().persistent().set(&key, &ids);
 }
@@ -220,12 +223,15 @@ fn compute_root(env: &Env, tree_id: u64, leaf_count: u32) -> BytesN<32> {
             while children.len() < BRANCHING_FACTOR {
                 children.push_back(env.crypto().sha256(&Bytes::new(env)).to_bytes());
             }
-            let commitment = node_commitment(env, &[
-                children.get(0).unwrap(),
-                children.get(1).unwrap(),
-                children.get(2).unwrap(),
-                children.get(3).unwrap(),
-            ]);
+            let commitment = node_commitment(
+                env,
+                &[
+                    children.get(0).unwrap(),
+                    children.get(1).unwrap(),
+                    children.get(2).unwrap(),
+                    children.get(3).unwrap(),
+                ],
+            );
             next_level.push_back(commitment);
             i += BRANCHING_FACTOR;
         }
@@ -257,10 +263,8 @@ pub fn create_tree(env: &Env, owner: &Address) -> u64 {
     save_tree(env, &tree);
     track_owner_tree(env, owner, tree_id);
 
-    env.events().publish(
-        (symbol_short!("vk_crt"),),
-        (tree_id, owner.clone()),
-    );
+    env.events()
+        .publish((symbol_short!("vk_crt"),), (tree_id, owner.clone()));
 
     tree_id
 }
@@ -356,10 +360,8 @@ pub fn generate_proof(env: &Env, tree_id: u64, leaf_index: u32) -> u64 {
         .persistent()
         .set(&DataKey::Verkle(VerkleKey::Proof(proof_id)), &proof);
 
-    env.events().publish(
-        (symbol_short!("vk_pgen"),),
-        (proof_id, tree_id, leaf_index),
-    );
+    env.events()
+        .publish((symbol_short!("vk_pgen"),), (proof_id, tree_id, leaf_index));
 
     proof_id
 }
@@ -378,16 +380,15 @@ pub fn verify_proof(env: &Env, proof_id: u64) -> bool {
     let tree = get_tree_internal(env, proof.tree_id);
 
     // Recompute root from the proof path.
-    let computed_root = recompute_root_from_path(env, &proof.leaf_hash, proof.leaf_index, &proof.path);
+    let computed_root =
+        recompute_root_from_path(env, &proof.leaf_hash, proof.leaf_index, &proof.path);
     let valid = computed_root == tree.root;
 
     proof.verified = valid;
     env.storage().persistent().set(&key, &proof);
 
-    env.events().publish(
-        (symbol_short!("vk_vfy"),),
-        (proof_id, valid),
-    );
+    env.events()
+        .publish((symbol_short!("vk_vfy"),), (proof_id, valid));
 
     valid
 }
@@ -427,10 +428,8 @@ pub fn deactivate_tree(env: &Env, owner: &Address, tree_id: u64) {
     tree.active = false;
     save_tree(env, &tree);
 
-    env.events().publish(
-        (symbol_short!("vk_deact"),),
-        (tree_id,),
-    );
+    env.events()
+        .publish((symbol_short!("vk_deact"),), (tree_id,));
 }
 
 // ── Internal proof helpers ───────────────────────────────────────────────────
@@ -484,12 +483,15 @@ fn build_proof_path(env: &Env, tree_id: u64, leaf_index: u32, leaf_count: u32) -
             while children.len() < BRANCHING_FACTOR {
                 children.push_back(zero_hash.clone());
             }
-            let commitment = node_commitment(env, &[
-                children.get(0).unwrap(),
-                children.get(1).unwrap(),
-                children.get(2).unwrap(),
-                children.get(3).unwrap(),
-            ]);
+            let commitment = node_commitment(
+                env,
+                &[
+                    children.get(0).unwrap(),
+                    children.get(1).unwrap(),
+                    children.get(2).unwrap(),
+                    children.get(3).unwrap(),
+                ],
+            );
             next_level.push_back(commitment);
             i += BRANCHING_FACTOR;
         }
@@ -535,12 +537,15 @@ fn recompute_root_from_path(
             }
         }
 
-        current = node_commitment(env, &[
-            children.get(0).unwrap(),
-            children.get(1).unwrap(),
-            children.get(2).unwrap(),
-            children.get(3).unwrap(),
-        ]);
+        current = node_commitment(
+            env,
+            &[
+                children.get(0).unwrap(),
+                children.get(1).unwrap(),
+                children.get(2).unwrap(),
+                children.get(3).unwrap(),
+            ],
+        );
 
         current_index /= BRANCHING_FACTOR;
         path_iter += siblings_per_level;

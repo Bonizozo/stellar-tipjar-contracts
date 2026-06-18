@@ -15,6 +15,7 @@ pub fn implied_probability(market: &PredictionMarket, outcome: Outcome) -> i128 
         return ODDS_PRECISION / 2;
     }
     let side = match outcome {
+        Outcome::None => return ODDS_PRECISION / 2,
         Outcome::Yes => market.yes_pool,
         Outcome::No => market.no_pool,
     };
@@ -28,6 +29,7 @@ pub fn implied_probability(market: &PredictionMarket, outcome: Outcome) -> i128 
 pub fn payout_multiplier(market: &PredictionMarket, outcome: Outcome) -> i128 {
     let total = market.yes_pool + market.no_pool;
     let side = match outcome {
+        Outcome::None => return 100 * ODDS_PRECISION,
         Outcome::Yes => market.yes_pool,
         Outcome::No => market.no_pool,
     };

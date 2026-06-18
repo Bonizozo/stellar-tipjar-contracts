@@ -2,7 +2,10 @@
 
 extern crate std;
 
-use soroban_sdk::{vec, Address, Env};
+use soroban_sdk::{
+    testutils::{Address, Ledger},
+    vec, Address as SdkAddress, Env
+};
 use tipjar::{royalty::SplitRecipient, TipJarContract, TipJarContractClient};
 
 fn setup() -> (Env, TipJarContractClient<'static>, Address) {
@@ -15,7 +18,7 @@ fn setup() -> (Env, TipJarContractClient<'static>, Address) {
     let admin = Address::generate(&env);
     let token_admin = Address::generate(&env);
     let token_id = env.register_stellar_asset_contract(token_admin);
-    client.init(&admin, &0u32, &0u64);
+    client.init(&admin);
     client.add_token(&admin, &token_id);
 
     (env, client, admin)

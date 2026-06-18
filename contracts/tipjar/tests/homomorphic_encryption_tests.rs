@@ -1,7 +1,5 @@
 #![cfg(test)]
 
-use soroban_sdk::{BytesN, Env};
-
 // Note: These are integration test stubs. Full tests require Soroban test environment setup.
 // Run with: cargo test --test homomorphic_encryption_tests
 

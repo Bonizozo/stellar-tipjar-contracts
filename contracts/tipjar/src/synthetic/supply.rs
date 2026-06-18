@@ -5,13 +5,7 @@
 
 use super::events::{emit_collateral_updated, emit_supply_updated};
 use super::types::SyntheticAsset;
-use crate::{
-    AuctionError, AuctionKey, BridgeKey, CircuitBreakerKey, CoreError, CreditError, DataKey,
-    DelegationKey, DisputeKey, FeatureError, FeeKey, InsuranceKey, LimitKey, LockedTipKey,
-    MatchingKey, MilestoneKey, MultiSigKey, OptionKey, OtherError, PrivateTipKey, RoleKey,
-    SnapshotKey, StatsKey, StreamError, StreamKey, SyntheticKey, SystemError, TipJarError,
-    VestingError, VestingKey,
-};
+use crate::{CoreError, CreditError, DataKey, SyntheticKey, TipJarError};
 use soroban_sdk::Env;
 
 /// Updates total supply after minting or redemption

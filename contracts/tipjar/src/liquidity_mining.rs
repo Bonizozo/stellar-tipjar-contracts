@@ -214,16 +214,8 @@ fn accrue(program: &MiningProgram, position: &mut MiningPosition, now: u64) {
 
 /// Computes how much of `total_earned` has vested at `now` given the program's
 /// vesting cliff and duration, minus what has already been claimed.
-fn compute_vested(
-    program: &MiningProgram,
-    position: &MiningPosition,
-    now: u64,
-) -> i128 {
-    let elapsed_since_entry = if now > position.entry_time {
-        now - position.entry_time
-    } else {
-        0
-    };
+fn compute_vested(program: &MiningProgram, position: &MiningPosition, now: u64) -> i128 {
+    let elapsed_since_entry = now.saturating_sub(position.entry_time);
 
     // Before cliff: nothing vested
     if elapsed_since_entry < program.vesting_cliff {
@@ -311,7 +303,13 @@ pub fn create_program(
 
     env.events().publish(
         (symbol_short!("lm_create"),),
-        (program_id, lp_token.clone(), reward_token.clone(), total_rewards, reward_rate_bps),
+        (
+            program_id,
+            lp_token.clone(),
+            reward_token.clone(),
+            total_rewards,
+            reward_rate_bps,
+        ),
     );
 
     program_id
@@ -493,7 +491,12 @@ pub fn apply_boost(env: &Env, provider: &Address, program_id: u64, lock_duration
 
     env.events().publish(
         (symbol_short!("lm_boost"),),
-        (provider.clone(), program_id, new_boost, position.boost_lock_until),
+        (
+            provider.clone(),
+            program_id,
+            new_boost,
+            position.boost_lock_until,
+        ),
     );
 }
 
@@ -509,10 +512,8 @@ pub fn deactivate_program(env: &Env, admin: &Address, program_id: u64) {
     program.active = false;
     set_program(env, &program);
 
-    env.events().publish(
-        (symbol_short!("lm_deact"),),
-        (program_id,),
-    );
+    env.events()
+        .publish((symbol_short!("lm_deact"),), (program_id,));
 }
 
 /// Returns the current vesting info for a provider's position.
@@ -523,23 +524,11 @@ pub fn get_vesting_info(env: &Env, provider: &Address, program_id: u64) -> Vesti
     let now = env.ledger().timestamp();
     accrue(&program, &mut position, now);
 
-    let elapsed_since_entry = if now > position.entry_time {
-        now - position.entry_time
-    } else {
-        0
-    };
+    let elapsed_since_entry = now.saturating_sub(position.entry_time);
 
-    let cliff_remaining = if elapsed_since_entry >= program.vesting_cliff {
-        0
-    } else {
-        program.vesting_cliff - elapsed_since_entry
-    };
+    let cliff_remaining = program.vesting_cliff.saturating_sub(elapsed_since_entry);
 
-    let vesting_remaining = if elapsed_since_entry >= program.vesting_duration {
-        0
-    } else {
-        program.vesting_duration - elapsed_since_entry
-    };
+    let vesting_remaining = program.vesting_duration.saturating_sub(elapsed_since_entry);
 
     let vested = compute_vested(&program, &position, now);
     let claimed = position.claimable_rewards;

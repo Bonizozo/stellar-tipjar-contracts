@@ -7,7 +7,7 @@
 //! - Key expiration and lifecycle management
 //! - Secure key derivation
 
-use soroban_sdk::{contracttype, Address, BytesN, Env, Symbol, Vec};
+use soroban_sdk::{contracttype, Address, Env, Symbol, Vec};
 
 use super::homomorphic::{HomomorphicConfig, HomomorphicPublicKey};
 use crate::DataKey;
@@ -149,7 +149,7 @@ pub fn rotate_key(
     env.storage().instance().set(&DataKey::KeyHistory, &history);
 
     // Record rotation event
-    let event = KeyRotationEvent {
+    let _event = KeyRotationEvent {
         old_version,
         new_version: new_key.version,
         timestamp: env.ledger().timestamp(),
@@ -258,10 +258,10 @@ pub fn disable_homomorphic(env: &Env, admin: &Address) -> Result<(), &'static st
 /// Verify key is still valid (not expired).
 pub fn verify_key_validity(env: &Env, key_version: u32) -> Result<(), &'static str> {
     let config = get_homomorphic_config(env)?;
-    let key_mgmt = get_key_management_config(env)?;
+    let _key_mgmt = get_key_management_config(env)?;
 
     // Get the key
-    let key = get_public_key_by_version(env, key_version)?;
+    let _key = get_public_key_by_version(env, key_version)?;
 
     // Check if key is current or recent
     if key_version < config.public_key.version {

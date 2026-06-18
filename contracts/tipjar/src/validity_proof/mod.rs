@@ -190,9 +190,10 @@ pub fn generate_proof(
         nonce,
     };
 
-    env.storage()
-        .persistent()
-        .set(&DataKey::ValidityProof(ValidityProofKey::Proof(proof_id)), &proof);
+    env.storage().persistent().set(
+        &DataKey::ValidityProof(ValidityProofKey::Proof(proof_id)),
+        &proof,
+    );
     env.storage().persistent().set(
         &DataKey::ValidityProof(ValidityProofKey::TipProofId(tip_id)),
         &proof_id,
@@ -241,10 +242,8 @@ pub fn verify_proof(env: &Env, proof_id: u64) -> bool {
     proof.verified_at = env.ledger().timestamp();
     env.storage().persistent().set(&key, &proof);
 
-    env.events().publish(
-        (symbol_short!("vp_vrfy"),),
-        (proof_id, valid),
-    );
+    env.events()
+        .publish((symbol_short!("vp_vrfy"),), (proof_id, valid));
 
     valid
 }
@@ -296,7 +295,7 @@ pub fn aggregate_proofs(env: &Env, proof_ids: Vec<u64>) -> u64 {
         id: agg_id,
         proof_ids: proof_ids.clone(),
         aggregate_root: aggregate_root.clone(),
-        validity: if valid_count == proof_ids.len() as u32 {
+        validity: if valid_count == proof_ids.len() {
             ProofValidity::Valid
         } else {
             ProofValidity::Invalid
@@ -330,10 +329,8 @@ pub fn revoke_proof(env: &Env, admin: &Address, proof_id: u64) {
     proof.validity = ProofValidity::Revoked;
     env.storage().persistent().set(&key, &proof);
 
-    env.events().publish(
-        (symbol_short!("vp_rev"),),
-        (proof_id,),
-    );
+    env.events()
+        .publish((symbol_short!("vp_rev"),), (proof_id,));
 }
 
 /// Retrieve a proof by ID.
@@ -347,7 +344,9 @@ pub fn get_proof(env: &Env, proof_id: u64) -> Option<TipProof> {
 pub fn get_proof_for_tip(env: &Env, tip_id: u64) -> Option<u64> {
     env.storage()
         .persistent()
-        .get(&DataKey::ValidityProof(ValidityProofKey::TipProofId(tip_id)))
+        .get(&DataKey::ValidityProof(ValidityProofKey::TipProofId(
+            tip_id,
+        )))
 }
 
 /// Retrieve an aggregated proof by ID.

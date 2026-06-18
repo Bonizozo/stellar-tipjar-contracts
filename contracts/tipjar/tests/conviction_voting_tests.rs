@@ -1,6 +1,6 @@
 #![cfg(test)]
 
-use soroban_sdk::{testutils::*, Address, Env, String, Vec};
+use soroban_sdk::Env;
 
 // Note: These are integration test examples showing how conviction voting would be used.
 // Actual tests would require the full contract setup and token initialization.
@@ -13,7 +13,7 @@ fn test_conviction_multiplier_calculation() {
     // conviction::init_conviction_voting(&env);
 
     // Test 1: No time locked = 1x multiplier
-    let conviction_start = env.ledger().timestamp();
+    let _conviction_start = env.ledger().timestamp();
     // let multiplier = conviction::calculate_conviction_multiplier(&env, conviction_start);
     // assert_eq!(multiplier, 1_000_000); // 1x
 
@@ -30,7 +30,7 @@ fn test_conviction_multiplier_calculation() {
 
 #[test]
 fn test_conviction_vote_recording() {
-    let env = Env::default();
+    let _env = Env::default();
 
     // Initialize conviction voting
     // conviction::init_conviction_voting(&env);
@@ -51,7 +51,7 @@ fn test_conviction_vote_recording() {
 
 #[test]
 fn test_conviction_vote_change_with_decay() {
-    let env = Env::default();
+    let _env = Env::default();
 
     // Initialize conviction voting
     // conviction::init_conviction_voting(&env);
@@ -79,7 +79,7 @@ fn test_conviction_vote_change_with_decay() {
 
 #[test]
 fn test_minimum_conviction_threshold() {
-    let env = Env::default();
+    let _env = Env::default();
 
     // Initialize conviction voting
     // conviction::init_conviction_voting(&env);
@@ -95,7 +95,7 @@ fn test_minimum_conviction_threshold() {
 
 #[test]
 fn test_voter_total_conviction() {
-    let env = Env::default();
+    let _env = Env::default();
 
     // Initialize conviction voting
     // conviction::init_conviction_voting(&env);
@@ -116,7 +116,7 @@ fn test_voter_total_conviction() {
 
 #[test]
 fn test_proposal_threshold_with_conviction() {
-    let env = Env::default();
+    let _env = Env::default();
 
     // Initialize conviction voting
     // conviction::init_conviction_voting(&env);
@@ -140,7 +140,7 @@ fn test_proposal_threshold_with_conviction() {
 
 #[test]
 fn test_conviction_history_tracking() {
-    let env = Env::default();
+    let _env = Env::default();
 
     // Initialize conviction voting
     // conviction::init_conviction_voting(&env);
@@ -165,7 +165,7 @@ fn test_conviction_history_tracking() {
 
 #[test]
 fn test_effective_voting_power_with_multiplier() {
-    let env = Env::default();
+    let _env = Env::default();
 
     // Initialize conviction voting
     // conviction::init_conviction_voting(&env);
@@ -186,7 +186,7 @@ fn test_effective_voting_power_with_multiplier() {
 
 #[test]
 fn test_accumulated_conviction_over_time() {
-    let env = Env::default();
+    let _env = Env::default();
 
     // Initialize conviction voting
     // conviction::init_conviction_voting(&env);
@@ -209,7 +209,7 @@ fn test_accumulated_conviction_over_time() {
 
 #[test]
 fn test_conviction_config_update() {
-    let env = Env::default();
+    let _env = Env::default();
 
     // Initialize conviction voting
     // conviction::init_conviction_voting(&env);

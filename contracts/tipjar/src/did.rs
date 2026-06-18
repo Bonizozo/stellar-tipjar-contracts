@@ -54,12 +54,7 @@ pub enum DidKey {
 }
 
 /// Register a new DID for an owner.
-pub fn register_did(
-    env: &Env,
-    owner: &Address,
-    did_string: String,
-    method: DidMethod,
-) -> u64 {
+pub fn register_did(env: &Env, owner: &Address, did_string: String, method: DidMethod) -> u64 {
     let id: u64 = env
         .storage()
         .persistent()
@@ -123,12 +118,7 @@ pub fn update_did(env: &Env, owner: &Address, did_id: u64, did_string: String) {
 }
 
 /// Add a claim to a DID.
-pub fn add_claim(
-    env: &Env,
-    did_id: u64,
-    claim_type: String,
-    claim_value: String,
-) -> u64 {
+pub fn add_claim(env: &Env, did_id: u64, claim_type: String, claim_value: String) -> u64 {
     let claim_id: u64 = env
         .storage()
         .persistent()

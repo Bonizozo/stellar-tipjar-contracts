@@ -1,5 +1,6 @@
 //! Simple verification that event emission functions compile and are accessible
 
+use soroban_sdk::testutils::Address as _;
 use soroban_sdk::{Address, Env};
 
 fn main() {

@@ -88,8 +88,8 @@ pub fn calculate_impermanent_loss(
     };
 
     // IL ≈ 0.5 * (price_change / 1_000_000)^2 * 1_000_000
-    let il = price_change * price_change / 2_000_000;
-    il
+
+    price_change * price_change / 2_000_000
 }
 
 /// Calculate expected rewards for a given stake amount and duration

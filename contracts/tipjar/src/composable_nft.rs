@@ -85,7 +85,7 @@ pub fn mint(env: &Env, owner: &Address, metadata: String) -> u64 {
 pub fn compose(env: &Env, owner: &Address, parent_id: u64, child_id: u64) {
     assert!(parent_id != child_id, "cannot compose with self");
 
-    let mut parent: ComposableNft = env
+    let parent: ComposableNft = env
         .storage()
         .persistent()
         .get(&DataKey::Nft(NftKey::Record(parent_id)))
@@ -117,15 +117,21 @@ pub fn compose(env: &Env, owner: &Address, parent_id: u64, child_id: u64) {
         .persistent()
         .set(&DataKey::Nft(NftKey::Children(parent_id)), &children);
 
-    push_history(env, parent_id, CompositionEvent {
+    push_history(
+        env,
         parent_id,
-        child_id,
-        timestamp: env.ledger().timestamp(),
-        is_decompose: false,
-    });
+        CompositionEvent {
+            parent_id,
+            child_id,
+            timestamp: env.ledger().timestamp(),
+            is_decompose: false,
+        },
+    );
 
-    env.events()
-        .publish((symbol_short!("nft_comp"),), (parent_id, child_id, owner.clone()));
+    env.events().publish(
+        (symbol_short!("nft_comp"),),
+        (parent_id, child_id, owner.clone()),
+    );
 }
 
 /// Decompose a child NFT from its parent.
@@ -159,15 +165,21 @@ pub fn decompose(env: &Env, owner: &Address, child_id: u64) {
         .persistent()
         .set(&DataKey::Nft(NftKey::Children(parent_id)), &remaining);
 
-    push_history(env, parent_id, CompositionEvent {
+    push_history(
+        env,
         parent_id,
-        child_id,
-        timestamp: env.ledger().timestamp(),
-        is_decompose: true,
-    });
+        CompositionEvent {
+            parent_id,
+            child_id,
+            timestamp: env.ledger().timestamp(),
+            is_decompose: true,
+        },
+    );
 
-    env.events()
-        .publish((symbol_short!("nft_dcp"),), (parent_id, child_id, owner.clone()));
+    env.events().publish(
+        (symbol_short!("nft_dcp"),),
+        (parent_id, child_id, owner.clone()),
+    );
 }
 
 /// Get an NFT record.

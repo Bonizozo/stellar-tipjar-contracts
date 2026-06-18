@@ -180,11 +180,7 @@ pub fn get_unstake_cooldown_remaining(env: &Env, staker: &Address) -> u64 {
             let now = env.ledger().timestamp();
             let config = super::get_staking_config(env);
             let cooldown_end = info.stake_time + config.unstake_cooldown;
-            if now >= cooldown_end {
-                0
-            } else {
-                cooldown_end - now
-            }
+            cooldown_end.saturating_sub(now)
         }
         None => 0,
     }

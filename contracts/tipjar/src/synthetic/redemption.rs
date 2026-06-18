@@ -7,13 +7,7 @@ use super::events::emit_synthetic_tokens_redeemed;
 use super::oracle::get_oracle_price;
 use super::supply::{update_collateral, update_supply};
 use super::types::SyntheticAsset;
-use crate::{
-    AuctionError, AuctionKey, BridgeKey, CircuitBreakerKey, CoreError, CreditError, DataKey,
-    DelegationKey, DisputeKey, FeatureError, FeeKey, InsuranceKey, LimitKey, LockedTipKey,
-    MatchingKey, MilestoneKey, MultiSigKey, OptionKey, OtherError, PrivateTipKey, RoleKey,
-    SnapshotKey, StatsKey, StreamError, StreamKey, SyntheticKey, SystemError, TipJarError,
-    VestingError, VestingKey,
-};
+use crate::{CoreError, CreditError, DataKey, SyntheticKey, TipJarError};
 use soroban_sdk::{token, Address, Env};
 
 /// Calculates redemption value for a token amount

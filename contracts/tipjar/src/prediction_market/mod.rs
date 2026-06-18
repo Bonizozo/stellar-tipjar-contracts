@@ -37,6 +37,7 @@ pub const ODDS_PRECISION: i128 = 1_000_000;
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq, Copy)]
 pub enum Outcome {
+    None,
     Yes,
     No,
 }
@@ -80,7 +81,7 @@ pub struct PredictionMarket {
     /// Current lifecycle status.
     pub status: MarketStatus,
     /// Winning outcome (set on resolution).
-    pub winning_outcome: Option<Outcome>,
+    pub winning_outcome: Outcome,
     /// Platform fee in basis points.
     pub fee_bps: u32,
     /// Creation timestamp.
@@ -159,7 +160,7 @@ pub fn get_active_markets(env: &Env) -> Vec<u64> {
 
 pub fn add_active_market(env: &Env, market_id: u64) {
     let mut list = get_active_markets(env);
-    if !list.contains(&market_id) {
+    if !list.contains(market_id) {
         list.push_back(market_id);
         env.storage()
             .persistent()
@@ -190,7 +191,7 @@ pub fn get_creator_markets(env: &Env, creator: &Address) -> Vec<u64> {
 
 pub fn add_creator_market(env: &Env, creator: &Address, market_id: u64) {
     let mut list = get_creator_markets(env, creator);
-    if !list.contains(&market_id) {
+    if !list.contains(market_id) {
         list.push_back(market_id);
         env.storage()
             .persistent()
@@ -207,7 +208,7 @@ pub fn get_bettor_markets(env: &Env, bettor: &Address) -> Vec<u64> {
 
 pub fn add_bettor_market(env: &Env, bettor: &Address, market_id: u64) {
     let mut list = get_bettor_markets(env, bettor);
-    if !list.contains(&market_id) {
+    if !list.contains(market_id) {
         list.push_back(market_id);
         env.storage()
             .persistent()
@@ -255,7 +256,7 @@ pub fn create_market(
         closes_at,
         resolves_at,
         status: MarketStatus::Open,
-        winning_outcome: None,
+        winning_outcome: Outcome::None,
         fee_bps,
         created_at: now,
     };
@@ -282,6 +283,7 @@ pub fn place_bet(env: &Env, bettor: &Address, market_id: u64, outcome: Outcome, 
 
     // Update pool totals
     match outcome {
+        Outcome::None => panic!("invalid outcome"),
         Outcome::Yes => market.yes_pool += amount,
         Outcome::No => market.no_pool += amount,
     }
@@ -290,6 +292,7 @@ pub fn place_bet(env: &Env, bettor: &Address, market_id: u64, outcome: Outcome, 
     // Update bettor position
     let mut position = get_bettor_position(env, market_id, bettor);
     match outcome {
+        Outcome::None => panic!("invalid outcome"),
         Outcome::Yes => position.yes_amount += amount,
         Outcome::No => position.no_amount += amount,
     }
@@ -319,7 +322,7 @@ pub fn resolve_market(env: &Env, resolver: &Address, market_id: u64, winning: Ou
     assert!(*resolver == market.resolver, "not the resolver");
 
     market.status = MarketStatus::Resolved;
-    market.winning_outcome = Some(winning);
+    market.winning_outcome = winning;
     save_market(env, &market);
     remove_active_market(env, market_id);
 }

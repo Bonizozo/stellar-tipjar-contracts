@@ -114,7 +114,7 @@ pub struct HomomorphicConfig {
 /// # Returns
 /// Aggregated encrypted amount
 pub fn aggregate_encrypted_amounts(
-    env: &Env,
+    _env: &Env,
     amounts: &Vec<EncryptedAmount>,
 ) -> Result<EncryptedAmount, &'static str> {
     if amounts.is_empty() {
@@ -252,7 +252,10 @@ pub fn verify_decryption_proof(
 ) -> Result<(), &'static str> {
     // Verify value commitment matches decrypted value
     let mut commitment_data = soroban_sdk::Bytes::new(env);
-    commitment_data.append(&soroban_sdk::Bytes::from_slice(env, &decrypted_value.to_le_bytes()));
+    commitment_data.append(&soroban_sdk::Bytes::from_slice(
+        env,
+        &decrypted_value.to_le_bytes(),
+    ));
 
     let recomputed_commitment = env.crypto().sha256(&commitment_data);
 
@@ -301,7 +304,7 @@ pub fn encrypt_amount(
     let bit_length = if amount == 0 {
         32u32
     } else {
-        (64 - (amount as u64).leading_zeros()) as u32
+        64 - (amount as u64).leading_zeros()
     };
 
     // Generate randomness from seed

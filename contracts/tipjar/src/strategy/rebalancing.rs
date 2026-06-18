@@ -2,7 +2,7 @@
 
 use soroban_sdk::{contracterror, panic_with_error, Env, Vec};
 
-use super::{AllocationTarget, DataKey, StrategyConfig};
+use super::AllocationTarget;
 
 #[contracterror]
 #[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
@@ -21,14 +21,14 @@ pub enum RebalancingError {
 
 /// Check if a strategy needs rebalancing
 pub fn should_rebalance(env: &Env, strategy_id: u64) -> Result<bool, RebalancingError> {
-    let strategy = super::get_strategy(env, strategy_id)
-        .ok_or(RebalancingError::StrategyNotFound)?;
+    let strategy =
+        super::get_strategy(env, strategy_id).ok_or(RebalancingError::StrategyNotFound)?;
 
     let now = env.ledger().timestamp();
 
     // Check frequency constraint
     if now < strategy.last_rebalance + strategy.rebalance_frequency_seconds {
-        return Err(RebalancingError::TooFrequentRebalancing.into());
+        return Err(RebalancingError::TooFrequentRebalancing);
     }
 
     Ok(true)
@@ -41,8 +41,8 @@ pub fn calculate_rebalancing(
     current_allocations: &Vec<i128>,
     total_aum: i128,
 ) -> Result<Vec<i128>, RebalancingError> {
-    let strategy = super::get_strategy(env, strategy_id)
-        .ok_or(RebalancingError::StrategyNotFound)?;
+    let strategy =
+        super::get_strategy(env, strategy_id).ok_or(RebalancingError::StrategyNotFound)?;
 
     if total_aum <= 0 {
         panic_with_error!(env, RebalancingError::CalculationFailed);
@@ -71,10 +71,11 @@ pub fn calculate_rebalancing(
 
         // Calculate drift in basis points
         let drift_bps = if current_amount != 0 {
-            ((deviation.abs() as u128)
+            (deviation
+                .unsigned_abs()
                 .checked_mul(10000)
                 .ok_or(RebalancingError::CalculationFailed)?
-                .checked_div(current_amount.abs() as u128)
+                .checked_div(current_amount.unsigned_abs())
                 .ok_or(RebalancingError::CalculationFailed)?) as u32
         } else {
             10001 // Force rebalance if no current allocation
@@ -93,12 +94,9 @@ pub fn calculate_rebalancing(
 }
 
 /// Execute rebalancing for a strategy
-pub fn execute_rebalancing(
-    env: &Env,
-    strategy_id: u64,
-) -> Result<(), RebalancingError> {
-    let mut strategy = super::get_strategy(env, strategy_id)
-        .ok_or(RebalancingError::StrategyNotFound)?;
+pub fn execute_rebalancing(env: &Env, strategy_id: u64) -> Result<(), RebalancingError> {
+    let mut strategy =
+        super::get_strategy(env, strategy_id).ok_or(RebalancingError::StrategyNotFound)?;
 
     let now = env.ledger().timestamp();
 
@@ -149,16 +147,14 @@ pub fn get_rebalancing_metrics(
     current_allocations: &Vec<i128>,
     total_aum: i128,
 ) -> Result<RebalancingMetrics, RebalancingError> {
-    let strategy = super::get_strategy(env, strategy_id)
-        .ok_or(RebalancingError::StrategyNotFound)?;
+    let strategy =
+        super::get_strategy(env, strategy_id).ok_or(RebalancingError::StrategyNotFound)?;
 
     let now = env.ledger().timestamp();
     let time_since_last_rebalance = now - strategy.last_rebalance;
-    let time_until_next_rebalance = if time_since_last_rebalance >= strategy.rebalance_frequency_seconds {
-        0
-    } else {
-        strategy.rebalance_frequency_seconds - time_since_last_rebalance
-    };
+    let time_until_next_rebalance = strategy
+        .rebalance_frequency_seconds
+        .saturating_sub(time_since_last_rebalance);
 
     let should_rebalance = time_until_next_rebalance == 0;
     let max_drift = calculate_max_drift(env, strategy_id, current_allocations, total_aum)?;
@@ -180,8 +176,8 @@ fn calculate_max_drift(
     current_allocations: &Vec<i128>,
     total_aum: i128,
 ) -> Result<u32, RebalancingError> {
-    let strategy = super::get_strategy(env, strategy_id)
-        .ok_or(RebalancingError::StrategyNotFound)?;
+    let strategy =
+        super::get_strategy(env, strategy_id).ok_or(RebalancingError::StrategyNotFound)?;
 
     let mut max_drift = 0u32;
 
@@ -206,7 +202,7 @@ fn calculate_max_drift(
             ((deviation as u128)
                 .checked_mul(10000)
                 .ok_or(RebalancingError::CalculationFailed)?
-                .checked_div(current_amount.abs() as u128)
+                .checked_div(current_amount.unsigned_abs())
                 .ok_or(RebalancingError::CalculationFailed)?) as u32
         } else {
             10001

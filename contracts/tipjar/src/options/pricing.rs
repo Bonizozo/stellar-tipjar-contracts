@@ -287,6 +287,6 @@ mod tests {
         assert_eq!(approximate_sqrt(1), 10_000);
 
         let sqrt_4 = approximate_sqrt(4);
-        assert!(sqrt_4 >= 1 && sqrt_4 <= 3);
+        assert!((1..=3).contains(&sqrt_4));
     }
 }

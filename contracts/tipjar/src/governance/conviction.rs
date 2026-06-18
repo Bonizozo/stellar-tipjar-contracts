@@ -111,7 +111,7 @@ pub fn calculate_accumulated_conviction(env: &Env, conviction_vote: &ConvictionV
 
     // Conviction accumulates as: base_power * time_locked / conviction_period
     let config = get_conviction_config(env);
-    let time_locked = now.saturating_sub(conviction_vote.conviction_start);
+    let _time_locked = now.saturating_sub(conviction_vote.conviction_start);
 
     // Calculate conviction rate per second
     let conviction_rate =
@@ -192,7 +192,9 @@ pub fn update_conviction_vote(
         .timestamp()
         .saturating_sub(conviction_vote.last_updated);
     let decay_amount =
-        conviction_vote.accumulated_conviction * decay_rate * time_since_vote as i128 / 10_000 / 1_000_000;
+        conviction_vote.accumulated_conviction * decay_rate * time_since_vote as i128
+            / 10_000
+            / 1_000_000;
     conviction_vote.accumulated_conviction = conviction_vote
         .accumulated_conviction
         .saturating_sub(decay_amount);

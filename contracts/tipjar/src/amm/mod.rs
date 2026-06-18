@@ -219,7 +219,7 @@ pub fn settle_rewards(env: &Env, pool_id: u64, provider: &Address) -> i128 {
 }
 
 /// Accrue a fee amount into the pool's fee-per-share accumulator.
-pub fn accrue_fee(env: &Env, pool: &mut LiquidityPool, fee_amount: i128) {
+pub fn accrue_fee(_env: &Env, pool: &mut LiquidityPool, fee_amount: i128) {
     if pool.total_shares > 0 && fee_amount > 0 {
         pool.fee_per_share_accum += fee_amount * PRECISION / pool.total_shares;
         pool.total_fees_collected += fee_amount;
