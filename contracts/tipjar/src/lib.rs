@@ -144,6 +144,9 @@ pub mod rental;
 // Portfolio rebalancing: diversified tip investment management
 pub mod portfolio;
 
+// Address whitelists/blacklists for compliance and creator preferences
+pub mod access_lists;
+
 /// A tip record that includes an optional memo and timestamp.
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -998,6 +1001,8 @@ pub enum DataKey {
     StopLoss(stop_loss::StopLossKey),
     /// Market making sub-keys.
     MarketMaking(market_making::MarketMakingKey),
+    /// Address whitelist/blacklist sub-keys.
+    AccessList(access_lists::AccessListKey),
 }
 
 #[contracterror]
@@ -1959,54 +1964,6 @@ impl TipJarContract {
         env.events().publish((symbol_short!("cb_init"),), admin);
     }
 
-    /// Pauses all state-changing operations. Admin only.
-    ///
-    /// `reason` is stored on-chain for transparency.
-    /// `duration_seconds` optionally sets an auto-unpause time; pass `None` for indefinite pause.
-    /// Emits `("paused",)` with data `(admin, reason, unpause_time_or_zero)`.
-    pub fn pause(env: Env, admin: Address, reason: String, duration_seconds: Option<u64>) {
-        admin.require_auth();
-        let stored_admin: Address = env.storage().instance().get(&DataKey::Admin).unwrap();
-        if admin != stored_admin {
-            panic_with_error!(&env, TipJarError::Unauthorized);
-        }
-        env.storage().instance().set(&DataKey::Paused, &true);
-        env.storage().instance().set(&DataKey::PauseReason, &reason);
-        let unpause_time: u64 = if let Some(duration) = duration_seconds {
-            let t = env.ledger().timestamp().saturating_add(duration);
-            env.storage().instance().set(&DataKey::PauseUntil, &t);
-            t
-        } else {
-            env.storage().instance().remove(&DataKey::PauseUntil);
-            0
-        };
-        env.events()
-            .publish((symbol_short!("paused"),), (admin, reason, unpause_time));
-    }
-
-    /// Resumes normal operations. Admin only. Fails if contract is not paused.
-    ///
-    /// Emits `("unpaused",)` with data `admin`.
-    pub fn unpause(env: Env, admin: Address) {
-        admin.require_auth();
-        let stored_admin: Address = env.storage().instance().get(&DataKey::Admin).unwrap();
-        if admin != stored_admin {
-            panic_with_error!(&env, TipJarError::Unauthorized);
-        }
-        if !Self::check_is_paused(&env) {
-            panic_with_error!(&env, TipJarError::NotPaused);
-        }
-        env.storage().instance().set(&DataKey::Paused, &false);
-        env.storage().instance().remove(&DataKey::PauseReason);
-        env.storage().instance().remove(&DataKey::PauseUntil);
-        env.events().publish((symbol_short!("unpaused"),), admin);
-    }
-
-    /// Returns `true` when the contract is currently paused (respects auto-unpause).
-    pub fn is_paused(env: Env) -> bool {
-        Self::check_is_paused(&env)
-    }
-
     /// Returns the pause reason if the contract is paused, or `None` otherwise.
     pub fn get_pause_reason(env: Env) -> Option<String> {
         if !Self::check_is_paused(&env) {
@@ -2049,7 +2006,7 @@ impl TipJarContract {
     ///
     /// Reverts token to using global limits.
     /// Emits `("token_cb_remove",)` with data `token`.
-    pub fn remove_token_circuit_breaker_limit(env: Env, admin: Address, token: Address) {
+    pub fn del_token_circuit_breaker_limit(env: Env, admin: Address, token: Address) {
         admin.require_auth();
         let stored_admin: Address = env.storage().instance().get(&DataKey::Admin).unwrap();
         if admin != stored_admin {
@@ -2294,6 +2251,8 @@ impl TipJarContract {
         if amount <= 0 {
             panic_with_error!(&env, TipJarError::InvalidAmount);
         }
+        // Enforce compliance / creator-preference access lists.
+        access_lists::check_allowed(&env, &creator, &sender);
         let whitelisted: bool = env
             .storage()
             .instance()
@@ -9409,7 +9368,7 @@ impl TipJarContract {
     }
 
     /// Check if voter can create a proposal based on conviction voting.
-    pub fn can_create_proposal_with_conviction(env: Env, voter: Address) -> bool {
+    pub fn can_propose_with_conviction(env: Env, voter: Address) -> bool {
         governance::conviction_integration::can_create_proposal_with_conviction(&env, &voter)
     }
 
@@ -10939,13 +10898,6 @@ impl TipJarContract {
     pub fn vk_deactivate_tree(env: Env, owner: Address, tree_id: u64) {
         verkle_tree::deactivate_tree(&env, &owner, tree_id)
     }
-}
-
-
-
-
-
-
 
 
 
@@ -11560,5 +11512,112 @@ impl TipJarContract {
         quote_token: Address,
     ) -> Vec<u64> {
         market_making::get_pair_makers(&env, &base_token, &quote_token)
+    }
+
+    // ── Access Lists: whitelist / blacklist ───────────────────────────────────
+
+    /// Adds `subject` to the blacklist for `scope`.
+    ///
+    /// `duration_secs` is how long the block lasts; pass `0` for a permanent
+    /// block, or a positive value for a temporary block. Global-scope calls
+    /// require the contract admin; creator-scope calls require that creator.
+    pub fn al_blacklist(
+        env: Env,
+        caller: Address,
+        scope: access_lists::ListScope,
+        subject: Address,
+        reason: String,
+        duration_secs: u64,
+    ) {
+        access_lists::add_to_blacklist(&env, &caller, &scope, &subject, reason, duration_secs);
+    }
+
+    /// Removes `subject` from the blacklist for `scope`.
+    pub fn al_unblacklist(
+        env: Env,
+        caller: Address,
+        scope: access_lists::ListScope,
+        subject: Address,
+    ) {
+        access_lists::remove_from_blacklist(&env, &caller, &scope, &subject);
+    }
+
+    /// Adds `subject` to the whitelist for `scope`.
+    pub fn al_whitelist(
+        env: Env,
+        caller: Address,
+        scope: access_lists::ListScope,
+        subject: Address,
+    ) {
+        access_lists::add_to_whitelist(&env, &caller, &scope, &subject);
+    }
+
+    /// Removes `subject` from the whitelist for `scope`.
+    pub fn al_unwhitelist(
+        env: Env,
+        caller: Address,
+        scope: access_lists::ListScope,
+        subject: Address,
+    ) {
+        access_lists::remove_from_whitelist(&env, &caller, &scope, &subject);
+    }
+
+    /// Enables or disables whitelist-only mode for `scope`.
+    pub fn al_set_whitelist_mode(
+        env: Env,
+        caller: Address,
+        scope: access_lists::ListScope,
+        enabled: bool,
+    ) {
+        access_lists::set_whitelist_mode(&env, &caller, &scope, enabled);
+    }
+
+    /// Returns `true` if `subject` is currently blacklisted in `scope`
+    /// (expired temporary blocks count as inactive).
+    pub fn al_is_blacklisted(
+        env: Env,
+        scope: access_lists::ListScope,
+        subject: Address,
+    ) -> bool {
+        access_lists::is_blacklisted(&env, &scope, &subject)
+    }
+
+    /// Returns `true` if `subject` is on the whitelist for `scope`.
+    pub fn al_is_whitelisted(
+        env: Env,
+        scope: access_lists::ListScope,
+        subject: Address,
+    ) -> bool {
+        access_lists::is_whitelisted(&env, &scope, &subject)
+    }
+
+    /// Returns `true` if whitelist-only mode is enabled for `scope`.
+    pub fn al_is_whitelist_mode(env: Env, scope: access_lists::ListScope) -> bool {
+        access_lists::is_whitelist_mode(&env, &scope)
+    }
+
+    /// Returns the raw blacklist entry for `subject` in `scope`, if any.
+    pub fn al_get_block_entry(
+        env: Env,
+        scope: access_lists::ListScope,
+        subject: Address,
+    ) -> Option<access_lists::BlockEntry> {
+        access_lists::get_block_entry(&env, &scope, &subject)
+    }
+
+    /// Returns all subjects currently on the blacklist for `scope`.
+    pub fn al_get_blacklist(env: Env, scope: access_lists::ListScope) -> Vec<Address> {
+        access_lists::get_blacklist(&env, &scope)
+    }
+
+    /// Returns all subjects currently on the whitelist for `scope`.
+    pub fn al_get_whitelist(env: Env, scope: access_lists::ListScope) -> Vec<Address> {
+        access_lists::get_whitelist(&env, &scope)
+    }
+
+    /// Returns `true` if `subject` is allowed to interact with `creator` under
+    /// the current access-list rules (non-panicking).
+    pub fn al_is_allowed(env: Env, creator: Address, subject: Address) -> bool {
+        access_lists::is_allowed(&env, &creator, &subject)
     }
 }
