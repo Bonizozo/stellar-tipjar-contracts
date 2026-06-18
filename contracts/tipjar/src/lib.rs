@@ -2343,6 +2343,38 @@ impl TipJarContract {
             .unwrap_or(false)
     }
 
+    // ── configuration view functions ─────────────────────────────────────────
+
+    /// Returns the contract administrator, or `None` if not yet initialized.
+    ///
+    /// Read-only: performs no state changes.
+    pub fn get_admin(env: Env) -> Option<Address> {
+        env.storage().instance().get(&DataKey::Admin)
+    }
+
+    /// Returns the platform fee in basis points (defaults to `0`).
+    ///
+    /// Read-only: performs no state changes.
+    pub fn get_fee_bps(env: Env) -> u32 {
+        env.storage()
+            .instance()
+            .get(&DataKey::Fee(FeeKey::BasisPoints))
+            .unwrap_or(0)
+    }
+
+    /// Returns the accumulated platform fee balance for `token` (defaults to `0`).
+    ///
+    /// Fees are tracked per token because the contract accepts any whitelisted
+    /// token (see [`is_whitelisted`]) rather than a single fixed one.
+    ///
+    /// Read-only: performs no state changes.
+    pub fn get_platform_fees(env: Env, token: Address) -> i128 {
+        env.storage()
+            .instance()
+            .get(&DataKey::Fee(FeeKey::Balance(token)))
+            .unwrap_or(0)
+    }
+
     /// Pauses all state-changing operations. Admin only.
     ///
     /// `reason` is stored on-chain for transparency.
