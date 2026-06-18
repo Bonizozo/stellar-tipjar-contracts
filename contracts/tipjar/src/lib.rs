@@ -2271,6 +2271,11 @@ impl TipJarContract {
     // ── initialization ───────────────────────────────────────────────────────
 
     /// One-time setup to choose the administrator for the TipJar.
+    ///
+    /// Stores [`CONTRACT_VERSION`] as a human-readable semantic version string
+    /// and the current ledger timestamp as the deployment time so both can be
+    /// queried on-chain at any point via [`get_version_string`] and
+    /// [`get_deployed_at`].
     pub fn init(env: Env, admin: Address) {
         if env.storage().instance().has(&DataKey::Admin) {
             panic_with_error!(&env, TipJarError::AlreadyInitialized);
@@ -2280,6 +2285,18 @@ impl TipJarContract {
             .instance()
             .set(&DataKey::Fee(FeeKey::BasisPoints), &0u32);
         env.storage().instance().set(&DataKey::RefundWindow, &0u64);
+
+        // Store semantic version string for on-chain queryability and upgrade tooling.
+        let version_str = soroban_sdk::String::from_str(&env, CONTRACT_VERSION);
+        env.storage()
+            .instance()
+            .set(&DataKey::Version, &version_str);
+
+        // Record the deployment timestamp for auditability and upgrade path tracking.
+        let deployed_at: u64 = env.ledger().timestamp();
+        env.storage()
+            .instance()
+            .set(&DataKey::DeployedAt, &deployed_at);
     }
 
     /// Sets an off-chain condition flag that can later be referenced in
@@ -3985,6 +4002,29 @@ impl TipJarContract {
     /// Returns the current contract version (0 before the first upgrade).
     pub fn get_version(env: Env) -> u32 {
         upgrade::get_version(&env)
+    }
+
+    /// Returns the human-readable semantic version string (e.g. `"1.0.0"`)
+    /// that was stored in instance storage when the contract was initialised.
+    ///
+    /// This is distinct from [`get_version`], which returns the monotonically
+    /// increasing upgrade counter used for migration logic.  Use this function
+    /// to verify which build is deployed without relying solely on WASM hashes.
+    pub fn get_version_string(env: Env) -> soroban_sdk::String {
+        env.storage()
+            .instance()
+            .get(&DataKey::Version)
+            .unwrap_or_else(|| soroban_sdk::String::from_str(&env, CONTRACT_VERSION))
+    }
+
+    /// Returns the Unix timestamp (seconds) at which the contract was first
+    /// initialised via [`init`], or `0` if called on a pre-upgrade deployment
+    /// that did not store this value.
+    pub fn get_deployed_at(env: Env) -> u64 {
+        env.storage()
+            .instance()
+            .get(&DataKey::DeployedAt)
+            .unwrap_or(0u64)
     }
 
     /// Applies any required state migrations after a WASM upgrade.
