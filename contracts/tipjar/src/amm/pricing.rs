@@ -2,7 +2,7 @@
 
 use soroban_sdk::{panic_with_error, Address, Env};
 
-use crate::{DataKey, TipJarError};
+use crate::TipJarError;
 
 use super::{get_pool, swap::price_impact_bps};
 

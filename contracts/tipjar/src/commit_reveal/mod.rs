@@ -12,7 +12,7 @@
 //! - Voting: Fair voting on governance proposals or creator rankings
 //! - Sealed-bid mechanisms: Any scenario requiring hidden bids until reveal
 
-use soroban_sdk::{contracttype, symbol_short, Address, BytesN, Bytes, Env, String, Vec};
+use soroban_sdk::{contracttype, symbol_short, Address, Bytes, BytesN, Env, String, Vec};
 
 use crate::DataKey;
 
@@ -160,7 +160,7 @@ pub fn compute_commitment(env: &Env, value: i128, salt: &BytesN<32>) -> BytesN<3
     let mut payload = Bytes::new(env);
     payload.extend_from_array(&value.to_be_bytes());
     payload.append(&salt.into());
-    env.crypto().sha256(&payload)
+    env.crypto().sha256(&payload).to_bytes()
 }
 
 // ── Core operations ──────────────────────────────────────────────────────────
@@ -179,11 +179,11 @@ pub fn create_round(
     min_bid: i128,
 ) -> u64 {
     assert!(
-        commit_duration >= MIN_COMMIT_DURATION && commit_duration <= MAX_COMMIT_DURATION,
+        (MIN_COMMIT_DURATION..=MAX_COMMIT_DURATION).contains(&commit_duration),
         "Invalid commit duration"
     );
     assert!(
-        reveal_duration >= MIN_REVEAL_DURATION && reveal_duration <= MAX_REVEAL_DURATION,
+        (MIN_REVEAL_DURATION..=MAX_REVEAL_DURATION).contains(&reveal_duration),
         "Invalid reveal duration"
     );
 
@@ -216,28 +216,25 @@ pub fn create_round(
         .get(&DataKey::CommitRevealCreatorRounds(creator.clone()))
         .unwrap_or_else(|| Vec::new(env));
     creator_rounds.push_back(id);
-    env.storage()
-        .persistent()
-        .set(&DataKey::CommitRevealCreatorRounds(creator.clone()), &creator_rounds);
-
-    env.events().publish(
-        (symbol_short!("cr_new"),),
-        (id, creator.clone(), now),
+    env.storage().persistent().set(
+        &DataKey::CommitRevealCreatorRounds(creator.clone()),
+        &creator_rounds,
     );
+
+    env.events()
+        .publish((symbol_short!("cr_new"),), (id, creator.clone(), now));
 
     id
 }
 
 /// Submits a commitment during the commit phase.
-pub fn commit(
-    env: &Env,
-    round_id: u64,
-    participant: &Address,
-    commitment_hash: BytesN<32>,
-) {
+pub fn commit(env: &Env, round_id: u64, participant: &Address, commitment_hash: BytesN<32>) {
     let mut round = load_round(env, round_id);
 
-    assert!(round.status == RoundStatus::Committing, "Not in commit phase");
+    assert!(
+        round.status == RoundStatus::Committing,
+        "Not in commit phase"
+    );
 
     let now = env.ledger().timestamp();
     assert!(now >= round.commit_start, "Commit phase not started");
@@ -249,7 +246,7 @@ pub fn commit(
     let commitment = Commitment {
         round_id,
         participant: participant.clone(),
-        commitment_hash,
+        commitment_hash: commitment_hash.clone(),
         committed_at: now,
         revealed: false,
     };
@@ -261,7 +258,7 @@ pub fn commit(
 
     env.events().publish(
         (symbol_short!("cr_cmt"),),
-        (round_id, participant.clone(), commitment_hash),
+        (round_id, participant.clone(), commitment_hash.clone()),
     );
 }
 
@@ -271,7 +268,10 @@ pub fn commit(
 pub fn start_reveal_phase(env: &Env, round_id: u64) {
     let mut round = load_round(env, round_id);
 
-    assert!(round.status == RoundStatus::Committing, "Not in commit phase");
+    assert!(
+        round.status == RoundStatus::Committing,
+        "Not in commit phase"
+    );
 
     let now = env.ledger().timestamp();
     assert!(now >= round.commit_end, "Commit phase not ended");
@@ -279,25 +279,20 @@ pub fn start_reveal_phase(env: &Env, round_id: u64) {
     round.status = RoundStatus::Revealing;
     save_round(env, &round);
 
-    env.events().publish(
-        (symbol_short!("cr_rvl"),),
-        (round_id,),
-    );
+    env.events()
+        .publish((symbol_short!("cr_rvl"),), (round_id,));
 }
 
 /// Reveals a commitment during the reveal phase.
 ///
 /// Verifies that `hash(value || salt) == commitment_hash`.
-pub fn reveal(
-    env: &Env,
-    round_id: u64,
-    participant: &Address,
-    value: i128,
-    salt: BytesN<32>,
-) {
+pub fn reveal(env: &Env, round_id: u64, participant: &Address, value: i128, salt: BytesN<32>) {
     let mut round = load_round(env, round_id);
 
-    assert!(round.status == RoundStatus::Revealing, "Not in reveal phase");
+    assert!(
+        round.status == RoundStatus::Revealing,
+        "Not in reveal phase"
+    );
 
     let now = env.ledger().timestamp();
     assert!(now < round.reveal_end, "Reveal phase ended");
@@ -346,15 +341,18 @@ pub fn reveal(
 pub fn finalize_round(env: &Env, round_id: u64) {
     let mut round = load_round(env, round_id);
 
-    assert!(round.status == RoundStatus::Revealing, "Not in reveal phase");
+    assert!(
+        round.status == RoundStatus::Revealing,
+        "Not in reveal phase"
+    );
 
     let now = env.ledger().timestamp();
     assert!(now >= round.reveal_end, "Reveal phase not ended");
 
     // Determine winner for auctions
     if round.round_type == RoundType::TipAuction {
-        let mut max_bid = round.min_bid;
-        let mut winner: Option<Address> = None;
+        let max_bid = round.min_bid;
+        let winner: Option<Address> = None;
 
         // Iterate through all reveals to find highest bid
         // In production, you'd track reveal keys in a list for efficiency
@@ -385,10 +383,8 @@ pub fn cancel_round(env: &Env, round_id: u64) {
     round.status = RoundStatus::Cancelled;
     save_round(env, &round);
 
-    env.events().publish(
-        (symbol_short!("cr_cncl"),),
-        (round_id,),
-    );
+    env.events()
+        .publish((symbol_short!("cr_cncl"),), (round_id,));
 }
 
 /// Returns a round by ID.
@@ -402,7 +398,10 @@ pub fn get_round(env: &Env, round_id: u64) -> Option<CommitRevealRound> {
 pub fn get_commitment(env: &Env, round_id: u64, participant: &Address) -> Option<Commitment> {
     env.storage()
         .persistent()
-        .get(&DataKey::CommitRevealCommitment(round_id, participant.clone()))
+        .get(&DataKey::CommitRevealCommitment(
+            round_id,
+            participant.clone(),
+        ))
 }
 
 /// Returns a reveal for a participant in a round.

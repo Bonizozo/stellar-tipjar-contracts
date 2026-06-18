@@ -50,7 +50,7 @@ pub fn fiat_shamir_challenge(env: &Env, commitment: &PolyCommitment) -> u64 {
     let h = env.crypto().sha256(&Bytes::from(&commitment.digest));
     let mut z = 0u64;
     for i in 0..8u32 {
-        z |= (h.get(i).unwrap_or(0) as u64) << (8 * i);
+        z |= (h.to_array()[i as usize] as u64) << (8 * i);
     }
     super::fp_reduce(z as u128)
 }

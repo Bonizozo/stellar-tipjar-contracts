@@ -190,7 +190,7 @@ pub fn get_trader_contracts(env: &Env, trader: &Address) -> Vec<u64> {
 
 pub fn add_trader_contract(env: &Env, trader: &Address, contract_id: u64) {
     let mut list = get_trader_contracts(env, trader);
-    if !list.contains(&contract_id) {
+    if !list.contains(contract_id) {
         list.push_back(contract_id);
         env.storage()
             .persistent()
@@ -207,7 +207,7 @@ pub fn get_active_contracts(env: &Env) -> Vec<u64> {
 
 pub fn add_active_contract(env: &Env, contract_id: u64) {
     let mut list = get_active_contracts(env);
-    if !list.contains(&contract_id) {
+    if !list.contains(contract_id) {
         list.push_back(contract_id);
         env.storage()
             .persistent()

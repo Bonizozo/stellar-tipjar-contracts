@@ -25,7 +25,7 @@ pub fn calculate_pending_rewards(env: &Env, stake_info: &StakeInfo) -> i128 {
     let time_fraction = time_staked * 1_000_000 / year_seconds; // Use 1_000_000 as base
 
     let share = stake_info.amount * 1_000_000 / total_staked;
-    let base_rewards = config.reward_pool * share / 1_000_000 * time_fraction / 1_000_000;
+    let base_rewards = config.reward_pool * share / 1_000_000 * time_fraction as i128 / 1_000_000;
 
     // Apply time multiplier
     let time_multiplier = calculate_time_multiplier(env, stake_info);
@@ -44,7 +44,7 @@ pub fn calculate_time_multiplier(env: &Env, stake_info: &StakeInfo) -> i128 {
         config.max_time_multiplier
     } else {
         // Linear interpolation: multiplier = (total_time / time_weight_period) * max_multiplier
-        total_time * config.max_time_multiplier / config.time_weight_period
+        (total_time as i128) * config.max_time_multiplier / config.time_weight_period as i128
     }
 }
 
@@ -88,8 +88,8 @@ pub fn calculate_impermanent_loss(
     };
 
     // IL ≈ 0.5 * (price_change / 1_000_000)^2 * 1_000_000
-    let il = price_change * price_change / 2_000_000;
-    il
+
+    price_change * price_change / 2_000_000
 }
 
 /// Calculate expected rewards for a given stake amount and duration
@@ -106,13 +106,13 @@ pub fn calculate_expected_rewards(env: &Env, stake_amount: i128, duration: u64) 
     let time_fraction = duration * 1_000_000 / year_seconds;
 
     let share = stake_amount * 1_000_000 / total_staked;
-    let base_rewards = config.reward_pool * share / 1_000_000 * time_fraction / 1_000_000;
+    let base_rewards = config.reward_pool * share / 1_000_000 * time_fraction as i128 / 1_000_000;
 
     // Time multiplier
     let time_multiplier = if duration >= config.time_weight_period {
         config.max_time_multiplier
     } else {
-        duration * config.max_time_multiplier / config.time_weight_period
+        (duration as i128) * config.max_time_multiplier / config.time_weight_period as i128
     };
 
     base_rewards * time_multiplier / 1_000_000

@@ -5,6 +5,7 @@
 //! leaf to root. Supports incremental updates and proof size optimization
 //! by pruning unchanged subtrees.
 
+use soroban_sdk::xdr::ToXdr;
 use soroban_sdk::{contracttype, symbol_short, Address, Bytes, BytesN, Env, Vec};
 
 use crate::DataKey;
@@ -143,10 +144,9 @@ fn get_tree_internal(env: &Env, tree_id: u64) -> VerkleTree {
 }
 
 fn save_leaf(env: &Env, tree_id: u64, leaf: &VerkleLeaf) {
-    env.storage().persistent().set(
-        &DataKey::Verkle(VerkleKey::Leaf(tree_id, leaf.index)),
-        leaf,
-    );
+    env.storage()
+        .persistent()
+        .set(&DataKey::Verkle(VerkleKey::Leaf(tree_id, leaf.index)), leaf);
 }
 
 fn get_leaf_internal(env: &Env, tree_id: u64, index: u32) -> Option<VerkleLeaf> {
@@ -157,7 +157,11 @@ fn get_leaf_internal(env: &Env, tree_id: u64, index: u32) -> Option<VerkleLeaf> 
 
 fn track_owner_tree(env: &Env, owner: &Address, tree_id: u64) {
     let key = DataKey::Verkle(VerkleKey::OwnerTrees(owner.clone()));
-    let mut ids: Vec<u64> = env.storage().persistent().get(&key).unwrap_or(Vec::new(env));
+    let mut ids: Vec<u64> = env
+        .storage()
+        .persistent()
+        .get(&key)
+        .unwrap_or(Vec::new(env));
     ids.push_back(tree_id);
     env.storage().persistent().set(&key, &ids);
 }
@@ -170,7 +174,7 @@ fn leaf_hash(env: &Env, key: &BytesN<32>, value: &Bytes) -> BytesN<32> {
     let key_bytes: Bytes = key.clone().into();
     data.append(&key_bytes);
     data.append(value);
-    env.crypto().sha256(&data)
+    env.crypto().sha256(&data).to_bytes()
 }
 
 /// Compute a node commitment from a list of child hashes.
@@ -180,7 +184,7 @@ fn node_commitment(env: &Env, children: &[BytesN<32>]) -> BytesN<32> {
         let child_bytes: Bytes = child.clone().into();
         data.append(&child_bytes);
     }
-    env.crypto().sha256(&data)
+    env.crypto().sha256(&data).to_bytes()
 }
 
 /// Recompute the root from all leaves in the tree.
@@ -190,7 +194,7 @@ fn node_commitment(env: &Env, children: &[BytesN<32>]) -> BytesN<32> {
 fn compute_root(env: &Env, tree_id: u64, leaf_count: u32) -> BytesN<32> {
     if leaf_count == 0 {
         // Empty tree root is SHA-256 of empty bytes.
-        return env.crypto().sha256(&Bytes::new(env));
+        return env.crypto().sha256(&Bytes::new(env)).to_bytes();
     }
 
     // Collect all leaf hashes.
@@ -200,7 +204,7 @@ fn compute_root(env: &Env, tree_id: u64, leaf_count: u32) -> BytesN<32> {
             level.push_back(leaf.hash.clone());
         } else {
             // Missing leaf: use zero hash.
-            level.push_back(env.crypto().sha256(&Bytes::new(env)));
+            level.push_back(env.crypto().sha256(&Bytes::new(env)).to_bytes());
         }
     }
 
@@ -217,14 +221,17 @@ fn compute_root(env: &Env, tree_id: u64, leaf_count: u32) -> BytesN<32> {
             }
             // Pad with zero hash if needed.
             while children.len() < BRANCHING_FACTOR {
-                children.push_back(env.crypto().sha256(&Bytes::new(env)));
+                children.push_back(env.crypto().sha256(&Bytes::new(env)).to_bytes());
             }
-            let commitment = node_commitment(env, &[
-                children.get(0).unwrap(),
-                children.get(1).unwrap(),
-                children.get(2).unwrap(),
-                children.get(3).unwrap(),
-            ]);
+            let commitment = node_commitment(
+                env,
+                &[
+                    children.get(0).unwrap(),
+                    children.get(1).unwrap(),
+                    children.get(2).unwrap(),
+                    children.get(3).unwrap(),
+                ],
+            );
             next_level.push_back(commitment);
             i += BRANCHING_FACTOR;
         }
@@ -242,7 +249,7 @@ fn compute_root(env: &Env, tree_id: u64, leaf_count: u32) -> BytesN<32> {
 pub fn create_tree(env: &Env, owner: &Address) -> u64 {
     owner.require_auth();
     let tree_id = next_tree_id(env);
-    let empty_root = env.crypto().sha256(&Bytes::new(env));
+    let empty_root = env.crypto().sha256(&Bytes::new(env)).to_bytes();
 
     let tree = VerkleTree {
         id: tree_id,
@@ -256,10 +263,8 @@ pub fn create_tree(env: &Env, owner: &Address) -> u64 {
     save_tree(env, &tree);
     track_owner_tree(env, owner, tree_id);
 
-    env.events().publish(
-        (symbol_short!("vk_crt"),),
-        (tree_id, owner.clone()),
-    );
+    env.events()
+        .publish((symbol_short!("vk_crt"),), (tree_id, owner.clone()));
 
     tree_id
 }
@@ -283,7 +288,7 @@ pub fn update_leaf(
     let mut key_data = Bytes::new(env);
     key_data.append(&creator.to_xdr(env));
     key_data.append(&token.to_xdr(env));
-    let key: BytesN<32> = env.crypto().sha256(&key_data);
+    let key: BytesN<32> = env.crypto().sha256(&key_data).to_bytes();
 
     // Find existing leaf with this key or append a new one.
     let mut found_index: Option<u32> = None;
@@ -355,10 +360,8 @@ pub fn generate_proof(env: &Env, tree_id: u64, leaf_index: u32) -> u64 {
         .persistent()
         .set(&DataKey::Verkle(VerkleKey::Proof(proof_id)), &proof);
 
-    env.events().publish(
-        (symbol_short!("vk_pgen"),),
-        (proof_id, tree_id, leaf_index),
-    );
+    env.events()
+        .publish((symbol_short!("vk_pgen"),), (proof_id, tree_id, leaf_index));
 
     proof_id
 }
@@ -377,16 +380,15 @@ pub fn verify_proof(env: &Env, proof_id: u64) -> bool {
     let tree = get_tree_internal(env, proof.tree_id);
 
     // Recompute root from the proof path.
-    let computed_root = recompute_root_from_path(env, &proof.leaf_hash, proof.leaf_index, &proof.path);
+    let computed_root =
+        recompute_root_from_path(env, &proof.leaf_hash, proof.leaf_index, &proof.path);
     let valid = computed_root == tree.root;
 
     proof.verified = valid;
     env.storage().persistent().set(&key, &proof);
 
-    env.events().publish(
-        (symbol_short!("vk_vfy"),),
-        (proof_id, valid),
-    );
+    env.events()
+        .publish((symbol_short!("vk_vfy"),), (proof_id, valid));
 
     valid
 }
@@ -426,10 +428,8 @@ pub fn deactivate_tree(env: &Env, owner: &Address, tree_id: u64) {
     tree.active = false;
     save_tree(env, &tree);
 
-    env.events().publish(
-        (symbol_short!("vk_deact"),),
-        (tree_id,),
-    );
+    env.events()
+        .publish((symbol_short!("vk_deact"),), (tree_id,));
 }
 
 // ── Internal proof helpers ───────────────────────────────────────────────────
@@ -439,7 +439,7 @@ pub fn deactivate_tree(env: &Env, owner: &Address, tree_id: u64) {
 /// At each level, collect the sibling hashes within the same group.
 fn build_proof_path(env: &Env, tree_id: u64, leaf_index: u32, leaf_count: u32) -> Vec<BytesN<32>> {
     let mut path: Vec<BytesN<32>> = Vec::new(env);
-    let zero_hash = env.crypto().sha256(&Bytes::new(env));
+    let zero_hash = env.crypto().sha256(&Bytes::new(env)).to_bytes();
 
     // Collect all leaf hashes.
     let mut level: Vec<BytesN<32>> = Vec::new(env);
@@ -483,12 +483,15 @@ fn build_proof_path(env: &Env, tree_id: u64, leaf_index: u32, leaf_count: u32) -
             while children.len() < BRANCHING_FACTOR {
                 children.push_back(zero_hash.clone());
             }
-            let commitment = node_commitment(env, &[
-                children.get(0).unwrap(),
-                children.get(1).unwrap(),
-                children.get(2).unwrap(),
-                children.get(3).unwrap(),
-            ]);
+            let commitment = node_commitment(
+                env,
+                &[
+                    children.get(0).unwrap(),
+                    children.get(1).unwrap(),
+                    children.get(2).unwrap(),
+                    children.get(3).unwrap(),
+                ],
+            );
             next_level.push_back(commitment);
             i += BRANCHING_FACTOR;
         }
@@ -507,7 +510,7 @@ fn recompute_root_from_path(
     leaf_index: u32,
     path: &Vec<BytesN<32>>,
 ) -> BytesN<32> {
-    let zero_hash = env.crypto().sha256(&Bytes::new(env));
+    let zero_hash = env.crypto().sha256(&Bytes::new(env)).to_bytes();
     let mut current = leaf_hash.clone();
     let mut current_index = leaf_index;
     let mut path_iter = 0u32;
@@ -534,12 +537,15 @@ fn recompute_root_from_path(
             }
         }
 
-        current = node_commitment(env, &[
-            children.get(0).unwrap(),
-            children.get(1).unwrap(),
-            children.get(2).unwrap(),
-            children.get(3).unwrap(),
-        ]);
+        current = node_commitment(
+            env,
+            &[
+                children.get(0).unwrap(),
+                children.get(1).unwrap(),
+                children.get(2).unwrap(),
+                children.get(3).unwrap(),
+            ],
+        );
 
         current_index /= BRANCHING_FACTOR;
         path_iter += siblings_per_level;

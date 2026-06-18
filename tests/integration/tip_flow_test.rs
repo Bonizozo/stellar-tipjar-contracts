@@ -5,7 +5,7 @@
 
 use soroban_sdk::{
     testutils::{Address as _, Events as _},
-    token, Address, Env, Symbol,
+    token, Address, Env, Symbol, TryFromVal,
 };
 use tipjar::{TipJarContract, TipJarContractClient, TipJarError};
 
@@ -34,7 +34,7 @@ impl Ctx {
         }
     }
 
-    fn c(&self) -> TipJarContractClient {
+    fn c(&self) -> TipJarContractClient<'_> {
         TipJarContractClient::new(&self.env, &self.contract_id)
     }
 

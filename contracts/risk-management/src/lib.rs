@@ -99,27 +99,31 @@ impl RiskManagementContract {
         } else {
             100
         };
-        profile.risk_score = if raw_score > 100 { 100 } else if raw_score < 0 { 0 } else { raw_score as u32 };
+        profile.risk_score = if raw_score > 100 {
+            100
+        } else if raw_score < 0 {
+            0
+        } else {
+            raw_score as u32
+        };
 
         env.storage()
             .persistent()
             .set(&DataKey::Profile(caller.clone()), &profile);
 
         // Update global metrics
-        let mut metrics: RiskMetrics = env
-            .storage()
-            .persistent()
-            .get(&DataKey::Metrics)
-            .unwrap_or(RiskMetrics {
-                total_exposure: 0,
-                high_risk_count: 0,
-                last_updated: 0,
-            });
+        let mut metrics: RiskMetrics =
+            env.storage()
+                .persistent()
+                .get(&DataKey::Metrics)
+                .unwrap_or(RiskMetrics {
+                    total_exposure: 0,
+                    high_risk_count: 0,
+                    last_updated: 0,
+                });
         metrics.total_exposure = metrics.total_exposure - old_exposure + profile.exposure;
         metrics.last_updated = env.ledger().timestamp();
-        env.storage()
-            .persistent()
-            .set(&DataKey::Metrics, &metrics);
+        env.storage().persistent().set(&DataKey::Metrics, &metrics);
 
         env.events().publish(
             (symbol_short!("risk"), symbol_short!("exp_upd")),
@@ -194,20 +198,18 @@ impl RiskManagementContract {
             .persistent()
             .set(&DataKey::Profile(owner), &profile);
 
-        let mut metrics: RiskMetrics = env
-            .storage()
-            .persistent()
-            .get(&DataKey::Metrics)
-            .unwrap_or(RiskMetrics {
-                total_exposure: 0,
-                high_risk_count: 0,
-                last_updated: 0,
-            });
+        let mut metrics: RiskMetrics =
+            env.storage()
+                .persistent()
+                .get(&DataKey::Metrics)
+                .unwrap_or(RiskMetrics {
+                    total_exposure: 0,
+                    high_risk_count: 0,
+                    last_updated: 0,
+                });
         metrics.total_exposure -= old_exposure;
         metrics.last_updated = env.ledger().timestamp();
-        env.storage()
-            .persistent()
-            .set(&DataKey::Metrics, &metrics);
+        env.storage().persistent().set(&DataKey::Metrics, &metrics);
     }
 }
 

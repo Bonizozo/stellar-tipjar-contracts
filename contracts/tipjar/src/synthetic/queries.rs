@@ -8,13 +8,7 @@ use super::oracle::get_oracle_price;
 use super::redemption::calculate_redemption_value;
 use super::supply::{get_collateralization_ratio, get_total_collateral, get_total_supply};
 use super::types::SyntheticAsset;
-use crate::{
-    AuctionError, AuctionKey, BridgeKey, CircuitBreakerKey, CoreError, CreditError, DataKey,
-    DelegationKey, DisputeKey, FeatureError, FeeKey, InsuranceKey, LimitKey, LockedTipKey,
-    MatchingKey, MilestoneKey, MultiSigKey, OptionKey, OtherError, PrivateTipKey, RoleKey,
-    SnapshotKey, StatsKey, StreamError, StreamKey, SyntheticKey, SystemError, TipJarError,
-    VestingError, VestingKey,
-};
+use crate::{CreditError, DataKey, SyntheticKey, TipJarError};
 use soroban_sdk::{Address, Env, Vec};
 
 /// Retrieves synthetic asset details by asset identifier

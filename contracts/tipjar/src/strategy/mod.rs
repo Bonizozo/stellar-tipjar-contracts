@@ -108,7 +108,9 @@ pub enum DataKey {
 
 /// Initialize strategy module with default state
 pub fn init_strategy_module(env: &soroban_sdk::Env) {
-    env.storage().persistent().set(&DataKey::StrategyNextId, &1u64);
+    env.storage()
+        .persistent()
+        .set(&DataKey::StrategyNextId, &1u64);
 }
 
 /// Get the next strategy ID
@@ -197,9 +199,10 @@ pub fn update_allocation_instance(
     owner: &Address,
     allocation: &AllocationInstance,
 ) {
-    env.storage()
-        .persistent()
-        .set(&DataKey::AllocationInstance(strategy_id, owner.clone()), allocation);
+    env.storage().persistent().set(
+        &DataKey::AllocationInstance(strategy_id, owner.clone()),
+        allocation,
+    );
 }
 
 #[cfg(test)]
@@ -209,8 +212,17 @@ mod tests {
     #[test]
     fn test_strategy_type_enum() {
         // Verify enum values are unique
-        assert_ne!(StrategyType::Conservative as u32, StrategyType::Balanced as u32);
-        assert_ne!(StrategyType::Balanced as u32, StrategyType::Aggressive as u32);
-        assert_ne!(StrategyType::Aggressive as u32, StrategyType::IndexTracking as u32);
+        assert_ne!(
+            StrategyType::Conservative as u32,
+            StrategyType::Balanced as u32
+        );
+        assert_ne!(
+            StrategyType::Balanced as u32,
+            StrategyType::Aggressive as u32
+        );
+        assert_ne!(
+            StrategyType::Aggressive as u32,
+            StrategyType::IndexTracking as u32
+        );
     }
 }

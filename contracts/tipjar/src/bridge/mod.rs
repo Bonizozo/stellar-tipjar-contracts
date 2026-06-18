@@ -1,7 +1,7 @@
 pub mod relayer;
 pub mod validator;
 
-use soroban_sdk::{contracttype, Address, BytesN, String, Vec};
+use soroban_sdk::{contracttype, Address, BytesN, String};
 
 /// Supported source chains for bridged tips.
 #[contracttype]

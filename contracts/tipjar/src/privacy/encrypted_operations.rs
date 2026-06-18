@@ -6,7 +6,7 @@
 //! - Perform privacy-preserving withdrawals
 //! - Compute encrypted statistics
 
-use soroban_sdk::{token, Address, BytesN, Env, Vec};
+use soroban_sdk::{Address, BytesN, Env, Vec};
 
 use super::homomorphic::{
     aggregate_encrypted_amounts, encrypt_amount, scalar_multiply_encrypted, verify_range_proof,
@@ -258,6 +258,7 @@ pub fn reveal_encrypted_tip(
     Ok(())
 }
 
+#[soroban_sdk::contracttype]
 /// Encrypted tip record.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct EncryptedTip {
@@ -279,7 +280,6 @@ pub struct EncryptedTip {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
 
     #[test]
     fn test_compute_encrypted_fee() {

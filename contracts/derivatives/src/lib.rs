@@ -168,14 +168,12 @@ impl DerivativesContract {
                     entry_price: match_price,
                 };
 
-                env.storage().persistent().set(
-                    &DataKey::Position(buy.owner.clone(), buy.id),
-                    &buy_pos,
-                );
-                env.storage().persistent().set(
-                    &DataKey::Position(sell.owner.clone(), sell.id),
-                    &sell_pos,
-                );
+                env.storage()
+                    .persistent()
+                    .set(&DataKey::Position(buy.owner.clone(), buy.id), &buy_pos);
+                env.storage()
+                    .persistent()
+                    .set(&DataKey::Position(sell.owner.clone(), sell.id), &sell_pos);
 
                 env.events().publish(
                     (symbol_short!("deriv"), symbol_short!("matched")),
@@ -294,8 +292,24 @@ mod tests {
         let seller = Address::generate(&env);
         let deriv_type = Symbol::new(&env, "CALL");
 
-        let buy_id = client.place_order(&buyer, &deriv_type, &token, &100i128, &9999u64, &10i128, &true);
-        let sell_id = client.place_order(&seller, &deriv_type, &token, &100i128, &9999u64, &10i128, &false);
+        let buy_id = client.place_order(
+            &buyer,
+            &deriv_type,
+            &token,
+            &100i128,
+            &9999u64,
+            &10i128,
+            &true,
+        );
+        let sell_id = client.place_order(
+            &seller,
+            &deriv_type,
+            &token,
+            &100i128,
+            &9999u64,
+            &10i128,
+            &false,
+        );
 
         assert_eq!(buy_id, 1);
         assert_eq!(sell_id, 2);
@@ -327,7 +341,15 @@ mod tests {
         let deriv_type = Symbol::new(&env, "PUT");
         let expiry = 1000u64;
 
-        let order_id = client.place_order(&owner, &deriv_type, &token_addr, &50i128, &expiry, &5i128, &true);
+        let order_id = client.place_order(
+            &owner,
+            &deriv_type,
+            &token_addr,
+            &50i128,
+            &expiry,
+            &5i128,
+            &true,
+        );
 
         // Advance time past expiry
         env.ledger().with_mut(|l| l.timestamp = 2000);
@@ -355,7 +377,15 @@ mod tests {
 
         env.ledger().with_mut(|l| l.timestamp = 100);
 
-        let order_id = client.place_order(&owner, &deriv_type, &token, &100i128, &expiry, &1i128, &true);
+        let order_id = client.place_order(
+            &owner,
+            &deriv_type,
+            &token,
+            &100i128,
+            &expiry,
+            &1i128,
+            &true,
+        );
         client.settle_order(&owner, &order_id);
     }
 
@@ -369,7 +399,15 @@ mod tests {
         let attacker = Address::generate(&env);
         let deriv_type = Symbol::new(&env, "CALL");
 
-        let order_id = client.place_order(&owner, &deriv_type, &token, &100i128, &9999u64, &1i128, &true);
+        let order_id = client.place_order(
+            &owner,
+            &deriv_type,
+            &token,
+            &100i128,
+            &9999u64,
+            &1i128,
+            &true,
+        );
         client.cancel_order(&attacker, &order_id);
     }
 
@@ -381,7 +419,15 @@ mod tests {
         let owner = Address::generate(&env);
         let deriv_type = Symbol::new(&env, "CALL");
 
-        let order_id = client.place_order(&owner, &deriv_type, &_token, &100i128, &9999u64, &1i128, &true);
+        let order_id = client.place_order(
+            &owner,
+            &deriv_type,
+            &_token,
+            &100i128,
+            &9999u64,
+            &1i128,
+            &true,
+        );
         client.cancel_order(&owner, &order_id);
 
         let order: Order = env.as_contract(&contract_id, || {

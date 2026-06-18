@@ -1,10 +1,6 @@
 use soroban_sdk::Env;
 
-use crate::{
-    AuctionKey, BridgeKey, CircuitBreakerKey, DataKey, DelegationKey, DisputeKey, FeeKey,
-    InsuranceKey, LimitKey, LockedTipKey, MatchingKey, MilestoneKey, MultiSigKey, OptionKey,
-    PrivateTipKey, RoleKey, SnapshotKey, StatsKey, StreamKey, SyntheticKey, VestingKey,
-};
+use crate::DataKey;
 
 /// Default version for new contracts before any upgrade occurs.
 pub const DEFAULT_CONTRACT_VERSION: u32 = 0;

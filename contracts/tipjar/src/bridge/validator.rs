@@ -1,4 +1,4 @@
-use soroban_sdk::{symbol_short, BytesN, Env, String};
+use soroban_sdk::{BytesN, Env, String};
 
 use crate::bridge::{BridgeDataKey, SourceChain};
 
@@ -141,7 +141,8 @@ mod tests {
     #[test]
     fn test_calculate_bridge_fee_zero() {
         let env = Env::default();
-        let (fee, net) = calculate_bridge_fee(&env, 1000);
+        let contract_id = env.register(crate::TipJarContract, ());
+        let (fee, net) = env.as_contract(&contract_id, || calculate_bridge_fee(&env, 1000));
         assert_eq!(fee, 0);
         assert_eq!(net, 1000);
     }

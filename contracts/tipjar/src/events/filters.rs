@@ -1,6 +1,6 @@
 //! Event filtering utilities
 
-use super::{EventFilter, TipEvent};
+use super::{EventFilter, EventType, TipEvent};
 use soroban_sdk::Vec;
 
 /// Check if an event matches the given filter
@@ -54,7 +54,7 @@ pub fn matches_filter(event: &TipEvent, filter: &EventFilter) -> bool {
 
     // Check tags filter
     if let Some(ref filter_tags) = filter.tags {
-        if filter_tags.len() > 0 {
+        if !filter_tags.is_empty() {
             let mut has_tag = false;
             for filter_tag in filter_tags.iter() {
                 for event_tag in event.tags.iter() {
@@ -79,7 +79,7 @@ pub fn matches_filter(event: &TipEvent, filter: &EventFilter) -> bool {
 /// Create a filter for events by creator
 pub fn creator_filter(creator: &soroban_sdk::Address) -> EventFilter {
     EventFilter {
-        event_type: None,
+        event_type: EventType::None,
         sender: None,
         creator: Some(creator.clone()),
         token: None,
@@ -94,7 +94,7 @@ pub fn creator_filter(creator: &soroban_sdk::Address) -> EventFilter {
 /// Create a filter for events by sender
 pub fn sender_filter(sender: &soroban_sdk::Address) -> EventFilter {
     EventFilter {
-        event_type: None,
+        event_type: EventType::None,
         sender: Some(sender.clone()),
         creator: None,
         token: None,
@@ -109,7 +109,7 @@ pub fn sender_filter(sender: &soroban_sdk::Address) -> EventFilter {
 /// Create a filter for events by token
 pub fn token_filter(token: &soroban_sdk::Address) -> EventFilter {
     EventFilter {
-        event_type: None,
+        event_type: EventType::None,
         sender: None,
         creator: None,
         token: Some(token.clone()),
@@ -124,7 +124,7 @@ pub fn token_filter(token: &soroban_sdk::Address) -> EventFilter {
 /// Create a filter for events by time range
 pub fn time_range_filter(start: u64, end: u64) -> EventFilter {
     EventFilter {
-        event_type: None,
+        event_type: EventType::None,
         sender: None,
         creator: None,
         token: None,
@@ -139,7 +139,7 @@ pub fn time_range_filter(start: u64, end: u64) -> EventFilter {
 /// Create a filter for events by amount range
 pub fn amount_range_filter(min: i128, max: i128) -> EventFilter {
     EventFilter {
-        event_type: None,
+        event_type: EventType::None,
         sender: None,
         creator: None,
         token: None,
@@ -154,7 +154,7 @@ pub fn amount_range_filter(min: i128, max: i128) -> EventFilter {
 /// Create a filter for events by tags
 pub fn tags_filter(tags: &Vec<soroban_sdk::String>) -> EventFilter {
     EventFilter {
-        event_type: None,
+        event_type: EventType::None,
         sender: None,
         creator: None,
         token: None,

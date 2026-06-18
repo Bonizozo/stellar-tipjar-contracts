@@ -5,9 +5,8 @@
 
 use super::conviction::{
     self, calculate_effective_voting_power, get_conviction_vote, record_conviction_vote,
-    update_conviction_vote, ConvictionConfig, ConvictionVote,
+    update_conviction_vote,
 };
-use super::voting;
 use super::{DataKey, Vote, VoteChoice};
 use soroban_sdk::{Address, Env};
 
@@ -112,11 +111,11 @@ pub fn change_conviction_vote(
     let old_vote = env
         .storage()
         .persistent()
-        .get(&vote_key)
+        .get::<_, Vote>(&vote_key)
         .expect("No vote found to change");
 
     // Get existing conviction vote
-    let old_conviction =
+    let _old_conviction =
         get_conviction_vote(env, proposal_id, voter).expect("No conviction vote found");
 
     // Update conviction vote (applies decay)

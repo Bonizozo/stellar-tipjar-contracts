@@ -7,7 +7,7 @@
 //! - Key expiration and lifecycle management
 //! - Secure key derivation
 
-use soroban_sdk::{contracttype, Address, BytesN, Env, Symbol};
+use soroban_sdk::{contracttype, Address, Env, Symbol, Vec};
 
 use super::homomorphic::{HomomorphicConfig, HomomorphicPublicKey};
 use crate::DataKey;
@@ -68,7 +68,7 @@ pub fn initialize_homomorphic(
 
     // Create initial configuration
     let hom_config = HomomorphicConfig {
-        public_key,
+        public_key: public_key.clone(),
         enabled: true,
         min_bit_length: 32,
         max_bit_length: 128,
@@ -87,7 +87,7 @@ pub fn initialize_homomorphic(
 
     // Initialize key history
     let mut history: Vec<HomomorphicPublicKey> = Vec::new(env);
-    history.push_back(public_key);
+    history.push_back(public_key.clone());
     env.storage().instance().set(&DataKey::KeyHistory, &history);
 
     // Emit initialization event
@@ -142,14 +142,14 @@ pub fn rotate_key(
 
     // Trim history if needed
     let key_mgmt_config = get_key_management_config(env)?;
-    while history.len() > key_mgmt_config.key_history_size as usize {
+    while (history.len() as usize) > key_mgmt_config.key_history_size as usize {
         history.pop_front();
     }
 
     env.storage().instance().set(&DataKey::KeyHistory, &history);
 
     // Record rotation event
-    let event = KeyRotationEvent {
+    let _event = KeyRotationEvent {
         old_version,
         new_version: new_key.version,
         timestamp: env.ledger().timestamp(),
@@ -258,10 +258,10 @@ pub fn disable_homomorphic(env: &Env, admin: &Address) -> Result<(), &'static st
 /// Verify key is still valid (not expired).
 pub fn verify_key_validity(env: &Env, key_version: u32) -> Result<(), &'static str> {
     let config = get_homomorphic_config(env)?;
-    let key_mgmt = get_key_management_config(env)?;
+    let _key_mgmt = get_key_management_config(env)?;
 
     // Get the key
-    let key = get_public_key_by_version(env, key_version)?;
+    let _key = get_public_key_by_version(env, key_version)?;
 
     // Check if key is current or recent
     if key_version < config.public_key.version {

@@ -8,13 +8,7 @@ use super::events::emit_synthetic_tokens_minted;
 use super::oracle::get_oracle_price;
 use super::supply::{update_collateral, update_supply};
 use super::types::SyntheticAsset;
-use crate::{
-    AuctionError, AuctionKey, BridgeKey, CircuitBreakerKey, CoreError, CreditError, DataKey,
-    DelegationKey, DisputeKey, FeatureError, FeeKey, InsuranceKey, LimitKey, LockedTipKey,
-    MatchingKey, MilestoneKey, MultiSigKey, OptionKey, OtherError, PrivateTipKey, RoleKey,
-    SnapshotKey, StatsKey, StreamError, StreamKey, SyntheticKey, SystemError, TipJarError,
-    VestingError, VestingKey,
-};
+use crate::{CoreError, CreditError, DataKey, SyntheticKey, TipJarError};
 use soroban_sdk::{token, Address, Env};
 
 /// Calculates required collateral for minting synthetic tokens
@@ -39,7 +33,7 @@ pub fn calculate_required_collateral(
 ) -> Result<i128, TipJarError> {
     // Validate amount is positive
     if amount <= 0 {
-        return Err(CoreError::InvalidAmount);
+        return Err(CoreError::InvalidAmount.into());
     }
 
     // Retrieve the synthetic asset
@@ -81,7 +75,7 @@ pub fn calculate_required_collateral(
 pub fn mint(env: &Env, user: &Address, asset_id: u64, amount: i128) -> Result<i128, TipJarError> {
     // Validate amount is positive
     if amount <= 0 {
-        return Err(CoreError::InvalidAmount);
+        return Err(CoreError::InvalidAmount.into());
     }
 
     // Verify synthetic asset exists and is active
@@ -93,7 +87,7 @@ pub fn mint(env: &Env, user: &Address, asset_id: u64, amount: i128) -> Result<i1
         .ok_or(CreditError::SyntheticAssetNotFound)?;
 
     if !asset.active {
-        return Err(CreditError::SyntheticAssetInactive);
+        return Err(CreditError::SyntheticAssetInactive.into());
     }
 
     // Calculate required collateral

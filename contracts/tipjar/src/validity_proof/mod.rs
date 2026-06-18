@@ -3,6 +3,7 @@
 //! Allows verifying tip transactions without full re-execution by generating
 //! and verifying compact proofs. Supports batching and aggregation.
 
+use soroban_sdk::xdr::ToXdr;
 use soroban_sdk::{contracttype, symbol_short, Address, Bytes, BytesN, Env, Vec};
 
 use crate::DataKey;
@@ -149,7 +150,7 @@ fn build_commitment(
     data.append(&token.to_xdr(env));
     data.append(&Bytes::from_array(env, &amount.to_le_bytes()));
     data.append(&Bytes::from_array(env, &nonce.to_le_bytes()));
-    env.crypto().sha256(&data)
+    env.crypto().sha256(&data).to_bytes()
 }
 
 // ── Public API ───────────────────────────────────────────────────────────────
@@ -181,7 +182,7 @@ pub fn generate_proof(
         creator: creator.clone(),
         token: token.clone(),
         amount,
-        commitment,
+        commitment: commitment.clone(),
         witness,
         validity: ProofValidity::Pending,
         generated_at: now,
@@ -189,9 +190,10 @@ pub fn generate_proof(
         nonce,
     };
 
-    env.storage()
-        .persistent()
-        .set(&DataKey::ValidityProof(ValidityProofKey::Proof(proof_id)), &proof);
+    env.storage().persistent().set(
+        &DataKey::ValidityProof(ValidityProofKey::Proof(proof_id)),
+        &proof,
+    );
     env.storage().persistent().set(
         &DataKey::ValidityProof(ValidityProofKey::TipProofId(tip_id)),
         &proof_id,
@@ -199,7 +201,7 @@ pub fn generate_proof(
 
     env.events().publish(
         (symbol_short!("vp_gen"),),
-        (proof_id, tip_id, commitment),
+        (proof_id, tip_id, commitment.clone()),
     );
 
     proof_id
@@ -240,10 +242,8 @@ pub fn verify_proof(env: &Env, proof_id: u64) -> bool {
     proof.verified_at = env.ledger().timestamp();
     env.storage().persistent().set(&key, &proof);
 
-    env.events().publish(
-        (symbol_short!("vp_vrfy"),),
-        (proof_id, valid),
-    );
+    env.events()
+        .publish((symbol_short!("vp_vrfy"),), (proof_id, valid));
 
     valid
 }
@@ -287,15 +287,15 @@ pub fn aggregate_proofs(env: &Env, proof_ids: Vec<u64>) -> u64 {
         combined.append(&commitment_bytes);
     }
 
-    let aggregate_root: BytesN<32> = env.crypto().sha256(&combined);
+    let aggregate_root: BytesN<32> = env.crypto().sha256(&combined).to_bytes();
     let agg_id = next_agg_id(env);
     let now = env.ledger().timestamp();
 
     let agg = AggregatedProof {
         id: agg_id,
         proof_ids: proof_ids.clone(),
-        aggregate_root,
-        validity: if valid_count == proof_ids.len() as u32 {
+        aggregate_root: aggregate_root.clone(),
+        validity: if valid_count == proof_ids.len() {
             ProofValidity::Valid
         } else {
             ProofValidity::Invalid
@@ -311,7 +311,7 @@ pub fn aggregate_proofs(env: &Env, proof_ids: Vec<u64>) -> u64 {
 
     env.events().publish(
         (symbol_short!("vp_agg"),),
-        (agg_id, proof_ids.len(), valid_count, aggregate_root),
+        (agg_id, proof_ids.len(), valid_count, aggregate_root.clone()),
     );
 
     agg_id
@@ -329,10 +329,8 @@ pub fn revoke_proof(env: &Env, admin: &Address, proof_id: u64) {
     proof.validity = ProofValidity::Revoked;
     env.storage().persistent().set(&key, &proof);
 
-    env.events().publish(
-        (symbol_short!("vp_rev"),),
-        (proof_id,),
-    );
+    env.events()
+        .publish((symbol_short!("vp_rev"),), (proof_id,));
 }
 
 /// Retrieve a proof by ID.
@@ -346,7 +344,9 @@ pub fn get_proof(env: &Env, proof_id: u64) -> Option<TipProof> {
 pub fn get_proof_for_tip(env: &Env, tip_id: u64) -> Option<u64> {
     env.storage()
         .persistent()
-        .get(&DataKey::ValidityProof(ValidityProofKey::TipProofId(tip_id)))
+        .get(&DataKey::ValidityProof(ValidityProofKey::TipProofId(
+            tip_id,
+        )))
 }
 
 /// Retrieve an aggregated proof by ID.

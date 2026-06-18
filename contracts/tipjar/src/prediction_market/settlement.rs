@@ -10,13 +10,14 @@ use super::{BettorPosition, Outcome, PredictionMarket, BPS_DENOM};
 /// Returns 0 if the bettor had no stake on the winning side.
 pub fn calculate_payout(_env: &Env, market: &PredictionMarket, position: &BettorPosition) -> i128 {
     let winning = match market.winning_outcome {
-        Some(o) => o,
-        None => return 0,
+        Outcome::None => return 0,
+        o => o,
     };
 
     let bettor_stake = match winning {
         Outcome::Yes => position.yes_amount,
         Outcome::No => position.no_amount,
+        Outcome::None => return 0,
     };
 
     if bettor_stake == 0 {
@@ -26,6 +27,7 @@ pub fn calculate_payout(_env: &Env, market: &PredictionMarket, position: &Bettor
     let winning_pool = match winning {
         Outcome::Yes => market.yes_pool,
         Outcome::No => market.no_pool,
+        Outcome::None => return 0,
     };
 
     if winning_pool == 0 {

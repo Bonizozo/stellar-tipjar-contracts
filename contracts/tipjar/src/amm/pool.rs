@@ -2,7 +2,7 @@
 
 use soroban_sdk::{panic_with_error, token, Address, Env};
 
-use crate::{DataKey, TipJarError};
+use crate::TipJarError;
 
 use super::{
     accrue_fee, get_lp_shares, get_pool, get_pool_id_by_tokens, isqrt, next_pool_id,

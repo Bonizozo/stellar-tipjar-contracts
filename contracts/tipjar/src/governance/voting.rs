@@ -83,8 +83,8 @@ pub fn get_voter_total_votes(env: &Env, voter: &Address) -> i128 {
 
 /// Get all votes for a proposal
 pub fn get_proposal_votes(env: &Env, proposal_id: u64) -> Vec<Vote> {
-    let mut votes: Vec<Vote> = Vec::new(env);
-    let proposal = super::proposals::get_proposal_or_panic(env, proposal_id);
+    let votes: Vec<Vote> = Vec::new(env);
+    let _proposal = super::proposals::get_proposal_or_panic(env, proposal_id);
 
     // This is a simplified implementation
     // In production, you'd want to iterate through all voters

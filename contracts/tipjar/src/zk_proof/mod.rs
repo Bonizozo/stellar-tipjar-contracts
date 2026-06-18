@@ -197,7 +197,7 @@ pub fn register_circuit(
     let vk = VerificationKey {
         circuit_id: id,
         circuit_type,
-        vk_hash,
+        vk_hash: vk_hash.clone(),
         owner: owner.clone(),
         active: true,
         description,
@@ -217,8 +217,10 @@ pub fn register_circuit(
         .persistent()
         .set(&DataKey::ZkOwnerCircuits(owner.clone()), &owner_circuits);
 
-    env.events()
-        .publish((symbol_short!("zk_reg"),), (id, owner.clone(), vk_hash));
+    env.events().publish(
+        (symbol_short!("zk_reg"),),
+        (id, owner.clone(), vk_hash.clone()),
+    );
 
     id
 }

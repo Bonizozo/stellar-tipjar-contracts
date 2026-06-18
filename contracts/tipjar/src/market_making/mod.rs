@@ -156,9 +156,10 @@ pub fn register_maker(
         .instance()
         .get(&crate::DataKey::MarketMaking(MarketMakingKey::Counter))
         .unwrap_or(0u64);
-    env.storage()
-        .instance()
-        .set(&crate::DataKey::MarketMaking(MarketMakingKey::Counter), &(maker_id + 1));
+    env.storage().instance().set(
+        &crate::DataKey::MarketMaking(MarketMakingKey::Counter),
+        &(maker_id + 1),
+    );
 
     let now = env.ledger().timestamp();
     let mm = MarketMaker {
@@ -179,9 +180,10 @@ pub fn register_maker(
         updated_at: now,
     };
 
-    env.storage()
-        .persistent()
-        .set(&crate::DataKey::MarketMaking(MarketMakingKey::Maker(maker_id)), &mm);
+    env.storage().persistent().set(
+        &crate::DataKey::MarketMaking(MarketMakingKey::Maker(maker_id)),
+        &mm,
+    );
 
     _add_owner_maker(env, maker, maker_id);
     _add_active_maker(env, maker_id);
@@ -205,7 +207,13 @@ pub fn register_maker(
 
     env.events().publish(
         (symbol_short!("mm_reg"),),
-        (maker_id, maker.clone(), base_token.clone(), quote_token.clone(), spread_bps),
+        (
+            maker_id,
+            maker.clone(),
+            base_token.clone(),
+            quote_token.clone(),
+            spread_bps,
+        ),
     );
 
     maker_id
@@ -227,9 +235,9 @@ pub fn get_quote(env: &Env, maker_id: u64, mid_price: i128) -> Quote {
 
     // Available base at ask, available quote at bid
     let available_base = mm.base_inventory.min(mm.max_trade_size);
-    let available_quote = mm.quote_inventory.min(
-        (mm.max_trade_size * bid_price) / PRICE_PRECISION,
-    );
+    let available_quote = mm
+        .quote_inventory
+        .min((mm.max_trade_size * bid_price) / PRICE_PRECISION);
 
     Quote {
         maker_id,
@@ -290,9 +298,10 @@ pub fn execute_buy(
     mm.trade_count += 1;
     mm.updated_at = env.ledger().timestamp();
 
-    env.storage()
-        .persistent()
-        .set(&crate::DataKey::MarketMaking(MarketMakingKey::Maker(maker_id)), &mm);
+    env.storage().persistent().set(
+        &crate::DataKey::MarketMaking(MarketMakingKey::Maker(maker_id)),
+        &mm,
+    );
 
     // Transfers: taker pays quote, receives base
     token::Client::new(env, &mm.quote_token).transfer(
@@ -371,9 +380,10 @@ pub fn execute_sell(
     mm.trade_count += 1;
     mm.updated_at = env.ledger().timestamp();
 
-    env.storage()
-        .persistent()
-        .set(&crate::DataKey::MarketMaking(MarketMakingKey::Maker(maker_id)), &mm);
+    env.storage().persistent().set(
+        &crate::DataKey::MarketMaking(MarketMakingKey::Maker(maker_id)),
+        &mm,
+    );
 
     // Transfers: taker pays base, receives quote
     token::Client::new(env, &mm.base_token).transfer(
@@ -433,9 +443,10 @@ pub fn deposit_inventory(
     mm.quote_inventory += quote_amount;
     mm.updated_at = env.ledger().timestamp();
 
-    env.storage()
-        .persistent()
-        .set(&crate::DataKey::MarketMaking(MarketMakingKey::Maker(maker_id)), &mm);
+    env.storage().persistent().set(
+        &crate::DataKey::MarketMaking(MarketMakingKey::Maker(maker_id)),
+        &mm,
+    );
 
     if base_amount > 0 {
         token::Client::new(env, &mm.base_token).transfer(
@@ -452,8 +463,10 @@ pub fn deposit_inventory(
         );
     }
 
-    env.events()
-        .publish((symbol_short!("mm_dep"),), (maker_id, base_amount, quote_amount));
+    env.events().publish(
+        (symbol_short!("mm_dep"),),
+        (maker_id, base_amount, quote_amount),
+    );
 }
 
 /// Withdraws inventory and accumulated fees from a market maker position.
@@ -494,9 +507,10 @@ pub fn withdraw_inventory(
     mm.quote_inventory -= quote_from_inventory;
     mm.updated_at = env.ledger().timestamp();
 
-    env.storage()
-        .persistent()
-        .set(&crate::DataKey::MarketMaking(MarketMakingKey::Maker(maker_id)), &mm);
+    env.storage().persistent().set(
+        &crate::DataKey::MarketMaking(MarketMakingKey::Maker(maker_id)),
+        &mm,
+    );
 
     if base_amount > 0 {
         token::Client::new(env, &mm.base_token).transfer(
@@ -537,9 +551,10 @@ pub fn update_spread(env: &Env, maker: &Address, maker_id: u64, new_spread_bps: 
     mm.spread_bps = new_spread_bps;
     mm.updated_at = env.ledger().timestamp();
 
-    env.storage()
-        .persistent()
-        .set(&crate::DataKey::MarketMaking(MarketMakingKey::Maker(maker_id)), &mm);
+    env.storage().persistent().set(
+        &crate::DataKey::MarketMaking(MarketMakingKey::Maker(maker_id)),
+        &mm,
+    );
 
     env.events()
         .publish((symbol_short!("mm_sprd"),), (maker_id, new_spread_bps));
@@ -560,17 +575,24 @@ pub fn set_maker_status(env: &Env, maker: &Address, maker_id: u64, active: bool)
         panic_with_error!(env, MarketMakingError::MakerNotActive);
     }
 
-    mm.status = if active { MakerStatus::Active } else { MakerStatus::Paused };
+    mm.status = if active {
+        MakerStatus::Active
+    } else {
+        MakerStatus::Paused
+    };
     mm.updated_at = env.ledger().timestamp();
 
-    env.storage()
-        .persistent()
-        .set(&crate::DataKey::MarketMaking(MarketMakingKey::Maker(maker_id)), &mm);
+    env.storage().persistent().set(
+        &crate::DataKey::MarketMaking(MarketMakingKey::Maker(maker_id)),
+        &mm,
+    );
 
     if active {
-        env.events().publish((symbol_short!("mm_res"),), (maker_id,));
+        env.events()
+            .publish((symbol_short!("mm_res"),), (maker_id,));
     } else {
-        env.events().publish((symbol_short!("mm_pau"),), (maker_id,));
+        env.events()
+            .publish((symbol_short!("mm_pau"),), (maker_id,));
     }
 }
 
@@ -598,9 +620,10 @@ pub fn close_maker(env: &Env, maker: &Address, maker_id: u64) {
     mm.status = MakerStatus::Closed;
     mm.updated_at = env.ledger().timestamp();
 
-    env.storage()
-        .persistent()
-        .set(&crate::DataKey::MarketMaking(MarketMakingKey::Maker(maker_id)), &mm);
+    env.storage().persistent().set(
+        &crate::DataKey::MarketMaking(MarketMakingKey::Maker(maker_id)),
+        &mm,
+    );
 
     _remove_active_maker(env, maker_id);
 
@@ -619,22 +642,28 @@ pub fn close_maker(env: &Env, maker: &Address, maker_id: u64) {
         );
     }
 
-    env.events()
-        .publish((symbol_short!("mm_close"),), (maker_id, base_return, quote_return));
+    env.events().publish(
+        (symbol_short!("mm_close"),),
+        (maker_id, base_return, quote_return),
+    );
 }
 
 /// Returns a market maker by ID.
 pub fn get_maker(env: &Env, maker_id: u64) -> Option<MarketMaker> {
     env.storage()
         .persistent()
-        .get(&crate::DataKey::MarketMaking(MarketMakingKey::Maker(maker_id)))
+        .get(&crate::DataKey::MarketMaking(MarketMakingKey::Maker(
+            maker_id,
+        )))
 }
 
 /// Returns all maker IDs owned by `maker`.
 pub fn get_owner_makers(env: &Env, maker: &Address) -> Vec<u64> {
     env.storage()
         .persistent()
-        .get(&crate::DataKey::MarketMaking(MarketMakingKey::OwnerMakers(maker.clone())))
+        .get(&crate::DataKey::MarketMaking(MarketMakingKey::OwnerMakers(
+            maker.clone(),
+        )))
         .unwrap_or_else(|| Vec::new(env))
 }
 
@@ -662,7 +691,9 @@ pub fn get_pair_makers(env: &Env, base_token: &Address, quote_token: &Address) -
 fn _get_maker_or_panic(env: &Env, maker_id: u64) -> MarketMaker {
     env.storage()
         .persistent()
-        .get(&crate::DataKey::MarketMaking(MarketMakingKey::Maker(maker_id)))
+        .get(&crate::DataKey::MarketMaking(MarketMakingKey::Maker(
+            maker_id,
+        )))
         .unwrap_or_else(|| panic_with_error!(env, MarketMakingError::MakerNotFound))
 }
 
@@ -670,9 +701,11 @@ fn _add_owner_maker(env: &Env, maker: &Address, maker_id: u64) {
     let mut ids: Vec<u64> = env
         .storage()
         .persistent()
-        .get(&crate::DataKey::MarketMaking(MarketMakingKey::OwnerMakers(maker.clone())))
+        .get(&crate::DataKey::MarketMaking(MarketMakingKey::OwnerMakers(
+            maker.clone(),
+        )))
         .unwrap_or_else(|| Vec::new(env));
-    if !ids.contains(&maker_id) {
+    if !ids.contains(maker_id) {
         ids.push_back(maker_id);
         env.storage().persistent().set(
             &crate::DataKey::MarketMaking(MarketMakingKey::OwnerMakers(maker.clone())),
@@ -687,11 +720,12 @@ fn _add_active_maker(env: &Env, maker_id: u64) {
         .persistent()
         .get(&crate::DataKey::MarketMaking(MarketMakingKey::ActiveMakers))
         .unwrap_or_else(|| Vec::new(env));
-    if !ids.contains(&maker_id) {
+    if !ids.contains(maker_id) {
         ids.push_back(maker_id);
-        env.storage()
-            .persistent()
-            .set(&crate::DataKey::MarketMaking(MarketMakingKey::ActiveMakers), &ids);
+        env.storage().persistent().set(
+            &crate::DataKey::MarketMaking(MarketMakingKey::ActiveMakers),
+            &ids,
+        );
     }
 }
 
@@ -707,9 +741,10 @@ fn _remove_active_maker(env: &Env, maker_id: u64) {
             remaining.push_back(id);
         }
     }
-    env.storage()
-        .persistent()
-        .set(&crate::DataKey::MarketMaking(MarketMakingKey::ActiveMakers), &remaining);
+    env.storage().persistent().set(
+        &crate::DataKey::MarketMaking(MarketMakingKey::ActiveMakers),
+        &remaining,
+    );
 }
 
 fn _add_pair_maker(env: &Env, base: &Address, quote: &Address, maker_id: u64) {
@@ -721,7 +756,7 @@ fn _add_pair_maker(env: &Env, base: &Address, quote: &Address, maker_id: u64) {
             quote.clone(),
         )))
         .unwrap_or_else(|| Vec::new(env));
-    if !ids.contains(&maker_id) {
+    if !ids.contains(maker_id) {
         ids.push_back(maker_id);
         env.storage().persistent().set(
             &crate::DataKey::MarketMaking(MarketMakingKey::PairMakers(base.clone(), quote.clone())),
