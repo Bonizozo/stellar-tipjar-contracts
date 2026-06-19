@@ -45,3 +45,7 @@ path = "tests/quickcheck_properties.rs"
 name = "market_making_tests"
 path = "tests/market_making_tests.rs"
 
+[[test]]
+name = "partial_pause_tests"
+path = "tests/partial_pause_tests.rs"
+

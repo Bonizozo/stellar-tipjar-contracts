@@ -1279,6 +1279,20 @@ pub enum DataKey {
     SplitHistory(Address, u64),
     SplitHistoryCount(Address),
     TierConfig(SubscriptionTier),
+    /// Per-feature pause flag keyed by scope.
+    FeaturePaused(PauseScope),
+}
+
+/// Granular operation scopes that can be independently paused.
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum PauseScope {
+    /// Disables all inbound tip transfers.
+    Tipping,
+    /// Disables creator withdrawals.
+    Withdrawals,
+    /// Disables subscription creation and payments.
+    Subscriptions,
 }
 
 // `export = false`: enum exceeds Soroban's 50-case spec limit; skip spec export.
@@ -1411,6 +1425,8 @@ pub enum TipJarError {
     CreditErr = 286,
     OtherErr = 287,
     InsuranceErr = 288,
+    /// A specific operation scope has been paused by an admin.
+    FeaturePaused = 289,
 }
 
 impl From<CoreError> for TipJarError {
@@ -1951,6 +1967,22 @@ impl TipJarContract {
         }
     }
 
+    /// Panics with `FeaturePaused` when `scope` has been individually paused.
+    /// A global pause also blocks every scope.
+    fn require_feature_not_paused(env: &Env, scope: PauseScope) {
+        if Self::check_is_paused(env) {
+            panic_with_error!(env, TipJarError::ContractPaused);
+        }
+        if env
+            .storage()
+            .instance()
+            .get::<DataKey, bool>(&DataKey::FeaturePaused(scope))
+            .unwrap_or(false)
+        {
+            panic_with_error!(env, TipJarError::FeaturePaused);
+        }
+    }
+
     /// Core pause check: returns true if the contract is currently paused.
     /// Handles auto-unpause by clearing pause state when `PauseUntil` has elapsed.
     fn check_is_paused(env: &Env) -> bool {
@@ -2413,6 +2445,50 @@ impl TipJarContract {
             .unwrap_or(false)
     }
 
+    // ── partial / feature-level pause controls ───────────────────────────────
+
+    /// Pauses a single operation scope (`Tipping`, `Withdrawals`, or
+    /// `Subscriptions`) without halting the entire contract.  Admin only.
+    ///
+    /// Emits `("ft_paused",)` with data `(admin, scope)`.
+    pub fn pause_feature(env: Env, admin: Address, scope: PauseScope, reason: String) {
+        admin.require_auth();
+        let stored_admin: Address = env.storage().instance().get(&DataKey::Admin).unwrap();
+        if admin != stored_admin {
+            panic_with_error!(&env, TipJarError::Unauthorized);
+        }
+        env.storage()
+            .instance()
+            .set(&DataKey::FeaturePaused(scope.clone()), &true);
+        env.events()
+            .publish((symbol_short!("ft_paused"),), (admin, scope, reason));
+    }
+
+    /// Re-enables a previously paused operation scope.  Admin only.
+    ///
+    /// Emits `("ft_unpause",)` with data `(admin, scope)`.
+    pub fn unpause_feature(env: Env, admin: Address, scope: PauseScope) {
+        admin.require_auth();
+        let stored_admin: Address = env.storage().instance().get(&DataKey::Admin).unwrap();
+        if admin != stored_admin {
+            panic_with_error!(&env, TipJarError::Unauthorized);
+        }
+        env.storage()
+            .instance()
+            .remove(&DataKey::FeaturePaused(scope.clone()));
+        env.events()
+            .publish((symbol_short!("ft_unpaus"),), (admin, scope));
+    }
+
+    /// Returns `true` when the given scope has been individually paused.
+    /// Note: a global pause does NOT set this flag; check `is_paused()` as well.
+    pub fn is_feature_paused(env: Env, scope: PauseScope) -> bool {
+        env.storage()
+            .instance()
+            .get::<DataKey, bool>(&DataKey::FeaturePaused(scope))
+            .unwrap_or(false)
+    }
+
     /// Sets the circuit breaker configuration. Admin only.
     pub fn set_circuit_breaker_config(env: Env, admin: Address, config: CircuitBreakerConfig) {
         admin.require_auth();
@@ -2828,6 +2904,7 @@ impl TipJarContract {
     /// Emits `("tip", creator)` with data `(sender, amount)`.
     pub fn tip(env: Env, sender: Address, creator: Address, token: Address, amount: i128) -> u64 {
         Self::require_not_paused(&env);
+        Self::require_feature_not_paused(&env, PauseScope::Tipping);
         Self::check_circuit_breaker(&env, amount);
         sender.require_auth();
         if amount <= 0 {
@@ -2956,6 +3033,7 @@ impl TipJarContract {
     /// Emits `("withdraw", creator)` with data `amount`.
     pub fn withdraw(env: Env, creator: Address, token: Address) {
         Self::require_not_paused(&env);
+        Self::require_feature_not_paused(&env, PauseScope::Withdrawals);
         creator.require_auth();
         let bal_key = DataKey::CreatorBalance(creator.clone(), token.clone());
         let amount: i128 = env
@@ -4129,6 +4207,7 @@ impl TipJarContract {
         interval_seconds: u64,
     ) {
         Self::require_not_paused(&env);
+        Self::require_feature_not_paused(&env, PauseScope::Subscriptions);
         Self::check_circuit_breaker(&env, amount);
         subscriber.require_auth();
         if amount <= 0 {
@@ -4649,6 +4728,7 @@ impl TipJarContract {
         amount: i128,
     ) {
         Self::require_not_paused(&env);
+        Self::require_feature_not_paused(&env, PauseScope::Tipping);
         Self::check_circuit_breaker(&env, amount);
         sender.require_auth();
         if amount <= 0 {
