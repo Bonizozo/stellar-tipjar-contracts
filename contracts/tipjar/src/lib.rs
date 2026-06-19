@@ -46,6 +46,9 @@ pub mod upgrade;
 
 const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
 
+/// Upper bound for the platform fee configurable via [`TipJarContract::set_fee_bps`] (10%).
+const MAX_PLATFORM_FEE_BPS: u32 = 1000;
+
 #[cfg(test)]
 extern crate std;
 
@@ -1452,6 +1455,10 @@ pub enum TipJarError {
     InsuranceErr = 288,
     /// A specific operation scope has been paused by an admin.
     FeaturePaused = 289,
+    /// Requested platform fee exceeds the configured maximum.
+    FeeBpsTooHigh = 290,
+    /// No accumulated platform fees are available to withdraw.
+    NoFeesToWithdraw = 291,
 }
 
 impl From<CoreError> for TipJarError {
@@ -2432,6 +2439,54 @@ impl TipJarContract {
             .unwrap_or(0)
     }
 
+    /// Sets the platform fee applied to every [`tip`](Self::tip) call. Admin only.
+    ///
+    /// `fee_bps` is expressed in basis points (e.g. `100` = 1%) and must not
+    /// exceed [`MAX_PLATFORM_FEE_BPS`].
+    /// Emits `("plat_fee",)` with data `fee_bps`.
+    pub fn set_fee_bps(env: Env, admin: Address, fee_bps: u32) {
+        admin.require_auth();
+        let stored_admin: Address = env.storage().instance().get(&DataKey::Admin).unwrap();
+        if admin != stored_admin {
+            panic_with_error!(&env, TipJarError::Unauthorized);
+        }
+        if fee_bps > MAX_PLATFORM_FEE_BPS {
+            panic_with_error!(&env, TipJarError::FeeBpsTooHigh);
+        }
+        env.storage()
+            .instance()
+            .set(&DataKey::Fee(FeeKey::BasisPoints), &fee_bps);
+        env.events()
+            .publish((symbol_short!("plat_fee"),), fee_bps);
+    }
+
+    /// Withdraws the accumulated platform fee balance for `token` to `admin`. Admin only.
+    ///
+    /// Returns the withdrawn amount. Panics with [`TipJarError::NoFeesToWithdraw`]
+    /// if there is nothing accumulated for `token`.
+    /// Emits `("fee_wdrw",)` with data `(token, amount)`.
+    pub fn withdraw_fees(env: Env, admin: Address, token: Address) -> i128 {
+        admin.require_auth();
+        let stored_admin: Address = env.storage().instance().get(&DataKey::Admin).unwrap();
+        if admin != stored_admin {
+            panic_with_error!(&env, TipJarError::Unauthorized);
+        }
+        let fee_key = DataKey::Fee(FeeKey::Balance(token.clone()));
+        let amount: i128 = env.storage().instance().get(&fee_key).unwrap_or(0);
+        if amount <= 0 {
+            panic_with_error!(&env, TipJarError::NoFeesToWithdraw);
+        }
+        env.storage().instance().set(&fee_key, &0i128);
+        token::Client::new(&env, &token).transfer(
+            &env.current_contract_address(),
+            &admin,
+            &amount,
+        );
+        env.events()
+            .publish((symbol_short!("fee_wdrw"),), (token, amount));
+        amount
+    }
+
     /// Pauses all state-changing operations. Admin only.
     ///
     /// `reason` is stored on-chain for transparency.
@@ -3055,6 +3110,9 @@ impl TipJarContract {
 
         // Emit structured tip event
         events::emit_tip_event(&env, tip_id, &sender, &creator, creator_amount, &token);
+        if fee > 0 {
+            events::emit_fee_event(&env, &creator, &token, fee, fee_bp);
+        }
         tip_id
     }
 

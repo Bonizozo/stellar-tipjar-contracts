@@ -3,10 +3,7 @@
 //! This module provides enhanced event tracking, filtering, and querying capabilities
 //! for the TipJar contract.
 
-pub mod filters;
-pub mod indexing;
-
-use soroban_sdk::{contracttype, symbol_short, Address, Env, String, Vec};
+use soroban_sdk::{contracttype, symbol_short, Address, Env};
 
 /// Structured tip event for reliable indexing
 /// Emitted when a tip is sent to a creator
@@ -43,6 +40,25 @@ pub struct WithdrawEvent {
     /// Token address
     pub token: Address,
     /// Ledger timestamp when withdrawal occurred
+    pub timestamp: u64,
+}
+
+/// Structured platform fee event for reliable indexing
+/// Emitted when a platform fee is deducted from a tip
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct FeeEvent {
+    /// Event version for schema evolution
+    pub version: u32,
+    /// Address of the creator the tip was destined for
+    pub creator: Address,
+    /// Token address
+    pub token: Address,
+    /// Fee amount deducted, in smallest units
+    pub amount: i128,
+    /// Fee rate applied, in basis points
+    pub fee_bps: u32,
+    /// Ledger timestamp when the fee was deducted
     pub timestamp: u64,
 }
 
@@ -101,6 +117,34 @@ pub fn emit_withdraw_event(
 
     env.events().publish(
         (symbol_short!("withdraw"), creator.clone()),
+        event,
+    );
+}
+
+/// Emit a structured platform fee event
+///
+/// # Event Schema
+/// - **Topic**: `fee` (symbol)
+/// - **Data**: FeeEvent struct with named fields (creator, token, amount, fee_bps, timestamp)
+/// - **Filterable By**: creator (topics)
+pub fn emit_fee_event(
+    env: &Env,
+    creator: &Address,
+    token: &Address,
+    amount: i128,
+    fee_bps: u32,
+) {
+    let event = FeeEvent {
+        version: EVENT_VERSION,
+        creator: creator.clone(),
+        token: token.clone(),
+        amount,
+        fee_bps,
+        timestamp: env.ledger().timestamp(),
+    };
+
+    env.events().publish(
+        (symbol_short!("fee"), creator.clone()),
         event,
     );
 }
