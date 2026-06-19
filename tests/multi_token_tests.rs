@@ -127,7 +127,7 @@ fn test_withdraw_specific_token() {
     ctx.tipjar_client.tip(&sender, &creator, &ctx.token_2, &500);
 
     let before = ctx.get_token_balance(&creator, &ctx.token_1);
-    ctx.tipjar_client.withdraw(&creator, &ctx.token_1);
+    ctx.tipjar_client.withdraw(&creator, &ctx.token_1, &None);
 
     assert_eq!(ctx.get_token_balance(&creator, &ctx.token_1), before + 300);
     assert_withdrawable_balance_equals(&ctx, &creator, &ctx.token_1, 0);
@@ -139,7 +139,7 @@ fn test_withdraw_specific_token() {
 fn test_withdraw_nothing_fails() {
     let ctx = TestContext::new();
     let creator = ctx.create_creator();
-    let result = ctx.tipjar_client.try_withdraw(&creator, &ctx.token_1);
+    let result = ctx.tipjar_client.try_withdraw(&creator, &ctx.token_1, &None);
     assert_error_contains(result, TipJarError::NothingToWithdraw);
 }
 
@@ -154,11 +154,11 @@ fn test_withdraw_each_token_independently() {
     ctx.tipjar_client.tip(&sender, &creator, &ctx.token_1, &400);
     ctx.tipjar_client.tip(&sender, &creator, &ctx.token_2, &600);
 
-    ctx.tipjar_client.withdraw(&creator, &ctx.token_1);
+    ctx.tipjar_client.withdraw(&creator, &ctx.token_1, &None);
     assert_withdrawable_balance_equals(&ctx, &creator, &ctx.token_1, 0);
     assert_withdrawable_balance_equals(&ctx, &creator, &ctx.token_2, 600);
 
-    ctx.tipjar_client.withdraw(&creator, &ctx.token_2);
+    ctx.tipjar_client.withdraw(&creator, &ctx.token_2, &None);
     assert_withdrawable_balance_equals(&ctx, &creator, &ctx.token_2, 0);
 }
 
