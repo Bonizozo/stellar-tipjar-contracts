@@ -33,7 +33,7 @@ pub fn test_basic_operation_costs() {
     
     // Measure withdrawal operation
     let (_, withdraw_gas) = gas_tracker.measure(|| {
-        ctx.tipjar_client.withdraw(&creator, &ctx.token_1)
+        ctx.tipjar_client.withdraw(&creator, &ctx.token_1, &None)
     });
     
     println!("Withdrawal gas cost: {}", withdraw_gas);

@@ -64,7 +64,7 @@ fn qc_withdraw_clears_balance() {
         client.tip(&sender, &creator, &token, &amount);
 
         let balance_before = client.get_withdrawable_balance(&creator, &token);
-        client.withdraw(&creator, &token);
+        client.withdraw(&creator, &token, &None);
         let balance_after = client.get_withdrawable_balance(&creator, &token);
 
         TestResult::from_bool(balance_before == amount && balance_after == 0)

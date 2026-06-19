@@ -53,7 +53,7 @@ pub fn test_insufficient_balance_scenarios() {
     
     // Test withdrawal with nothing to withdraw
     let empty_creator = ctx.create_creator();
-    let result = ctx.tipjar_client.try_withdraw(&empty_creator, &ctx.token_1);
+    let result = ctx.tipjar_client.try_withdraw(&empty_creator, &ctx.token_1, &None);
     assert_error_contains(result, TipJarError::NothingToWithdraw);
 }
 
@@ -97,7 +97,7 @@ pub fn test_unauthorized_access() {
     ctx.tipjar_client.unpause(&ctx.admin);
     
     // Test non-creator cannot withdraw
-    let result = ctx.tipjar_client.try_withdraw(&user, &ctx.token_1);
+    let result = ctx.tipjar_client.try_withdraw(&user, &ctx.token_1, &None);
     assert_error_contains(result, TipJarError::Unauthorized);
     
     // Test non-creator cannot withdraw locked tips
@@ -314,7 +314,7 @@ pub fn test_contract_pause_scenarios() {
     let result = ctx.tipjar_client.try_tip_batch(&sender, &batch);
     assert!(result.is_err());
     
-    let result = ctx.tipjar_client.try_withdraw(&creator, &ctx.token_1);
+    let result = ctx.tipjar_client.try_withdraw(&creator, &ctx.token_1, &None);
     assert!(result.is_err());
     
     let result = ctx.tipjar_client.try_tip_locked(&sender, &creator, &ctx.token_1, &100, &(unlock_time + 1000));
@@ -359,7 +359,7 @@ pub fn test_contract_pause_scenarios() {
     ctx.tipjar_client.tip(&sender, &creator, &ctx.token_1, &150);
     assert_withdrawable_balance_equals(&ctx, &creator, &ctx.token_1, 450);
     
-    ctx.tipjar_client.withdraw(&creator, &ctx.token_1);
+    ctx.tipjar_client.withdraw(&creator, &ctx.token_1, &None);
     assert_withdrawable_balance_equals(&ctx, &creator, &ctx.token_1, 0);
     
     ctx.tipjar_client.withdraw_locked(&creator, &tip_id);

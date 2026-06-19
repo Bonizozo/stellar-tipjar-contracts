@@ -104,7 +104,7 @@ impl Simulator {
     /// Simulate a withdrawal and return a `SimResult`.
     pub fn simulate_withdraw(&self, creator: &Address) -> SimResult {
         self.env.budget().reset_unlimited();
-        let result = self.client().try_withdraw(creator, &self.token);
+        let result = self.client().try_withdraw(creator, &self.token, &None);
         let cpu = self.env.budget().cpu_instruction_cost();
         let ok = result.is_ok();
         let error = result.err().map(|e| format!("{e:?}"));
@@ -120,7 +120,7 @@ impl Simulator {
 
     /// Query the withdrawable balance for a creator.
     pub fn balance(&self, creator: &Address) -> i128 {
-        self.client().get_balance(creator, &self.token)
+        self.client().get_withdrawable_balance(creator, &self.token)
     }
 
     /// Query the historical total tips for a creator.

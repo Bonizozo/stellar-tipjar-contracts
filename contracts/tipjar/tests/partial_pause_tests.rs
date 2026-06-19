@@ -157,7 +157,7 @@ fn test_withdraw_blocked_when_withdrawals_scope_paused() {
     ctx.client.tip(&sender, &creator, &ctx.token, &100);
     ctx.client
         .pause_feature(&ctx.admin, &PauseScope::Withdrawals, &ctx.reason("audit"));
-    let result = ctx.client.try_withdraw(&creator, &ctx.token);
+    let result = ctx.client.try_withdraw(&creator, &ctx.token, &None);
     assert_eq!(
         result.err().unwrap().unwrap(),
         TipJarError::FeaturePaused.into()

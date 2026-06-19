@@ -53,7 +53,7 @@ pub fn test_balance_conservation_properties() {
         let withdrawable = ctx.tipjar_client.get_withdrawable_balance(creator.clone(), ctx.token_1.clone());
         if withdrawable > 0 {
             let creator_balance_before = ctx.get_token_balance(creator, &ctx.token_1);
-            ctx.tipjar_client.withdraw(creator, &ctx.token_1);
+            ctx.tipjar_client.withdraw(creator, &ctx.token_1, &None);
             let creator_balance_after = ctx.get_token_balance(creator, &ctx.token_1);
             
             assert_eq!(creator_balance_after - creator_balance_before, withdrawable, "Creator should receive full withdrawable amount");
@@ -119,10 +119,10 @@ pub fn test_authorization_properties() {
     ctx.tipjar_client.tip(&users[0], &creator, &ctx.token_1, &500);
     
     // Property: Only creators can withdraw
-    let result = ctx.tipjar_client.try_withdraw(&users[0], &ctx.token_1);
+    let result = ctx.tipjar_client.try_withdraw(&users[0], &ctx.token_1, &None);
     assert!(result.is_err(), "Non-creator should not be able to withdraw");
     
-    ctx.tipjar_client.withdraw(&creator, &ctx.token_1); // Should succeed
+    ctx.tipjar_client.withdraw(&creator, &ctx.token_1, &None); // Should succeed
     
     // Property: Role checks are consistent across all operations
     let non_creator = &users[1];

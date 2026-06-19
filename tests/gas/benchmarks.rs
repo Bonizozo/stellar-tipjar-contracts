@@ -104,7 +104,7 @@ mod bench {
         client.grant_role(&admin, &creator, &Role::Creator);
 
         env.budget().reset_default();
-        client.withdraw(&creator, &token_id);
+        client.withdraw(&creator, &token_id, &None);
         print_budget(&env, "withdraw");
     }
 

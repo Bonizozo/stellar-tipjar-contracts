@@ -141,7 +141,7 @@ fn test_withdraw_blocked_when_withdrawals_scope_paused() {
     ctx.tipjar_client
         .pause_feature(&ctx.admin, &PauseScope::Withdrawals, &reason);
 
-    let result = ctx.tipjar_client.try_withdraw(&creator, &ctx.token_1);
+    let result = ctx.tipjar_client.try_withdraw(&creator, &ctx.token_1, &None);
     assert_error_contains(result, TipJarError::FeaturePaused);
 }
 

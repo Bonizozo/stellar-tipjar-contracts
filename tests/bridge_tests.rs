@@ -148,7 +148,7 @@ fn test_bridge_tip_creator_can_withdraw() {
     ctx.mint(&ctx.relayer, 300);
 
     ctx.client.bridge_tip(&ctx.relayer, &ctx.make_tip(&creator, 300, 20)).unwrap();
-    ctx.client.withdraw(&creator, &ctx.bridge_token);
+    ctx.client.withdraw(&creator, &ctx.bridge_token, &None);
 
     assert_eq!(ctx.client.get_balance(&creator, &ctx.bridge_token), 0);
     // Token balance transferred to creator
