@@ -3026,10 +3026,8 @@ impl TipJarContract {
             &amount,
         );
 
-        env.events().publish(
-            (symbol_short!("tip"), creator.clone()),
-            (sender, creator_amount),
-        );
+        // Emit structured tip event
+        events::emit_tip_event(&env, tip_id, &sender, &creator, creator_amount, &token);
         tip_id
     }
 
@@ -4122,8 +4120,13 @@ impl TipJarContract {
         let new_tot: i128 = current_tot.checked_add(net).expect("total overflow");
         env.storage().persistent().set(&tot_key, &new_tot);
 
-        env.events()
-            .publish((symbol_short!("tip"), creator.clone()), (sender, net));
+        // Emit structured tip event
+        let tip_id: u64 = env
+            .storage()
+            .instance()
+            .get(&DataKey::Tip(TipKey::Ctr))
+            .unwrap_or(0);
+        events::emit_tip_event(&env, tip_id, &sender, &creator, net, &token);
         env.events()
             .publish((symbol_short!("fee"), creator.clone()), (fee, fee_bps));
     }
