@@ -72,7 +72,7 @@ fn test_withdraw_blocked_when_paused() {
     ctx.mint_tokens(&sender, &ctx.token_1, 1_000);
     ctx.tipjar_client.tip(&sender, &creator, &ctx.token_1, &100);
     pause_contract(&ctx);
-    let result = ctx.tipjar_client.try_withdraw(&creator, &ctx.token_1);
+    let result = ctx.tipjar_client.try_withdraw(&creator, &ctx.token_1, &None);
     assert_error_contains(result, TipJarError::ContractPaused);
 }
 

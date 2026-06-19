@@ -44,6 +44,8 @@ pub mod circuit_breaker;
 pub mod storage;
 pub mod upgrade;
 
+const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
+
 #[cfg(test)]
 extern crate std;
 
@@ -963,6 +965,10 @@ pub enum DataKey {
     Fee(FeeKey),
     /// Monotonically increasing contract version, incremented on each upgrade.
     ContractVersion,
+    /// Human-readable semantic contract version string.
+    Version,
+    /// Deployment ledger timestamp.
+    DeployedAt,
     /// Subscription keyed by (subscriber, creator).
     Subscription(Address, Address),
     /// Human-readable reason stored when the contract is paused.
@@ -3027,31 +3033,52 @@ impl TipJarContract {
         tip_id
     }
 
-    /// Withdraws the full escrowed balance for `creator` in `token`.
+    /// Withdraws the requested escrowed balance for `creator` in `token`.
+    ///
+    /// When `amount` is `None`, withdraws the full available balance. When it
+    /// is `Some`, withdraws only that amount and leaves the remainder escrowed.
     ///
     /// Enforces per-creator (or default) daily limits and cooldown periods.
     /// Emits `("withdraw", creator)` with data `amount`.
-    pub fn withdraw(env: Env, creator: Address, token: Address) {
+    pub fn withdraw(env: Env, creator: Address, token: Address, amount: Option<i128>) {
         Self::require_not_paused(&env);
         Self::require_feature_not_paused(&env, PauseScope::Withdrawals);
         creator.require_auth();
         let bal_key = DataKey::CreatorBalance(creator.clone(), token.clone());
-        let amount: i128 = env
+        let balance: i128 = env
             .storage()
             .persistent()
             .get(&bal_key)
             .unwrap_or_else(|| env.storage().instance().get(&bal_key).unwrap_or(0));
-        if amount == 0 {
-            panic_with_error!(&env, TipJarError::NothingToWithdraw);
-        }
-        Self::check_and_update_withdrawal_limits(&env, &creator, amount);
-        env.storage().persistent().set(&bal_key, &0i128);
+
+        let withdraw_amount = match amount {
+            Some(amount) => {
+                if amount <= 0 {
+                    panic_with_error!(&env, TipJarError::InvalidAmount);
+                }
+                if amount > balance {
+                    panic_with_error!(&env, TipJarError::InsufficientBalance);
+                }
+                amount
+            }
+            None => {
+                if balance <= 0 {
+                    panic_with_error!(&env, TipJarError::NothingToWithdraw);
+                }
+                balance
+            }
+        };
+
+        Self::check_and_update_withdrawal_limits(&env, &creator, withdraw_amount);
+        env.storage()
+            .persistent()
+            .set(&bal_key, &(balance - withdraw_amount));
         token::Client::new(&env, &token).transfer(
             &env.current_contract_address(),
             &creator,
-            &amount,
+            &withdraw_amount,
         );
-        events::emit_withdraw_event(&env, &creator, amount, &token);
+        events::emit_withdraw_event(&env, &creator, withdraw_amount, &token);
     }
 
     /// Withdraws a specific amount from the escrowed balance for `creator` in `token`.

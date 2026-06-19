@@ -88,7 +88,7 @@ fn test_withdrawal() {
     let ctx = Ctx::new();
     let (tipper, creator) = (ctx.tipper(), ctx.creator());
     ctx.c().tip(&tipper, &creator, &ctx.token, &500);
-    ctx.c().withdraw(&creator, &ctx.token);
+    ctx.c().withdraw(&creator, &ctx.token, &None);
     assert_eq!(ctx.c().get_withdrawable_balance(&creator, &ctx.token), 0);
     assert_eq!(ctx.c().get_total_tips(&creator, &ctx.token), 500);
     assert_eq!(
@@ -102,8 +102,39 @@ fn test_full_withdrawal() {
     let ctx = Ctx::new();
     let (tipper, creator) = (ctx.tipper(), ctx.creator());
     ctx.c().tip(&tipper, &creator, &ctx.token, &1_000);
-    ctx.c().withdraw(&creator, &ctx.token);
+    ctx.c().withdraw(&creator, &ctx.token, &None);
     assert_eq!(ctx.c().get_withdrawable_balance(&creator, &ctx.token), 0);
+}
+
+#[test]
+fn test_partial_withdrawal_keeps_remainder() {
+    let ctx = Ctx::new();
+    let (tipper, creator) = (ctx.tipper(), ctx.creator());
+    ctx.c().tip(&tipper, &creator, &ctx.token, &1_000);
+
+    ctx.c().withdraw(&creator, &ctx.token, &Some(400));
+
+    assert_eq!(ctx.c().get_withdrawable_balance(&creator, &ctx.token), 600);
+    assert_eq!(ctx.c().get_total_tips(&creator, &ctx.token), 1_000);
+    assert_eq!(
+        token::Client::new(&ctx.env, &ctx.token).balance(&creator),
+        400
+    );
+}
+
+#[test]
+fn test_partial_withdrawal_rejects_amount_over_balance() {
+    let ctx = Ctx::new();
+    let (tipper, creator) = (ctx.tipper(), ctx.creator());
+    ctx.c().tip(&tipper, &creator, &ctx.token, &300);
+
+    let err = ctx
+        .c()
+        .try_withdraw(&creator, &ctx.token, &Some(301))
+        .unwrap_err()
+        .unwrap();
+    assert_eq!(err, TipJarError::InsufficientBalance.into());
+    assert_eq!(ctx.c().get_withdrawable_balance(&creator, &ctx.token), 300);
 }
 
 #[test]
@@ -112,7 +143,7 @@ fn test_insufficient_balance_rejected() {
     let creator = ctx.creator();
     let err = ctx
         .c()
-        .try_withdraw(&creator, &ctx.token)
+        .try_withdraw(&creator, &ctx.token, &None)
         .unwrap_err()
         .unwrap();
     assert_eq!(err, TipJarError::NothingToWithdraw.into());

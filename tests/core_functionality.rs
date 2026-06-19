@@ -34,7 +34,7 @@ pub fn test_complete_tip_workflows() {
     
     // Test withdrawal workflow
     let creator_balance_before = ctx.get_token_balance(&creator, &ctx.token_1);
-    ctx.tipjar_client.withdraw(&creator, &ctx.token_1);
+    ctx.tipjar_client.withdraw(&creator, &ctx.token_1, &None);
     
     assert_balance_equals(&ctx, &creator, &ctx.token_1, creator_balance_before + 300);
     assert_withdrawable_balance_equals(&ctx, &creator, &ctx.token_1, 0);
@@ -76,7 +76,7 @@ pub fn test_role_based_operations() {
     assert_withdrawable_balance_equals(&ctx, &creator, &ctx.token_1, 100);
     
     // Test creator can withdraw
-    ctx.tipjar_client.withdraw(&creator, &ctx.token_1);
+    ctx.tipjar_client.withdraw(&creator, &ctx.token_1, &None);
     assert_withdrawable_balance_equals(&ctx, &creator, &ctx.token_1, 0);
     
     // Test unauthorized operations fail
@@ -145,7 +145,7 @@ pub fn test_pause_unpause_workflows() {
     let result = ctx.tipjar_client.try_tip(&sender, &creator, &ctx.token_1, &100);
     assert!(result.is_err());
     
-    let result = ctx.tipjar_client.try_withdraw(&creator, &ctx.token_1);
+    let result = ctx.tipjar_client.try_withdraw(&creator, &ctx.token_1, &None);
     assert!(result.is_err());
     
     // Test queries still work when paused
@@ -162,7 +162,7 @@ pub fn test_pause_unpause_workflows() {
     ctx.tipjar_client.tip(&sender, &creator, &ctx.token_1, &200);
     assert_withdrawable_balance_equals(&ctx, &creator, &ctx.token_1, 300);
     
-    ctx.tipjar_client.withdraw(&creator, &ctx.token_1);
+    ctx.tipjar_client.withdraw(&creator, &ctx.token_1, &None);
     assert_withdrawable_balance_equals(&ctx, &creator, &ctx.token_1, 0);
 }
 

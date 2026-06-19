@@ -47,7 +47,7 @@ pub struct EstimationReport {
 }
 
 /// Aggregate cost for a batch of N operations.
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct BatchEstimate {
     /// Human-readable label for the batch scenario.
     pub operation: String,
@@ -64,7 +64,7 @@ pub struct BatchEstimate {
 }
 
 /// Side-by-side comparison of two operations.
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Comparison {
     pub label: String,
     pub baseline: String,
@@ -77,7 +77,7 @@ pub struct Comparison {
 }
 
 /// A single optimisation recommendation.
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Suggestion {
     pub function: String,
     pub severity: Severity,
