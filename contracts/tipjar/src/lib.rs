@@ -43,6 +43,7 @@ use circuit_breaker::EnhancedCircuitBreakerConfig;
 pub mod circuit_breaker;
 pub mod storage;
 pub mod upgrade;
+pub mod recovery;
 
 const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
 
@@ -1306,6 +1307,16 @@ pub enum DataKey {
     TierConfig(SubscriptionTier),
     /// Per-feature pause flag keyed by scope.
     FeaturePaused(PauseScope),
+    /// Guardians list for social recovery keyed by creator.
+    RecoveryGuardians(Address),
+    /// Recovery request record keyed by request ID.
+    RecoveryRequest(u64),
+    /// Guardian approval for recovery request keyed by (request_id, guardian).
+    RecoveryApproval(u64, Address),
+    /// Recovery attempts history keyed by creator.
+    RecoveryAttempts(Address),
+    /// Global counter for recovery request IDs.
+    RecoveryCounter,
 }
 
 /// Granular operation scopes that can be independently paused.
@@ -12369,5 +12380,59 @@ impl TipJarContract {
     /// the current access-list rules (non-panicking).
     pub fn al_is_allowed(env: Env, creator: Address, subject: Address) -> bool {
         access_lists::is_allowed(&env, &creator, &subject)
+    }
+
+    // ── Social Recovery ──────────────────────────────────────────────────────
+
+    /// Initialize recovery system for a creator (sets up guardian tracking).
+    pub fn recovery_init(env: Env, creator: Address) {
+        recovery::init_recovery(&env, &creator);
+    }
+
+    /// Add a trusted guardian for account recovery.
+    pub fn recovery_add_guardian(env: Env, creator: Address, guardian: Address, weight: u32) {
+        // Verify caller is creator
+        if env.invoker() != creator {
+            panic!("Unauthorized");
+        }
+        recovery::add_guardian(&env, &creator, &guardian, weight);
+    }
+
+    /// Initiate revocation of a guardian (revocation applies after delay).
+    pub fn recovery_revoke_guardian(env: Env, creator: Address, guardian: Address) {
+        // Verify caller is creator
+        if env.invoker() != creator {
+            panic!("Unauthorized");
+        }
+        recovery::revoke_guardian(&env, &creator, &guardian);
+    }
+
+    /// Create a recovery request (initiated by creator to recover access).
+    pub fn recovery_create_request(env: Env, creator: Address, new_owner: Address) {
+        // Verify caller is creator
+        if env.invoker() != creator {
+            panic!("Unauthorized");
+        }
+        recovery::create_recovery_request(&env, &creator, &new_owner);
+    }
+
+    /// Guardian approves a recovery request.
+    pub fn recovery_approve(env: Env, request_id: u64) {
+        recovery::approve_recovery(&env, request_id, &env.invoker());
+    }
+
+    /// Execute a recovery request after timelock expires.
+    pub fn recovery_execute(env: Env, request_id: u64) -> Address {
+        recovery::execute_recovery(&env, request_id)
+    }
+
+    /// Get details of a recovery request.
+    pub fn recovery_get_request(env: Env, request_id: u64) -> recovery::RecoveryRequest {
+        recovery::get_recovery_request(&env, request_id)
+    }
+
+    /// Get recent recovery attempts for a creator (for rate limiting analysis).
+    pub fn recovery_get_recent_attempts(env: Env, creator: Address, since_timestamp: u64) -> Vec<u64> {
+        recovery::get_recent_attempts(&env, &creator, since_timestamp)
     }
 }
