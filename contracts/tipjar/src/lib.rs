@@ -120,6 +120,9 @@ pub mod meta_tx;
 // Royalty splits for collaborative content and team tips
 pub mod royalty;
 
+// Programmable royalty system with dynamic splits and conditional distributions
+pub mod programmable_royalty;
+
 // Zero-knowledge proofs for private tip verification
 pub mod zk_proof;
 
@@ -1273,6 +1276,22 @@ pub enum DataKey {
     RollupSequencer,
     RoyaltyBalance(Address, Address),
     RoyaltyConfig(Address),
+    /// Programmable royalty rule by rule ID.
+    ProgrammableRoyaltyRule(u64),
+    /// Programmable royalty rule ID for creator at index.
+    ProgrammableRoyaltyCreatorRule(Address, u64),
+    /// Payment record for creator at index.
+    ProgrammableRoyaltyPayment(Address, u64),
+    /// Total payment records for a creator.
+    ProgrammableRoyaltyPaymentCount(Address),
+    /// Global counter for rule IDs.
+    ProgrammableRoyaltyCounter,
+    /// Accumulated royalty balance for recipient.
+    ProgrammableRoyaltyBalance(Address),
+    /// Total tips received by creator (for conditions).
+    ProgrammableRoyaltyTotalTips(Address),
+    /// Number of unique tippers to a creator.
+    ProgrammableRoyaltyTipperCount(Address),
     SidechainBatch(u64),
     SidechainBatchCounter,
     SidechainCheckpoint(u64),
@@ -3012,6 +3031,14 @@ impl TipJarContract {
         // Record reputation for tipper and creator
         reputation::record_tip_sent(&env, &sender, amount);
         reputation::record_tip_received(&env, &creator, creator_amount);
+
+        // Apply programmable royalties if configured
+        let _remaining = programmable_royalty::distribute_programmable_royalties(
+            &env,
+            &creator,
+            creator_amount,
+            &sender,
+        );
 
         // Track which tokens this creator has received
         Self::track_creator_token(&env, &creator, &token);
