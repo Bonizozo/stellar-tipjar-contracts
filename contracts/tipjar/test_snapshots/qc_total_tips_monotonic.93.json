@@ -62,7 +62,7 @@
                 {
                   "i128": {
                     "hi": 0,
-                    "lo": 150588
+                    "lo": 90034
                   }
                 }
               ]
@@ -93,7 +93,7 @@
                 {
                   "i128": {
                     "hi": 0,
-                    "lo": 49925
+                    "lo": 65535
                   }
                 }
               ]
@@ -115,7 +115,7 @@
                     {
                       "i128": {
                         "hi": 0,
-                        "lo": 49925
+                        "lo": 65535
                       }
                     }
                   ]
@@ -149,7 +149,7 @@
                 {
                   "i128": {
                     "hi": 0,
-                    "lo": 5868
+                    "lo": 24499
                   }
                 }
               ]
@@ -171,175 +171,7 @@
                     {
                       "i128": {
                         "hi": 0,
-                        "lo": 5868
-                      }
-                    }
-                  ]
-                }
-              },
-              "sub_invocations": []
-            }
-          ]
-        }
-      ]
-    ],
-    [],
-    [
-      [
-        "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAK3IM",
-        {
-          "function": {
-            "contract_fn": {
-              "contract_address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAITA4",
-              "function_name": "tip",
-              "args": [
-                {
-                  "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAK3IM"
-                },
-                {
-                  "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAMDR4"
-                },
-                {
-                  "address": "CBEPDNVYXQGWB5YUBXKJWYJA7OXTZW5LFLNO5JRRGE6Z6C5OSUZPCCEL"
-                },
-                {
-                  "i128": {
-                    "hi": 0,
-                    "lo": 32756
-                  }
-                }
-              ]
-            }
-          },
-          "sub_invocations": [
-            {
-              "function": {
-                "contract_fn": {
-                  "contract_address": "CBEPDNVYXQGWB5YUBXKJWYJA7OXTZW5LFLNO5JRRGE6Z6C5OSUZPCCEL",
-                  "function_name": "transfer",
-                  "args": [
-                    {
-                      "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAK3IM"
-                    },
-                    {
-                      "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAITA4"
-                    },
-                    {
-                      "i128": {
-                        "hi": 0,
-                        "lo": 32756
-                      }
-                    }
-                  ]
-                }
-              },
-              "sub_invocations": []
-            }
-          ]
-        }
-      ]
-    ],
-    [],
-    [
-      [
-        "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAK3IM",
-        {
-          "function": {
-            "contract_fn": {
-              "contract_address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAITA4",
-              "function_name": "tip",
-              "args": [
-                {
-                  "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAK3IM"
-                },
-                {
-                  "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAMDR4"
-                },
-                {
-                  "address": "CBEPDNVYXQGWB5YUBXKJWYJA7OXTZW5LFLNO5JRRGE6Z6C5OSUZPCCEL"
-                },
-                {
-                  "i128": {
-                    "hi": 0,
-                    "lo": 1
-                  }
-                }
-              ]
-            }
-          },
-          "sub_invocations": [
-            {
-              "function": {
-                "contract_fn": {
-                  "contract_address": "CBEPDNVYXQGWB5YUBXKJWYJA7OXTZW5LFLNO5JRRGE6Z6C5OSUZPCCEL",
-                  "function_name": "transfer",
-                  "args": [
-                    {
-                      "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAK3IM"
-                    },
-                    {
-                      "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAITA4"
-                    },
-                    {
-                      "i128": {
-                        "hi": 0,
-                        "lo": 1
-                      }
-                    }
-                  ]
-                }
-              },
-              "sub_invocations": []
-            }
-          ]
-        }
-      ]
-    ],
-    [],
-    [
-      [
-        "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAK3IM",
-        {
-          "function": {
-            "contract_fn": {
-              "contract_address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAITA4",
-              "function_name": "tip",
-              "args": [
-                {
-                  "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAK3IM"
-                },
-                {
-                  "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAMDR4"
-                },
-                {
-                  "address": "CBEPDNVYXQGWB5YUBXKJWYJA7OXTZW5LFLNO5JRRGE6Z6C5OSUZPCCEL"
-                },
-                {
-                  "i128": {
-                    "hi": 0,
-                    "lo": 62038
-                  }
-                }
-              ]
-            }
-          },
-          "sub_invocations": [
-            {
-              "function": {
-                "contract_fn": {
-                  "contract_address": "CBEPDNVYXQGWB5YUBXKJWYJA7OXTZW5LFLNO5JRRGE6Z6C5OSUZPCCEL",
-                  "function_name": "transfer",
-                  "args": [
-                    {
-                      "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAK3IM"
-                    },
-                    {
-                      "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAITA4"
-                    },
-                    {
-                      "i128": {
-                        "hi": 0,
-                        "lo": 62038
+                        "lo": 24499
                       }
                     }
                   ]
@@ -534,7 +366,7 @@
                 "val": {
                   "i128": {
                     "hi": 0,
-                    "lo": 150588
+                    "lo": 90034
                   }
                 }
               }
@@ -637,7 +469,7 @@
                 "val": {
                   "i128": {
                     "hi": 0,
-                    "lo": 150588
+                    "lo": 90034
                   }
                 }
               }
@@ -693,7 +525,7 @@
                           "val": {
                             "i128": {
                               "hi": 0,
-                              "lo": 49
+                              "lo": 65
                             }
                           }
                         },
@@ -716,7 +548,7 @@
                           "val": {
                             "i128": {
                               "hi": 0,
-                              "lo": 49
+                              "lo": 65
                             }
                           }
                         },
@@ -762,7 +594,7 @@
                           "val": {
                             "i128": {
                               "hi": 0,
-                              "lo": 49
+                              "lo": 65
                             }
                           }
                         },
@@ -785,7 +617,7 @@
                           "val": {
                             "i128": {
                               "hi": 0,
-                              "lo": 5
+                              "lo": 24
                             }
                           }
                         },
@@ -808,7 +640,7 @@
                           "val": {
                             "i128": {
                               "hi": 0,
-                              "lo": 54
+                              "lo": 89
                             }
                           }
                         },
@@ -854,283 +686,7 @@
                           "val": {
                             "i128": {
                               "hi": 0,
-                              "lo": 54
-                            }
-                          }
-                        },
-                        {
-                          "key": {
-                            "symbol": "timestamp"
-                          },
-                          "val": {
-                            "u64": 0
-                          }
-                        }
-                      ]
-                    },
-                    {
-                      "map": [
-                        {
-                          "key": {
-                            "symbol": "delta"
-                          },
-                          "val": {
-                            "i128": {
-                              "hi": 0,
-                              "lo": 32
-                            }
-                          }
-                        },
-                        {
-                          "key": {
-                            "symbol": "reason"
-                          },
-                          "val": {
-                            "vec": [
-                              {
-                                "symbol": "TipSent"
-                              }
-                            ]
-                          }
-                        },
-                        {
-                          "key": {
-                            "symbol": "score_after"
-                          },
-                          "val": {
-                            "i128": {
-                              "hi": 0,
-                              "lo": 86
-                            }
-                          }
-                        },
-                        {
-                          "key": {
-                            "symbol": "timestamp"
-                          },
-                          "val": {
-                            "u64": 0
-                          }
-                        }
-                      ]
-                    },
-                    {
-                      "map": [
-                        {
-                          "key": {
-                            "symbol": "delta"
-                          },
-                          "val": {
-                            "i128": {
-                              "hi": 0,
-                              "lo": 0
-                            }
-                          }
-                        },
-                        {
-                          "key": {
-                            "symbol": "reason"
-                          },
-                          "val": {
-                            "vec": [
-                              {
-                                "symbol": "StreakBonus"
-                              }
-                            ]
-                          }
-                        },
-                        {
-                          "key": {
-                            "symbol": "score_after"
-                          },
-                          "val": {
-                            "i128": {
-                              "hi": 0,
-                              "lo": 86
-                            }
-                          }
-                        },
-                        {
-                          "key": {
-                            "symbol": "timestamp"
-                          },
-                          "val": {
-                            "u64": 0
-                          }
-                        }
-                      ]
-                    },
-                    {
-                      "map": [
-                        {
-                          "key": {
-                            "symbol": "delta"
-                          },
-                          "val": {
-                            "i128": {
-                              "hi": 0,
-                              "lo": 0
-                            }
-                          }
-                        },
-                        {
-                          "key": {
-                            "symbol": "reason"
-                          },
-                          "val": {
-                            "vec": [
-                              {
-                                "symbol": "TipSent"
-                              }
-                            ]
-                          }
-                        },
-                        {
-                          "key": {
-                            "symbol": "score_after"
-                          },
-                          "val": {
-                            "i128": {
-                              "hi": 0,
-                              "lo": 86
-                            }
-                          }
-                        },
-                        {
-                          "key": {
-                            "symbol": "timestamp"
-                          },
-                          "val": {
-                            "u64": 0
-                          }
-                        }
-                      ]
-                    },
-                    {
-                      "map": [
-                        {
-                          "key": {
-                            "symbol": "delta"
-                          },
-                          "val": {
-                            "i128": {
-                              "hi": 0,
-                              "lo": 0
-                            }
-                          }
-                        },
-                        {
-                          "key": {
-                            "symbol": "reason"
-                          },
-                          "val": {
-                            "vec": [
-                              {
-                                "symbol": "StreakBonus"
-                              }
-                            ]
-                          }
-                        },
-                        {
-                          "key": {
-                            "symbol": "score_after"
-                          },
-                          "val": {
-                            "i128": {
-                              "hi": 0,
-                              "lo": 86
-                            }
-                          }
-                        },
-                        {
-                          "key": {
-                            "symbol": "timestamp"
-                          },
-                          "val": {
-                            "u64": 0
-                          }
-                        }
-                      ]
-                    },
-                    {
-                      "map": [
-                        {
-                          "key": {
-                            "symbol": "delta"
-                          },
-                          "val": {
-                            "i128": {
-                              "hi": 0,
-                              "lo": 62
-                            }
-                          }
-                        },
-                        {
-                          "key": {
-                            "symbol": "reason"
-                          },
-                          "val": {
-                            "vec": [
-                              {
-                                "symbol": "TipSent"
-                              }
-                            ]
-                          }
-                        },
-                        {
-                          "key": {
-                            "symbol": "score_after"
-                          },
-                          "val": {
-                            "i128": {
-                              "hi": 0,
-                              "lo": 148
-                            }
-                          }
-                        },
-                        {
-                          "key": {
-                            "symbol": "timestamp"
-                          },
-                          "val": {
-                            "u64": 0
-                          }
-                        }
-                      ]
-                    },
-                    {
-                      "map": [
-                        {
-                          "key": {
-                            "symbol": "delta"
-                          },
-                          "val": {
-                            "i128": {
-                              "hi": 0,
-                              "lo": 0
-                            }
-                          }
-                        },
-                        {
-                          "key": {
-                            "symbol": "reason"
-                          },
-                          "val": {
-                            "vec": [
-                              {
-                                "symbol": "StreakBonus"
-                              }
-                            ]
-                          }
-                        },
-                        {
-                          "key": {
-                            "symbol": "score_after"
-                          },
-                          "val": {
-                            "i128": {
-                              "hi": 0,
-                              "lo": 148
+                              "lo": 89
                             }
                           }
                         },
@@ -1199,7 +755,7 @@
                           "val": {
                             "i128": {
                               "hi": 0,
-                              "lo": 99
+                              "lo": 131
                             }
                           }
                         },
@@ -1222,7 +778,7 @@
                           "val": {
                             "i128": {
                               "hi": 0,
-                              "lo": 99
+                              "lo": 131
                             }
                           }
                         },
@@ -1245,7 +801,7 @@
                           "val": {
                             "i128": {
                               "hi": 0,
-                              "lo": 11
+                              "lo": 48
                             }
                           }
                         },
@@ -1268,145 +824,7 @@
                           "val": {
                             "i128": {
                               "hi": 0,
-                              "lo": 110
-                            }
-                          }
-                        },
-                        {
-                          "key": {
-                            "symbol": "timestamp"
-                          },
-                          "val": {
-                            "u64": 0
-                          }
-                        }
-                      ]
-                    },
-                    {
-                      "map": [
-                        {
-                          "key": {
-                            "symbol": "delta"
-                          },
-                          "val": {
-                            "i128": {
-                              "hi": 0,
-                              "lo": 65
-                            }
-                          }
-                        },
-                        {
-                          "key": {
-                            "symbol": "reason"
-                          },
-                          "val": {
-                            "vec": [
-                              {
-                                "symbol": "TipReceived"
-                              }
-                            ]
-                          }
-                        },
-                        {
-                          "key": {
-                            "symbol": "score_after"
-                          },
-                          "val": {
-                            "i128": {
-                              "hi": 0,
-                              "lo": 175
-                            }
-                          }
-                        },
-                        {
-                          "key": {
-                            "symbol": "timestamp"
-                          },
-                          "val": {
-                            "u64": 0
-                          }
-                        }
-                      ]
-                    },
-                    {
-                      "map": [
-                        {
-                          "key": {
-                            "symbol": "delta"
-                          },
-                          "val": {
-                            "i128": {
-                              "hi": 0,
-                              "lo": 0
-                            }
-                          }
-                        },
-                        {
-                          "key": {
-                            "symbol": "reason"
-                          },
-                          "val": {
-                            "vec": [
-                              {
-                                "symbol": "TipReceived"
-                              }
-                            ]
-                          }
-                        },
-                        {
-                          "key": {
-                            "symbol": "score_after"
-                          },
-                          "val": {
-                            "i128": {
-                              "hi": 0,
-                              "lo": 175
-                            }
-                          }
-                        },
-                        {
-                          "key": {
-                            "symbol": "timestamp"
-                          },
-                          "val": {
-                            "u64": 0
-                          }
-                        }
-                      ]
-                    },
-                    {
-                      "map": [
-                        {
-                          "key": {
-                            "symbol": "delta"
-                          },
-                          "val": {
-                            "i128": {
-                              "hi": 0,
-                              "lo": 124
-                            }
-                          }
-                        },
-                        {
-                          "key": {
-                            "symbol": "reason"
-                          },
-                          "val": {
-                            "vec": [
-                              {
-                                "symbol": "TipReceived"
-                              }
-                            ]
-                          }
-                        },
-                        {
-                          "key": {
-                            "symbol": "score_after"
-                          },
-                          "val": {
-                            "i128": {
-                              "hi": 0,
-                              "lo": 299
+                              "lo": 179
                             }
                           }
                         },
@@ -1497,7 +915,7 @@
                       "val": {
                         "i128": {
                           "hi": 0,
-                          "lo": 148
+                          "lo": 89
                         }
                       }
                     },
@@ -1522,7 +940,7 @@
                         "symbol": "tips_sent"
                       },
                       "val": {
-                        "u64": 5
+                        "u64": 2
                       }
                     },
                     {
@@ -1543,7 +961,7 @@
                       "val": {
                         "i128": {
                           "hi": 0,
-                          "lo": 150588
+                          "lo": 90034
                         }
                       }
                     }
@@ -1624,7 +1042,7 @@
                       "val": {
                         "i128": {
                           "hi": 0,
-                          "lo": 299
+                          "lo": 179
                         }
                       }
                     },
@@ -1641,7 +1059,7 @@
                         "symbol": "tips_received"
                       },
                       "val": {
-                        "u64": 5
+                        "u64": 2
                       }
                     },
                     {
@@ -1659,7 +1077,7 @@
                       "val": {
                         "i128": {
                           "hi": 0,
-                          "lo": 150588
+                          "lo": 90034
                         }
                       }
                     },
@@ -1753,7 +1171,7 @@
                         "symbol": "tip_count"
                       },
                       "val": {
-                        "u32": 5
+                        "u32": 2
                       }
                     },
                     {
@@ -1763,7 +1181,7 @@
                       "val": {
                         "i128": {
                           "hi": 0,
-                          "lo": 150588
+                          "lo": 90034
                         }
                       }
                     }
@@ -1909,7 +1327,7 @@
                         "symbol": "tip_count"
                       },
                       "val": {
-                        "u32": 5
+                        "u32": 2
                       }
                     },
                     {
@@ -1919,7 +1337,7 @@
                       "val": {
                         "i128": {
                           "hi": 0,
-                          "lo": 150588
+                          "lo": 90034
                         }
                       }
                     }
@@ -2077,7 +1495,7 @@
                           ]
                         },
                         "val": {
-                          "u64": 5
+                          "u64": 2
                         }
                       },
                       {
@@ -2144,39 +1562,6 @@
             "contract": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAK3IM",
             "key": {
               "ledger_key_nonce": {
-                "nonce": 4270020994084947596
-              }
-            },
-            "durability": "temporary"
-          }
-        },
-        [
-          {
-            "last_modified_ledger_seq": 0,
-            "data": {
-              "contract_data": {
-                "ext": "v0",
-                "contract": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAK3IM",
-                "key": {
-                  "ledger_key_nonce": {
-                    "nonce": 4270020994084947596
-                  }
-                },
-                "durability": "temporary",
-                "val": "void"
-              }
-            },
-            "ext": "v0"
-          },
-          6311999
-        ]
-      ],
-      [
-        {
-          "contract_data": {
-            "contract": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAK3IM",
-            "key": {
-              "ledger_key_nonce": {
                 "nonce": 4837995959683129791
               }
             },
@@ -2193,72 +1578,6 @@
                 "key": {
                   "ledger_key_nonce": {
                     "nonce": 4837995959683129791
-                  }
-                },
-                "durability": "temporary",
-                "val": "void"
-              }
-            },
-            "ext": "v0"
-          },
-          6311999
-        ]
-      ],
-      [
-        {
-          "contract_data": {
-            "contract": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAK3IM",
-            "key": {
-              "ledger_key_nonce": {
-                "nonce": 6277191135259896685
-              }
-            },
-            "durability": "temporary"
-          }
-        },
-        [
-          {
-            "last_modified_ledger_seq": 0,
-            "data": {
-              "contract_data": {
-                "ext": "v0",
-                "contract": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAK3IM",
-                "key": {
-                  "ledger_key_nonce": {
-                    "nonce": 6277191135259896685
-                  }
-                },
-                "durability": "temporary",
-                "val": "void"
-              }
-            },
-            "ext": "v0"
-          },
-          6311999
-        ]
-      ],
-      [
-        {
-          "contract_data": {
-            "contract": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAK3IM",
-            "key": {
-              "ledger_key_nonce": {
-                "nonce": 8370022561469687789
-              }
-            },
-            "durability": "temporary"
-          }
-        },
-        [
-          {
-            "last_modified_ledger_seq": 0,
-            "data": {
-              "contract_data": {
-                "ext": "v0",
-                "contract": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAK3IM",
-                "key": {
-                  "ledger_key_nonce": {
-                    "nonce": 8370022561469687789
                   }
                 },
                 "durability": "temporary",
@@ -2314,7 +1633,7 @@
                       "val": {
                         "i128": {
                           "hi": 0,
-                          "lo": 150588
+                          "lo": 90034
                         }
                       }
                     },
