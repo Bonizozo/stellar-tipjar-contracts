@@ -2354,6 +2354,18 @@ impl TipJarContract {
         env.storage()
             .instance()
             .set(&DataKey::DeployedAt, &deployed_at);
+
+        storage::bump_instance(&env);
+    }
+
+    /// Extends the TTL of a creator's persistent storage entries so anyone
+    /// can prevent a creator's balance from expiring on-ledger.
+    pub fn bump_entry(env: Env, creator: Address, token: Address) {
+        storage::bump_instance(&env);
+        let bal_key = DataKey::CreatorBalance(creator.clone(), token.clone());
+        storage::bump_persistent_if_exists(&env, &bal_key);
+        let tot_key = DataKey::CreatorTotal(creator, token);
+        storage::bump_persistent_if_exists(&env, &tot_key);
     }
 
     /// Sets an off-chain condition flag that can later be referenced in
@@ -2737,11 +2749,13 @@ impl TipJarContract {
             return 0;
         }
 
+        let tot_key = DataKey::CreatorTotal(creator, token);
         let total_tips = env
             .storage()
             .persistent()
-            .get::<DataKey, i128>(&DataKey::CreatorTotal(creator, token))
+            .get::<DataKey, i128>(&tot_key)
             .unwrap_or(0);
+        storage::bump_persistent_if_exists(&env, &tot_key);
         if total_tips < config.min_total_tips {
             return 0;
         }
@@ -2766,11 +2780,13 @@ impl TipJarContract {
             panic_with_error!(&env, TipJarError::InvalidAmount);
         }
 
+        let tot_key = DataKey::CreatorTotal(creator.clone(), token.clone());
         let total_tips = env
             .storage()
             .persistent()
-            .get::<DataKey, i128>(&DataKey::CreatorTotal(creator.clone(), token.clone()))
+            .get::<DataKey, i128>(&tot_key)
             .unwrap_or(0);
+        storage::bump_persistent_if_exists(&env, &tot_key);
         if total_tips < config.min_total_tips {
             panic_with_error!(&env, OtherError::IneligibleForCredit);
         }
@@ -2813,6 +2829,7 @@ impl TipJarContract {
         env.storage()
             .persistent()
             .set(&bal_key, &(current_bal + amount));
+        storage::bump_persistent(&env, &bal_key);
 
         // Update credit account
         account.principal += amount;
@@ -2852,6 +2869,7 @@ impl TipJarContract {
 
         let bal_key = DataKey::CreatorBalance(creator.clone(), token.clone());
         let bal: i128 = env.storage().persistent().get(&bal_key).unwrap_or(0);
+        storage::bump_persistent_if_exists(&env, &bal_key);
         if bal < amount {
             panic_with_error!(&env, TipJarError::InsufficientBalance);
         }
@@ -2870,6 +2888,7 @@ impl TipJarContract {
         env.storage()
             .persistent()
             .set(&bal_key, &(bal - actual_repayment));
+        storage::bump_persistent(&env, &bal_key);
 
         let interest_paid;
         if actual_repayment <= account.interest_accrued {
@@ -2928,6 +2947,7 @@ impl TipJarContract {
     /// Deducts the platform fee before crediting the creator. Returns the tip ID.
     /// Emits `("tip", creator)` with data `(sender, amount)`.
     pub fn tip(env: Env, sender: Address, creator: Address, token: Address, amount: i128) -> u64 {
+        storage::bump_instance(&env);
         Self::require_not_paused(&env);
         Self::require_feature_not_paused(&env, PauseScope::Tipping);
         Self::check_circuit_breaker(&env, amount);
@@ -3009,6 +3029,7 @@ impl TipJarContract {
             .checked_add(net_amount)
             .expect("balance overflow");
         env.storage().persistent().set(&bal_key, &new_bal);
+        storage::bump_persistent(&env, &bal_key);
 
         let tot_key = DataKey::CreatorTotal(creator.clone(), token.clone());
         let existing_tot: i128 = env.storage().persistent().get(&tot_key).unwrap_or(0);
@@ -3016,6 +3037,7 @@ impl TipJarContract {
             .checked_add(creator_amount)
             .expect("total overflow");
         env.storage().persistent().set(&tot_key, &new_tot);
+        storage::bump_persistent(&env, &tot_key);
 
         let tip_id: u64 = env
             .storage()
@@ -3066,6 +3088,7 @@ impl TipJarContract {
     /// Enforces per-creator (or default) daily limits and cooldown periods.
     /// Emits `("withdraw", creator)` with data `amount`.
     pub fn withdraw(env: Env, creator: Address, token: Address, amount: Option<i128>) {
+        storage::bump_instance(&env);
         Self::require_not_paused(&env);
         Self::require_feature_not_paused(&env, PauseScope::Withdrawals);
         creator.require_auth();
@@ -3075,6 +3098,7 @@ impl TipJarContract {
             .persistent()
             .get(&bal_key)
             .unwrap_or_else(|| env.storage().instance().get(&bal_key).unwrap_or(0));
+        storage::bump_persistent_if_exists(&env, &bal_key);
 
         let withdraw_amount = match amount {
             Some(amount) => {
@@ -3098,6 +3122,7 @@ impl TipJarContract {
         env.storage()
             .persistent()
             .set(&bal_key, &(balance - withdraw_amount));
+        storage::bump_persistent(&env, &bal_key);
         token::Client::new(&env, &token).transfer(
             &env.current_contract_address(),
             &creator,
@@ -3112,6 +3137,7 @@ impl TipJarContract {
     /// Enforces per-creator (or default) daily limits and cooldown periods.
     /// Emits `("withdraw", creator)` with data `amount`.
     pub fn withdraw_amount(env: Env, creator: Address, token: Address, amount: i128) {
+        storage::bump_instance(&env);
         Self::require_not_paused(&env);
         creator.require_auth();
 
@@ -3126,6 +3152,7 @@ impl TipJarContract {
             .persistent()
             .get(&bal_key)
             .unwrap_or_else(|| env.storage().instance().get(&bal_key).unwrap_or(0));
+        storage::bump_persistent_if_exists(&env, &bal_key);
 
         if amount > current_balance {
             panic_with_error!(&env, TipJarError::InsufficientBalance);
@@ -3135,6 +3162,7 @@ impl TipJarContract {
 
         let new_balance = current_balance - amount;
         env.storage().persistent().set(&bal_key, &new_balance);
+        storage::bump_persistent(&env, &bal_key);
 
         token::Client::new(&env, &token).transfer(
             &env.current_contract_address(),
@@ -3391,6 +3419,7 @@ impl TipJarContract {
                 .checked_add(net_amount)
                 .expect("balance overflow");
             env.storage().persistent().set(&bal_key, &new_bal);
+            storage::bump_persistent(&env, &bal_key);
 
             let tot_key = DataKey::CreatorTotal(creator.clone(), auction.token.clone());
             let existing_tot: i128 = env.storage().persistent().get(&tot_key).unwrap_or(0);
@@ -3398,6 +3427,7 @@ impl TipJarContract {
                 .checked_add(creator_amount)
                 .expect("total overflow");
             env.storage().persistent().set(&tot_key, &new_tot);
+            storage::bump_persistent(&env, &tot_key);
 
             if let Some(winner) = auction.highest_bidder.clone() {
                 Self::update_leaderboard_stats(&env, &winner, &creator, creator_amount);
@@ -3527,6 +3557,7 @@ impl TipJarContract {
 
         let bal_key = DataKey::CreatorBalance(creator.clone(), token.clone());
         let balance: i128 = env.storage().persistent().get(&bal_key).unwrap_or(0);
+        storage::bump_persistent_if_exists(&env, &bal_key);
         if amount > balance || balance == 0 {
             panic_with_error!(&env, TipJarError::NothingToWithdraw);
         }
@@ -3536,6 +3567,7 @@ impl TipJarContract {
         env.storage()
             .persistent()
             .set(&bal_key, &(balance - amount));
+        storage::bump_persistent(&env, &bal_key);
         delegation.used_amount += amount;
         if delegation.used_amount >= delegation.max_amount {
             delegation.active = false;
@@ -3681,20 +3713,28 @@ impl TipJarContract {
 
     /// Returns the current withdrawable balance for `creator` in `token`.
     pub fn get_withdrawable_balance(env: Env, creator: Address, token: Address) -> i128 {
+        storage::bump_instance(&env);
         let key = DataKey::CreatorBalance(creator.clone(), token.clone());
-        env.storage()
+        let val = env
+            .storage()
             .persistent()
             .get(&key)
-            .unwrap_or_else(|| env.storage().instance().get(&key).unwrap_or(0))
+            .unwrap_or_else(|| env.storage().instance().get(&key).unwrap_or(0));
+        storage::bump_persistent_if_exists(&env, &key);
+        val
     }
 
     /// Returns the historical total tips received by `creator` in `token`.
     pub fn get_total_tips(env: Env, creator: Address, token: Address) -> i128 {
+        storage::bump_instance(&env);
         let key = DataKey::CreatorTotal(creator.clone(), token.clone());
-        env.storage()
+        let val = env
+            .storage()
             .persistent()
             .get(&key)
-            .unwrap_or_else(|| env.storage().instance().get(&key).unwrap_or(0))
+            .unwrap_or_else(|| env.storage().instance().get(&key).unwrap_or(0));
+        storage::bump_persistent_if_exists(&env, &key);
+        val
     }
 
     // ── vesting schedules ────────────────────────────────────────────────────
@@ -4141,11 +4181,13 @@ impl TipJarContract {
             .checked_add(net_amount)
             .expect("balance overflow");
         env.storage().persistent().set(&bal_key, &new_bal);
+        storage::bump_persistent(&env, &bal_key);
 
         let tot_key = DataKey::CreatorTotal(creator.clone(), token.clone());
         let current_tot: i128 = env.storage().persistent().get(&tot_key).unwrap_or(0);
         let new_tot: i128 = current_tot.checked_add(net).expect("total overflow");
         env.storage().persistent().set(&tot_key, &new_tot);
+        storage::bump_persistent(&env, &tot_key);
 
         // Emit structured tip event
         let tip_id: u64 = env
@@ -4390,11 +4432,13 @@ impl TipJarContract {
         env.storage()
             .persistent()
             .set(&bal_key, &(bal + net_amount));
+        storage::bump_persistent(&env, &bal_key);
         let tot_key = DataKey::CreatorTotal(creator.clone(), sub.token.clone());
         let tot: i128 = env.storage().persistent().get(&tot_key).unwrap_or(0);
         env.storage()
             .persistent()
             .set(&tot_key, &(tot + config.price));
+        storage::bump_persistent(&env, &tot_key);
 
         let now = env.ledger().timestamp();
         sub.tier = new_tier;
@@ -4496,12 +4540,14 @@ impl TipJarContract {
         env.storage()
             .persistent()
             .set(&bal_key, &(bal + net_amount));
+        storage::bump_persistent(&env, &bal_key);
 
         let tot_key = DataKey::CreatorTotal(creator.clone(), sub.token.clone());
         let tot: i128 = env.storage().persistent().get(&tot_key).unwrap_or(0);
         env.storage()
             .persistent()
             .set(&tot_key, &(tot + sub.amount));
+        storage::bump_persistent(&env, &tot_key);
 
         sub.last_payment = now;
         sub.next_payment = now + sub.interval_seconds;
@@ -4699,6 +4745,7 @@ impl TipJarContract {
         env.storage()
             .persistent()
             .set(&bal_key, &(existing_bal + net_amount));
+        storage::bump_persistent(&env, &bal_key);
 
         let tot_key = DataKey::CreatorTotal(creator.clone(), token.clone());
         let existing_tot: i128 = env
@@ -4709,6 +4756,7 @@ impl TipJarContract {
         env.storage()
             .persistent()
             .set(&tot_key, &(existing_tot + amount));
+        storage::bump_persistent(&env, &tot_key);
 
         Self::update_leaderboard_stats(&env, &sender, &creator, amount);
 
@@ -4836,10 +4884,12 @@ impl TipJarContract {
             env.storage()
                 .persistent()
                 .set(&bal_key, &(bal + net_amount));
+            storage::bump_persistent(&env, &bal_key);
 
             let tot_key = DataKey::CreatorTotal(r.creator.clone(), token.clone());
             let tot: i128 = env.storage().persistent().get(&tot_key).unwrap_or(0);
             env.storage().persistent().set(&tot_key, &(tot + share));
+            storage::bump_persistent(&env, &tot_key);
 
             distributed += share;
 
@@ -5452,11 +5502,13 @@ impl TipJarContract {
 
         let bal_key = DataKey::CreatorBalance(creator.clone(), token.clone());
         let amount: i128 = env.storage().persistent().get(&bal_key).unwrap_or(0);
+        storage::bump_persistent_if_exists(&env, &bal_key);
         if amount == 0 {
             panic_with_error!(&env, TipJarError::NothingToWithdraw);
         }
 
         env.storage().persistent().set(&bal_key, &0i128);
+        storage::bump_persistent(&env, &bal_key);
         token::Client::new(&env, &token).transfer(
             &env.current_contract_address(),
             &creator,
@@ -5542,6 +5594,7 @@ impl TipJarContract {
 
         let bal_key = DataKey::CreatorBalance(creator.clone(), token.clone());
         let balance: i128 = env.storage().persistent().get(&bal_key).unwrap_or(0);
+        storage::bump_persistent_if_exists(&env, &bal_key);
         if balance == 0 || amount <= 0 || amount > balance {
             panic_with_error!(&env, TipJarError::NothingToWithdraw);
         }
@@ -5558,6 +5611,7 @@ impl TipJarContract {
             env.storage()
                 .persistent()
                 .set(&bal_key, &(balance - amount));
+            storage::bump_persistent(&env, &bal_key);
             token::Client::new(&env, &token).transfer(
                 &env.current_contract_address(),
                 &creator,
@@ -5644,12 +5698,14 @@ impl TipJarContract {
             // Execute withdrawal.
             let bal_key = DataKey::CreatorBalance(request.creator.clone(), request.token.clone());
             let balance: i128 = env.storage().persistent().get(&bal_key).unwrap_or(0);
+            storage::bump_persistent_if_exists(&env, &bal_key);
             if balance < request.amount {
                 panic_with_error!(&env, TipJarError::InsufficientBalance);
             }
             env.storage()
                 .persistent()
                 .set(&bal_key, &(balance - request.amount));
+            storage::bump_persistent(&env, &bal_key);
             request.executed = true;
             env.storage().persistent().set(
                 &DataKey::MultiSig(MultiSigKey::Request(request_id)),
@@ -6003,6 +6059,7 @@ impl TipJarContract {
                 .checked_add(net_amount)
                 .expect("balance overflow");
             env.storage().persistent().set(&bal_key, &new_bal);
+            storage::bump_persistent(&env, &bal_key);
 
             let tot_key = DataKey::CreatorTotal(tip.creator.clone(), token.clone());
             let existing_tot: i128 = env.storage().persistent().get(&tot_key).unwrap_or(0);
@@ -6010,6 +6067,7 @@ impl TipJarContract {
                 .checked_add(creator_amount)
                 .expect("total overflow");
             env.storage().persistent().set(&tot_key, &new_tot);
+            storage::bump_persistent(&env, &tot_key);
 
             Self::update_leaderboard_stats(&env, &tipper, &tip.creator, creator_amount);
             successful_tips += 1;
@@ -6060,6 +6118,7 @@ impl TipJarContract {
                 .persistent()
                 .get(&bal_key)
                 .unwrap_or_else(|| env.storage().instance().get(&bal_key).unwrap_or(0));
+            storage::bump_persistent_if_exists(&env, &bal_key);
 
             if op.amount > balance {
                 panic_with_error!(&env, TipJarError::InsufficientBalance);
@@ -6077,6 +6136,7 @@ impl TipJarContract {
             env.storage()
                 .persistent()
                 .set(&bal_key, &(balance - op.amount));
+            storage::bump_persistent(&env, &bal_key);
         }
 
         // ── Interactions pass (external token transfers) ──────────────────────
@@ -6192,6 +6252,7 @@ impl TipJarContract {
                     .checked_add(creator_amount)
                     .expect("balance overflow"),
             );
+            storage::bump_persistent(&env, &bal_key);
 
             let tot_key = DataKey::CreatorTotal(op.creator.clone(), op.token.clone());
             let existing_tot: i128 = env.storage().persistent().get(&tot_key).unwrap_or(0);
@@ -6201,6 +6262,7 @@ impl TipJarContract {
                     .checked_add(creator_amount)
                     .expect("total overflow"),
             );
+            storage::bump_persistent(&env, &tot_key);
 
             Self::update_leaderboard_stats(&env, &tipper, &op.creator, creator_amount);
 
@@ -6318,12 +6380,14 @@ impl TipJarContract {
             env.storage()
                 .persistent()
                 .set(&bal_key, &existing_bal.saturating_add(creator_amount));
+            storage::bump_persistent(&env, &bal_key);
 
             let tot_key = DataKey::CreatorTotal(op.creator.clone(), op.token.clone());
             let existing_tot: i128 = env.storage().persistent().get(&tot_key).unwrap_or(0);
             env.storage()
                 .persistent()
                 .set(&tot_key, &existing_tot.saturating_add(creator_amount));
+            storage::bump_persistent(&env, &tot_key);
 
             Self::update_leaderboard_stats(&env, &tipper, &op.creator, creator_amount);
 
@@ -6730,6 +6794,7 @@ impl TipJarContract {
                 let existing_bal: i128 = env.storage().persistent().get(&bal_key).unwrap_or(0);
                 let new_bal: i128 = existing_bal.checked_add(reward).expect("balance overflow");
                 env.storage().persistent().set(&bal_key, &new_bal);
+                storage::bump_persistent(env, &bal_key);
 
                 let mut updated_milestone = milestone.clone();
                 updated_milestone.completed = true;
@@ -6978,6 +7043,7 @@ impl TipJarContract {
             .checked_add(creator_amount)
             .expect("balance overflow");
         env.storage().persistent().set(&bal_key, &new_bal);
+        storage::bump_persistent(&env, &bal_key);
 
         let tot_key = DataKey::CreatorTotal(private_tip.creator.clone(), token.clone());
         let existing_tot: i128 = env.storage().persistent().get(&tot_key).unwrap_or(0);
@@ -6985,6 +7051,7 @@ impl TipJarContract {
             .checked_add(creator_amount)
             .expect("total overflow");
         env.storage().persistent().set(&tot_key, &new_tot);
+        storage::bump_persistent(&env, &tot_key);
 
         private_tip.revealed = true;
         env.storage().persistent().set(
@@ -8047,11 +8114,13 @@ impl TipJarContract {
             .unwrap_or(0);
 
         // Automatic premium coverage estimate from tips received
+        let tot_key = DataKey::CreatorTotal(creator, token);
         let total_received: i128 = env
             .storage()
             .persistent()
-            .get(&DataKey::CreatorTotal(creator, token))
+            .get(&tot_key)
             .unwrap_or(0);
+        storage::bump_persistent_if_exists(&env, &tot_key);
 
         // Since CreatorTotal is net of fees and premiums, we approximate the original gross
         // to find the premium paid. Gross = Net / (1 - fee_bps - premium_bps)
@@ -10680,6 +10749,7 @@ impl TipJarContract {
                 env.storage()
                     .persistent()
                     .set(&key, &(current + request.amount));
+                storage::bump_persistent(&env, &key);
 
                 // Update creator total
                 let total_key = DataKey::CreatorTotal(request.to.clone(), request.token.clone());
@@ -10687,6 +10757,7 @@ impl TipJarContract {
                 env.storage()
                     .persistent()
                     .set(&total_key, &(total + request.amount));
+                storage::bump_persistent(&env, &total_key);
 
                 // Emit tip event
                 env.events().publish(
