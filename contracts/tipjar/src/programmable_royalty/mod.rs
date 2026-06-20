@@ -7,7 +7,7 @@
 //! - Nested royalty chains (recursive application)
 //! - Payment tracking (audit trail)
 
-use soroban_sdk::{contracttype, symbol_short, Address, Env, Vec, U32};
+use soroban_sdk::{contracttype, symbol_short, Address, Env, Vec};
 
 use crate::DataKey;
 
@@ -28,21 +28,21 @@ pub enum Condition {
     /// Always applies (default).
     Always,
     /// Apply if tip amount >= threshold.
-    MinAmount { threshold: i128 },
+    MinAmount(i128),
     /// Apply if tip amount <= threshold.
-    MaxAmount { threshold: i128 },
+    MaxAmount(i128),
     /// Apply only to specified sender.
-    FromSender { sender: Address },
+    FromSender(Address),
     /// Apply only from a list of senders.
-    FromList { senders: Vec<Address> },
+    FromList(Vec<Address>),
     /// Apply if current timestamp >= start (unix seconds).
-    TimeAfter { start_ts: u64 },
+    TimeAfter(u64),
     /// Apply if current timestamp <= end (unix seconds).
-    TimeBefore { end_ts: u64 },
+    TimeBefore(u64),
     /// Apply if tipper count >= threshold.
-    MinTipperCount { threshold: u32 },
+    MinTipperCount(u32),
     /// Apply if total tips received >= threshold.
-    MinTotalTips { threshold: i128 },
+    MinTotalTips(i128),
 }
 
 /// A recipient with a dynamic (context-aware) share percentage.
@@ -96,7 +96,7 @@ pub struct RoyaltyPayment {
 fn load_rules(env: &Env, creator: &Address) -> Vec<RoyaltyRule> {
     // This would ideally be stored as a single vector or map.
     // For now, we load each rule individually (up to MAX_RULES).
-    let mut rules = Vec::new();
+    let mut rules = Vec::new(env);
     for i in 0..MAX_RULES {
         if let Some(rule_id) = get_creator_rule_id(env, creator, i) {
             if let Some(rule) = load_rule(env, rule_id) {
@@ -110,8 +110,8 @@ fn load_rules(env: &Env, creator: &Address) -> Vec<RoyaltyRule> {
         for j in i + 1..n {
             if rules.get(i).unwrap().priority < rules.get(j).unwrap().priority {
                 let tmp = rules.get(i).unwrap();
-                rules.set(i, &rules.get(j).unwrap());
-                rules.set(j, &tmp);
+                rules.set(i, rules.get(j).unwrap());
+                rules.set(j, tmp);
             }
         }
     }
@@ -133,16 +133,17 @@ fn save_rule(env: &Env, rule: &RoyaltyRule) {
 fn get_creator_rule_id(env: &Env, creator: &Address, index: u32) -> Option<u64> {
     env.storage()
         .persistent()
-        .get(&DataKey::ProgrammableRoyaltyCreatorRule(creator.clone(), index as u64))
+        .get(&DataKey::ProgrammableRoyaltyCreatorRule(
+            creator.clone(),
+            index as u64,
+        ))
 }
 
 fn register_creator_rule(env: &Env, creator: &Address, index: u32, rule_id: u64) {
-    env.storage()
-        .persistent()
-        .set(
-            &DataKey::ProgrammableRoyaltyCreatorRule(creator.clone(), index as u64),
-            &rule_id,
-        );
+    env.storage().persistent().set(
+        &DataKey::ProgrammableRoyaltyCreatorRule(creator.clone(), index as u64),
+        &rule_id,
+    );
 }
 
 fn get_next_rule_id(env: &Env) -> u64 {
@@ -163,15 +164,14 @@ fn record_payment(env: &Env, creator: &Address, payment: &RoyaltyPayment) {
         .persistent()
         .get(&DataKey::ProgrammableRoyaltyPaymentCount(creator.clone()))
         .unwrap_or(0);
-    env.storage()
-        .persistent()
-        .set(
-            &DataKey::ProgrammableRoyaltyPayment(creator.clone(), count),
-            payment,
-        );
-    env.storage()
-        .persistent()
-        .set(&DataKey::ProgrammableRoyaltyPaymentCount(creator.clone()), &(count + 1));
+    env.storage().persistent().set(
+        &DataKey::ProgrammableRoyaltyPayment(creator.clone(), count),
+        payment,
+    );
+    env.storage().persistent().set(
+        &DataKey::ProgrammableRoyaltyPaymentCount(creator.clone()),
+        &(count + 1),
+    );
 }
 
 // ── Condition Evaluation ─────────────────────────────────────────────────────
@@ -185,20 +185,20 @@ fn evaluate_condition(
 ) -> bool {
     match cond {
         Condition::Always => true,
-        Condition::MinAmount { threshold } => tip_amount >= *threshold,
-        Condition::MaxAmount { threshold } => tip_amount <= *threshold,
-        Condition::FromSender { sender: s } => s == sender,
-        Condition::FromList { senders } => {
+        Condition::MinAmount(threshold) => tip_amount >= *threshold,
+        Condition::MaxAmount(threshold) => tip_amount <= *threshold,
+        Condition::FromSender(s) => s == sender,
+        Condition::FromList(senders) => {
             for i in 0..senders.len() {
-                if senders.get(i).unwrap() == sender {
+                if senders.get(i).unwrap() == sender.clone() {
                     return true;
                 }
             }
             false
         }
-        Condition::TimeAfter { start_ts } => env.ledger().timestamp() >= *start_ts,
-        Condition::TimeBefore { end_ts } => env.ledger().timestamp() <= *end_ts,
-        Condition::MinTipperCount { threshold } => {
+        Condition::TimeAfter(start_ts) => env.ledger().timestamp() >= *start_ts,
+        Condition::TimeBefore(end_ts) => env.ledger().timestamp() <= *end_ts,
+        Condition::MinTipperCount(threshold) => {
             let count: u32 = env
                 .storage()
                 .persistent()
@@ -206,7 +206,7 @@ fn evaluate_condition(
                 .unwrap_or(0);
             count >= *threshold
         }
-        Condition::MinTotalTips { threshold } => {
+        Condition::MinTotalTips(threshold) => {
             let total: i128 = env
                 .storage()
                 .persistent()
@@ -225,7 +225,13 @@ fn all_conditions_met(
     creator: &Address,
 ) -> bool {
     for i in 0..conditions.len() {
-        if !evaluate_condition(env, &conditions.get(i).unwrap(), tip_amount, sender, creator) {
+        if !evaluate_condition(
+            env,
+            &conditions.get(i).unwrap(),
+            tip_amount,
+            sender,
+            creator,
+        ) {
             return false;
         }
     }
@@ -242,8 +248,8 @@ fn calculate_recipient_share(recipient: &DynamicRecipient, bonus: bool) -> u32 {
     }
 }
 
-fn normalize_shares(recipients: &Vec<DynamicRecipient>, bonus: bool) -> Vec<u32> {
-    let mut shares = Vec::new();
+fn normalize_shares(env: &Env, recipients: &Vec<DynamicRecipient>, bonus: bool) -> Vec<u32> {
+    let mut shares = Vec::new(env);
     let mut total: u64 = 0;
 
     for i in 0..recipients.len() {
@@ -259,7 +265,7 @@ fn normalize_shares(recipients: &Vec<DynamicRecipient>, bonus: bool) -> Vec<u32>
 
     for i in 0..shares.len() {
         let scaled = (shares.get(i).unwrap() as u64 * 10_000 / total) as u32;
-        shares.set(i, &scaled);
+        shares.set(i, scaled);
     }
 
     shares
@@ -279,7 +285,7 @@ pub fn create_rule(
     owner.require_auth();
     assert!(!conditions.is_empty(), "at least one condition required");
     assert!(!recipients.is_empty(), "at least one recipient required");
-    assert!(recipients.len() <= MAX_RECIPIENTS as usize, "too many recipients");
+    assert!(recipients.len() <= MAX_RECIPIENTS, "too many recipients");
 
     let rule_id = get_next_rule_id(env);
     let rule = RoyaltyRule {
@@ -379,9 +385,10 @@ fn distribute_programmable_inner(
             .persistent()
             .get(&DataKey::ProgrammableRoyaltyTipperCount(creator.clone()))
             .unwrap_or(0);
-        env.storage()
-            .persistent()
-            .set(&DataKey::ProgrammableRoyaltyTipperCount(creator.clone()), &(count + 1));
+        env.storage().persistent().set(
+            &DataKey::ProgrammableRoyaltyTipperCount(creator.clone()),
+            &(count + 1),
+        );
     }
 
     let total: i128 = env
@@ -389,12 +396,10 @@ fn distribute_programmable_inner(
         .persistent()
         .get(&DataKey::ProgrammableRoyaltyTotalTips(creator.clone()))
         .unwrap_or(0);
-    env.storage()
-        .persistent()
-        .set(
-            &DataKey::ProgrammableRoyaltyTotalTips(creator.clone()),
-            &(total + tip_amount),
-        );
+    env.storage().persistent().set(
+        &DataKey::ProgrammableRoyaltyTotalTips(creator.clone()),
+        &(total + tip_amount),
+    );
 
     // Load and sort rules by priority.
     let rules = load_rules(env, creator);
@@ -407,24 +412,18 @@ fn distribute_programmable_inner(
         }
 
         // Check if all conditions are met.
-        if !all_conditions_met(
-            env,
-            &rule.conditions,
-            tip_amount,
-            sender,
-            creator,
-        ) {
+        if !all_conditions_met(env, &rule.conditions, tip_amount, sender, creator) {
             continue;
         }
 
         // Calculate shares (with bonus if applicable).
-        let shares = normalize_shares(&rule.recipients, true);
+        let shares = normalize_shares(env, &rule.recipients, true);
         let remaining_for_rule = tip_amount - distributed;
 
         for recip_idx in 0..rule.recipients.len() {
             let recipient = rule.recipients.get(recip_idx).unwrap();
             let share_bps = shares.get(recip_idx).unwrap();
-            let amount_to_distribute = (remaining_for_rule * (*share_bps as i128)) / BPS_DENOM;
+            let amount_to_distribute = (remaining_for_rule * (share_bps as i128)) / BPS_DENOM;
 
             if amount_to_distribute <= 0 {
                 continue;
@@ -470,10 +469,8 @@ fn distribute_programmable_inner(
     }
 
     if depth == 0 {
-        env.events().publish(
-            (symbol_short!("prog_dst"), creator.clone()),
-            distributed,
-        );
+        env.events()
+            .publish((symbol_short!("prog_dst"), creator.clone()), distributed);
     }
 
     tip_amount - distributed
@@ -483,7 +480,7 @@ fn distribute_programmable_inner(
 pub fn withdraw_programmable_royalties(
     env: &Env,
     recipient: &Address,
-    token_addr: &Address,
+    _token_addr: &Address,
 ) -> i128 {
     recipient.require_auth();
 
@@ -492,10 +489,8 @@ pub fn withdraw_programmable_royalties(
 
     if amount > 0 {
         env.storage().persistent().remove(&key);
-        env.events().publish(
-            (symbol_short!("prog_wdw"), recipient.clone()),
-            amount,
-        );
+        env.events()
+            .publish((symbol_short!("prog_wdw"), recipient.clone()), amount);
     }
 
     amount
