@@ -133,16 +133,17 @@ fn save_rule(env: &Env, rule: &RoyaltyRule) {
 fn get_creator_rule_id(env: &Env, creator: &Address, index: u32) -> Option<u64> {
     env.storage()
         .persistent()
-        .get(&DataKey::ProgrammableRoyaltyCreatorRule(creator.clone(), index as u64))
+        .get(&DataKey::ProgrammableRoyaltyCreatorRule(
+            creator.clone(),
+            index as u64,
+        ))
 }
 
 fn register_creator_rule(env: &Env, creator: &Address, index: u32, rule_id: u64) {
-    env.storage()
-        .persistent()
-        .set(
-            &DataKey::ProgrammableRoyaltyCreatorRule(creator.clone(), index as u64),
-            &rule_id,
-        );
+    env.storage().persistent().set(
+        &DataKey::ProgrammableRoyaltyCreatorRule(creator.clone(), index as u64),
+        &rule_id,
+    );
 }
 
 fn get_next_rule_id(env: &Env) -> u64 {
@@ -163,15 +164,14 @@ fn record_payment(env: &Env, creator: &Address, payment: &RoyaltyPayment) {
         .persistent()
         .get(&DataKey::ProgrammableRoyaltyPaymentCount(creator.clone()))
         .unwrap_or(0);
-    env.storage()
-        .persistent()
-        .set(
-            &DataKey::ProgrammableRoyaltyPayment(creator.clone(), count),
-            payment,
-        );
-    env.storage()
-        .persistent()
-        .set(&DataKey::ProgrammableRoyaltyPaymentCount(creator.clone()), &(count + 1));
+    env.storage().persistent().set(
+        &DataKey::ProgrammableRoyaltyPayment(creator.clone(), count),
+        payment,
+    );
+    env.storage().persistent().set(
+        &DataKey::ProgrammableRoyaltyPaymentCount(creator.clone()),
+        &(count + 1),
+    );
 }
 
 // ── Condition Evaluation ─────────────────────────────────────────────────────
@@ -225,7 +225,13 @@ fn all_conditions_met(
     creator: &Address,
 ) -> bool {
     for i in 0..conditions.len() {
-        if !evaluate_condition(env, &conditions.get(i).unwrap(), tip_amount, sender, creator) {
+        if !evaluate_condition(
+            env,
+            &conditions.get(i).unwrap(),
+            tip_amount,
+            sender,
+            creator,
+        ) {
             return false;
         }
     }
@@ -379,9 +385,10 @@ fn distribute_programmable_inner(
             .persistent()
             .get(&DataKey::ProgrammableRoyaltyTipperCount(creator.clone()))
             .unwrap_or(0);
-        env.storage()
-            .persistent()
-            .set(&DataKey::ProgrammableRoyaltyTipperCount(creator.clone()), &(count + 1));
+        env.storage().persistent().set(
+            &DataKey::ProgrammableRoyaltyTipperCount(creator.clone()),
+            &(count + 1),
+        );
     }
 
     let total: i128 = env
@@ -389,12 +396,10 @@ fn distribute_programmable_inner(
         .persistent()
         .get(&DataKey::ProgrammableRoyaltyTotalTips(creator.clone()))
         .unwrap_or(0);
-    env.storage()
-        .persistent()
-        .set(
-            &DataKey::ProgrammableRoyaltyTotalTips(creator.clone()),
-            &(total + tip_amount),
-        );
+    env.storage().persistent().set(
+        &DataKey::ProgrammableRoyaltyTotalTips(creator.clone()),
+        &(total + tip_amount),
+    );
 
     // Load and sort rules by priority.
     let rules = load_rules(env, creator);
@@ -407,13 +412,7 @@ fn distribute_programmable_inner(
         }
 
         // Check if all conditions are met.
-        if !all_conditions_met(
-            env,
-            &rule.conditions,
-            tip_amount,
-            sender,
-            creator,
-        ) {
+        if !all_conditions_met(env, &rule.conditions, tip_amount, sender, creator) {
             continue;
         }
 
@@ -470,10 +469,8 @@ fn distribute_programmable_inner(
     }
 
     if depth == 0 {
-        env.events().publish(
-            (symbol_short!("prog_dst"), creator.clone()),
-            distributed,
-        );
+        env.events()
+            .publish((symbol_short!("prog_dst"), creator.clone()), distributed);
     }
 
     tip_amount - distributed
@@ -492,10 +489,8 @@ pub fn withdraw_programmable_royalties(
 
     if amount > 0 {
         env.storage().persistent().remove(&key);
-        env.events().publish(
-            (symbol_short!("prog_wdw"), recipient.clone()),
-            amount,
-        );
+        env.events()
+            .publish((symbol_short!("prog_wdw"), recipient.clone()), amount);
     }
 
     amount

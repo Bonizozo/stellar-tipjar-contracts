@@ -103,7 +103,10 @@ fn test_tip_with_zero_fee_credits_full_amount() {
     let creator = Address::generate(&ctx.env);
     ctx.mint(&sender, 1_000);
     ctx.client.tip(&sender, &creator, &ctx.token, &1_000);
-    assert_eq!(ctx.client.get_withdrawable_balance(&creator, &ctx.token), 1_000);
+    assert_eq!(
+        ctx.client.get_withdrawable_balance(&creator, &ctx.token),
+        1_000
+    );
     assert_eq!(ctx.client.get_platform_fees(&ctx.token), 0);
 }
 
@@ -117,7 +120,10 @@ fn test_tip_deducts_configured_fee_and_credits_remainder() {
     ctx.client.tip(&sender, &creator, &ctx.token, &1_000);
 
     // 5% of 1000 = 50 fee, 950 to the creator.
-    assert_eq!(ctx.client.get_withdrawable_balance(&creator, &ctx.token), 950);
+    assert_eq!(
+        ctx.client.get_withdrawable_balance(&creator, &ctx.token),
+        950
+    );
     assert_eq!(ctx.client.get_platform_fees(&ctx.token), 50);
 }
 
@@ -132,7 +138,10 @@ fn test_platform_fees_accumulate_across_tips() {
     ctx.client.tip(&sender, &creator, &ctx.token, &2_000);
 
     assert_eq!(ctx.client.get_platform_fees(&ctx.token), 300); // 100 + 200
-    assert_eq!(ctx.client.get_withdrawable_balance(&creator, &ctx.token), 2_700); // 900 + 1800
+    assert_eq!(
+        ctx.client.get_withdrawable_balance(&creator, &ctx.token),
+        2_700
+    ); // 900 + 1800
 }
 
 // ── withdraw_fees ──────────────────────────────────────────────────────────────

@@ -66,7 +66,7 @@ pub struct FeeEvent {
 pub const EVENT_VERSION: u32 = 1;
 
 /// Emit a structured tip event
-/// 
+///
 /// # Event Schema
 /// - **Topic**: `tip` (symbol)
 /// - **Data**: TipEvent struct with named fields (sender, creator, amount, token, timestamp)
@@ -89,24 +89,17 @@ pub fn emit_tip_event(
         token: token.clone(),
     };
 
-    env.events().publish(
-        (symbol_short!("tip"), creator.clone()),
-        event,
-    );
+    env.events()
+        .publish((symbol_short!("tip"), creator.clone()), event);
 }
 
 /// Emit a structured withdraw event
-/// 
+///
 /// # Event Schema
 /// - **Topic**: `withdraw` (symbol)
 /// - **Data**: WithdrawEvent struct with named fields (creator, amount, token, timestamp)
 /// - **Filterable By**: creator (topics)
-pub fn emit_withdraw_event(
-    env: &Env,
-    creator: &Address,
-    amount: i128,
-    token: &Address,
-) {
+pub fn emit_withdraw_event(env: &Env, creator: &Address, amount: i128, token: &Address) {
     let event = WithdrawEvent {
         version: EVENT_VERSION,
         creator: creator.clone(),
@@ -115,10 +108,8 @@ pub fn emit_withdraw_event(
         timestamp: env.ledger().timestamp(),
     };
 
-    env.events().publish(
-        (symbol_short!("withdraw"), creator.clone()),
-        event,
-    );
+    env.events()
+        .publish((symbol_short!("withdraw"), creator.clone()), event);
 }
 
 /// Emit a structured platform fee event
@@ -127,13 +118,7 @@ pub fn emit_withdraw_event(
 /// - **Topic**: `fee` (symbol)
 /// - **Data**: FeeEvent struct with named fields (creator, token, amount, fee_bps, timestamp)
 /// - **Filterable By**: creator (topics)
-pub fn emit_fee_event(
-    env: &Env,
-    creator: &Address,
-    token: &Address,
-    amount: i128,
-    fee_bps: u32,
-) {
+pub fn emit_fee_event(env: &Env, creator: &Address, token: &Address, amount: i128, fee_bps: u32) {
     let event = FeeEvent {
         version: EVENT_VERSION,
         creator: creator.clone(),
@@ -143,9 +128,6 @@ pub fn emit_fee_event(
         timestamp: env.ledger().timestamp(),
     };
 
-    env.events().publish(
-        (symbol_short!("fee"), creator.clone()),
-        event,
-    );
+    env.events()
+        .publish((symbol_short!("fee"), creator.clone()), event);
 }
-

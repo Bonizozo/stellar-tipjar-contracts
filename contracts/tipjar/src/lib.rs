@@ -2456,8 +2456,7 @@ impl TipJarContract {
         env.storage()
             .instance()
             .set(&DataKey::Fee(FeeKey::BasisPoints), &fee_bps);
-        env.events()
-            .publish((symbol_short!("plat_fee"),), fee_bps);
+        env.events().publish((symbol_short!("plat_fee"),), fee_bps);
     }
 
     /// Withdraws the accumulated platform fee balance for `token` to `admin`. Admin only.
@@ -2477,11 +2476,7 @@ impl TipJarContract {
             panic_with_error!(&env, TipJarError::NoFeesToWithdraw);
         }
         env.storage().instance().set(&fee_key, &0i128);
-        token::Client::new(&env, &token).transfer(
-            &env.current_contract_address(),
-            &admin,
-            &amount,
-        );
+        token::Client::new(&env, &token).transfer(&env.current_contract_address(), &admin, &amount);
         env.events()
             .publish((symbol_short!("fee_wdrw"),), (token, amount));
         amount
