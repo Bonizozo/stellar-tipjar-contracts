@@ -1,12 +1,8 @@
-//! Advanced Event System with Filtering and Indexing
+//! Advanced Event System
 //!
-//! This module provides enhanced event tracking, filtering, and querying capabilities
-//! for the TipJar contract.
+//! This module provides enhanced event tracking for the TipJar contract.
 
-pub mod filters;
-pub mod indexing;
-
-use soroban_sdk::{contracttype, symbol_short, Address, Env, String, Vec};
+use soroban_sdk::{contracttype, symbol_short, Address, Env};
 
 /// Structured tip event for reliable indexing
 /// Emitted when a tip is sent to a creator
