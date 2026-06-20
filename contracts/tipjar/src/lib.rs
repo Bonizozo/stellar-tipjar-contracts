@@ -170,6 +170,9 @@ pub mod commit_reveal;
 pub mod fractional_ownership;
 pub mod liquidity_mining;
 
+// Peer-to-peer lending protocol with collateral and interest
+pub mod lending;
+
 /// A tip record that includes an optional memo and timestamp.
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]

@@ -49,3 +49,7 @@ path = "tests/market_making_tests.rs"
 name = "partial_pause_tests"
 path = "tests/partial_pause_tests.rs"
 
+[[test]]
+name = "lending_tests"
+path = "tests/lending_tests.rs"
+
