@@ -8,7 +8,19 @@
 
 ## TypeScript / JavaScript
 
-The SDK in `sdk/typescript/` wraps the contract calls.
+A generated frontend client package is available at `packages/contract-client/`.
+The package exports contract constants and a `Client` wrapper for `TipJar` calls.
+
+```typescript
+import { Client, CONTRACT_IDS } from '@tipjar/contract-client';
+
+const client = new Client({
+  contractId: CONTRACT_IDS.testnet,
+  network: 'testnet',
+});
+```
+
+The SDK in `sdk/typescript/` also provides a lower-level wrapper around the contract.
 
 ```typescript
 import { TipJarContract } from './sdk/typescript/src/TipJarContract';

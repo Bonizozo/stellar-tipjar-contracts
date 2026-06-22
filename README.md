@@ -78,6 +78,17 @@ bash scripts/deploy.sh
 
 Or run commands manually with `stellar contract deploy` and `stellar contract invoke`.
 
+## Frontend Contract Client
+
+A generated TypeScript contract client lives in `packages/contract-client/`.
+Run the generator after deployment:
+
+```bash
+bash scripts/generate-bindings.sh [network]
+```
+
+The package exports `TESTNET_CONTRACT_ID` and `MAINNET_CONTRACT_ID` from `deployment/config.json`.
+
 ## Contributing
 
 See `CONTRIBUTING.md` for:
