@@ -3107,7 +3107,9 @@ impl TipJarContract {
         if fee > 0 {
             let fee_key = DataKey::Fee(FeeKey::Balance(token.clone()));
             let current_fee: i128 = env.storage().instance().get(&fee_key).unwrap_or(0);
-            let new_fee_bal: i128 = current_fee.checked_add(fee).expect("fee overflow");
+            let new_fee_bal: i128 = current_fee.checked_add(fee).unwrap_or_else(|| {
+                panic_with_error!(&env, TipJarError::BalanceOverflow);
+            });
             env.storage().instance().set(&fee_key, &new_fee_bal);
         }
 
@@ -3133,17 +3135,17 @@ impl TipJarContract {
         let bal_key = DataKey::CreatorBalance(creator.clone(), token.clone());
         let existing_bal: i128 = env.storage().persistent().get(&bal_key).unwrap_or(0);
         let net_amount = Self::process_repayment(&env, &creator, &token, creator_amount);
-        let new_bal: i128 = existing_bal
-            .checked_add(net_amount)
-            .expect("balance overflow");
+        let new_bal: i128 = existing_bal.checked_add(net_amount).unwrap_or_else(|| {
+            panic_with_error!(&env, TipJarError::BalanceOverflow);
+        });
         env.storage().persistent().set(&bal_key, &new_bal);
         storage::bump_persistent(&env, &bal_key);
 
         let tot_key = DataKey::CreatorTotal(creator.clone(), token.clone());
         let existing_tot: i128 = env.storage().persistent().get(&tot_key).unwrap_or(0);
-        let new_tot: i128 = existing_tot
-            .checked_add(creator_amount)
-            .expect("total overflow");
+        let new_tot: i128 = existing_tot.checked_add(creator_amount).unwrap_or_else(|| {
+            panic_with_error!(&env, TipJarError::BalanceOverflow);
+        });
         env.storage().persistent().set(&tot_key, &new_tot);
         storage::bump_persistent(&env, &tot_key);
 
