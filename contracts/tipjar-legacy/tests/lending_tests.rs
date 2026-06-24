@@ -1,10 +1,10 @@
 #![cfg(test)]
 
 use soroban_sdk::{testutils::Address as _, Address, Env};
-use tipjar::lending::{PoolId, LoanStatus};
-use tipjar::lending::pool;
-use tipjar::lending::loan;
-use tipjar::lending::interest;
+use tipjar_legacy::lending::{PoolId, LoanStatus};
+use tipjar_legacy::lending::pool;
+use tipjar_legacy::lending::loan;
+use tipjar_legacy::lending::interest;
 
 #[test]
 fn test_create_pool() {

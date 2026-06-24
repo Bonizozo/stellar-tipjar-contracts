@@ -3,7 +3,7 @@
 extern crate std;
 
 use soroban_sdk::{testutils::Address as _, token, Address, Env};
-use tipjar::{TipJarContract, TipJarContractClient};
+use tipjar_legacy::{TipJarContract, TipJarContractClient};
 
 struct Ctx {
     env: Env,

@@ -1,2 +1,2 @@
+export * from './generated';
 export * from './networks';
-export * from './client';

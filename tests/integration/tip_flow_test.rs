@@ -7,7 +7,7 @@ use soroban_sdk::{
     testutils::{Address as _, Events as _},
     token, Address, Env, Symbol, TryFromVal,
 };
-use tipjar::{TipJarContract, TipJarContractClient, TipJarError};
+use tipjar_legacy::{TipJarContract, TipJarContractClient, TipJarError};
 
 struct Ctx {
     env: Env,

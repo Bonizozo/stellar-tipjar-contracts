@@ -14,7 +14,7 @@
 ///   cargo bench --package tipjar --bench contract_bench -- --save-baseline main
 use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
 use soroban_sdk::{testutils::Address as _, token, Address, Env, String, Vec};
-use tipjar::{TipJarContract, TipJarContractClient, TipOperation};
+use tipjar_legacy::{TipJarContract, TipJarContractClient, TipOperation};
 
 // ── shared setup ─────────────────────────────────────────────────────────────
 

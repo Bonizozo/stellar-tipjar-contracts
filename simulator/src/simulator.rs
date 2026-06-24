@@ -4,7 +4,7 @@ use soroban_sdk::{
     testutils::{Address as _, Ledger as _, Snapshot},
     token, Address, Env,
 };
-use tipjar::{TipJarContract, TipJarContractClient};
+use tipjar_legacy::{TipJarContract, TipJarContractClient};
 
 /// Result of a single simulated transaction.
 #[derive(Debug, Serialize, Deserialize)]

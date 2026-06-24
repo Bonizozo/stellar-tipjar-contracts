@@ -19,7 +19,7 @@ use soroban_sdk::{
     testutils::{Address as _, Ledger as _},
     token, Address, Env, Map, String,
 };
-use tipjar::{BatchTip, TipJarContract, TipJarContractClient};
+use tipjar_legacy::{BatchTip, TipJarContract, TipJarContractClient};
 
 // ── shared setup ─────────────────────────────────────────────────────────────
 

@@ -25,5 +25,5 @@ path = "tests/estimate.rs"
 
 [dev-dependencies]
 soroban-sdk = { version = "22.0.0", features = ["testutils"] }
-tipjar = { path = "../../contracts/tipjar" }
+tipjar-legacy = { path = "../../contracts/tipjar-legacy" }
 chrono = { version = "0.4", features = ["serde"] }

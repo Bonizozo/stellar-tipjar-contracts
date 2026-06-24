@@ -3,7 +3,7 @@
 extern crate std;
 
 use soroban_sdk::{testutils::Address as _, Address, Env};
-use tipjar::{market_making::MakerStatus, TipJarContract, TipJarContractClient};
+use tipjar_legacy::{market_making::MakerStatus, TipJarContract, TipJarContractClient};
 
 fn setup() -> (
     Env,
