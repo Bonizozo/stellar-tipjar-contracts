@@ -1,7 +1,8 @@
 {
   "name": "@tipjar/contract-client",
   "version": "0.1.0",
-  "description": "Frontend contract client for Stellar TipJar with generated TypeScript bindings.",
+  "description": "Frontend contract client for the Stellar TipJar contract, wrapping the generated TypeScript bindings.",
+  "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "files": ["dist"],
@@ -11,9 +12,10 @@
     "prepublishOnly": "npm run build"
   },
   "dependencies": {
-    "@stellar/stellar-sdk": "^12.0.0"
+    "@stellar/stellar-sdk": "^14.5.0",
+    "buffer": "6.0.3"
   },
   "devDependencies": {
-    "typescript": "^5.0.0"
+    "typescript": "^5.6.2"
   }
 }

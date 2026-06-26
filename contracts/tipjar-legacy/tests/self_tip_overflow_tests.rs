@@ -3,7 +3,7 @@
 extern crate std;
 
 use soroban_sdk::{testutils::Address as _, token, Address, Env};
-use tipjar::{DataKey, TipJarContract, TipJarContractClient, TipJarError};
+use tipjar_legacy::{DataKey, TipJarContract, TipJarContractClient, TipJarError};
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 

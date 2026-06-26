@@ -25,7 +25,7 @@ use soroban_sdk::{
     testutils::{Address as _, Ledger as _},
     token, Address, Env, Vec as SorobanVec,
 };
-use tipjar::{TipJarContract, TipJarContractClient, TipRecipient};
+use tipjar_legacy::{TipJarContract, TipJarContractClient, TipRecipient};
 
 // ── Shared setup ──────────────────────────────────────────────────────────────
 
@@ -254,8 +254,8 @@ fn measure_get_leaderboard_1() -> GasEstimate {
 
     env.budget().reset_default();
     client.get_leaderboard(
-        &tipjar::TimePeriod::AllTime,
-        &tipjar::ParticipantKind::Creator,
+        &tipjar_legacy::TimePeriod::AllTime,
+        &tipjar_legacy::ParticipantKind::Creator,
         &10u32,
     );
     let cpu = env.budget().cpu_instruction_cost();
@@ -276,8 +276,8 @@ fn measure_get_leaderboard_10() -> GasEstimate {
 
     env.budget().reset_default();
     client.get_leaderboard(
-        &tipjar::TimePeriod::AllTime,
-        &tipjar::ParticipantKind::Creator,
+        &tipjar_legacy::TimePeriod::AllTime,
+        &tipjar_legacy::ParticipantKind::Creator,
         &10u32,
     );
     let cpu = env.budget().cpu_instruction_cost();
@@ -322,7 +322,7 @@ fn measure_execute_subscription_payment_warm() -> GasEstimate {
 // ── Conditional tip ───────────────────────────────────────────────────────────
 
 fn measure_execute_conditional_tip_cold() -> GasEstimate {
-    use tipjar::conditions::types::Condition;
+    use tipjar_legacy::conditions::types::Condition;
     let (env, contract_id, token_id, _) = setup();
     let client = TipJarContractClient::new(&env, &contract_id);
     let sender = Address::generate(&env);

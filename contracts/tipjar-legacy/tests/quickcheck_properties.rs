@@ -1,6 +1,6 @@
 use quickcheck::{quickcheck, TestResult};
 use soroban_sdk::{testutils::Address as _, token, Address, Env};
-use tipjar::{TipJarContract, TipJarContractClient};
+use tipjar_legacy::{TipJarContract, TipJarContractClient};
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 

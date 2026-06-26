@@ -6,8 +6,8 @@
 use soroban_sdk::{contract, contractimpl, Address, Env};
 
 // These would be imported from tipjar crate in real usage
-// use tipjar::lending::{pool, loan, PoolId};
-// use tipjar::TipJarError;
+// use tipjar_legacy::lending::{pool, loan, PoolId};
+// use tipjar_legacy::TipJarError;
 
 /// Example lending application contract
 #[contract]

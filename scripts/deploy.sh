@@ -1,76 +1,118 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Automated deployment pipeline for contracts
-# Features: Multi-environment support, compilation, deployment, history tracking, verification, fallback/rollback, notifications.
+# Builds, optimizes, and deploys the `tipjar` contract to a Stellar network
+# (testnet by default), then records the resulting contract ID in
+# deployment/config.json.
+#
+# Usage:
+#   scripts/deploy.sh [token_address]
+#
+# Overridable env vars:
+#   NETWORK_NAME        Key under deployment/config.json to write to (default: testnet)
+#   RPC_URL              Soroban RPC endpoint (default: testnet RPC)
+#   NETWORK_PASSPHRASE   Network passphrase (default: testnet passphrase)
+#   DEPLOYER_IDENTITY    Name of the `stellar keys` identity used to deploy (default: tipjar-deployer)
+#   TOKEN_ADDRESS        SEP-41 token contract address to pass to `init` (or pass as $1)
 
-ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-CONTRACT_DIR="$ROOT_DIR/contracts/tipjar"
-HISTORY_FILE="$ROOT_DIR/deployments.json"
+NETWORK_NAME="${NETWORK_NAME:-testnet}"
+RPC_URL="${RPC_URL:-https://soroban-testnet.stellar.org}"
+NETWORK_PASSPHRASE="${NETWORK_PASSPHRASE:-Test SDF Network ; September 2015}"
+DEPLOYER_IDENTITY="${DEPLOYER_IDENTITY:-tipjar-deployer}"
+TOKEN_ADDRESS="${TOKEN_ADDRESS:-${1:-}}"
 
-NETWORK="${1:-testnet}"
-SOURCE_ACCOUNT="${2:-alice}"
-WEBHOOK_URL="${WEBHOOK_URL:-}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+CONFIG_FILE="$REPO_ROOT/deployment/config.json"
 
-echo "[Deploy] Target Network: $NETWORK"
-echo "[Deploy] Source Account: $SOURCE_ACCOUNT"
+log() { echo "[deploy] $*"; }
 
-if [ ! -f "$HISTORY_FILE" ]; then
-  echo "{}" > "$HISTORY_FILE"
-fi
+log "Network:    $NETWORK_NAME"
+log "RPC URL:    $RPC_URL"
+log "Passphrase: $NETWORK_PASSPHRASE"
 
-cd "$CONTRACT_DIR"
+log "Step 1/6: Building tipjar for wasm32v1-none (release)..."
+cargo build -p tipjar --target wasm32v1-none --release --manifest-path "$REPO_ROOT/Cargo.toml"
 
-echo "[Deploy] Automating contract compilation..."
-stellar contract build
-
-WASM_PATH="target/wasm32-unknown-unknown/release/stellar_tipjar.wasm"
-if [ ! -f "$WASM_PATH" ]; then
-    WASM_PATH="target/wasm32-unknown-unknown/release/tipjar.wasm"
-fi
-
-if [ ! -f "$WASM_PATH" ]; then
-    echo "Error: WASM file not found after build!"
-    exit 1
-fi
-
-echo "[Deploy] Deploying contract to $NETWORK..."
-CONTRACT_ID=$(stellar contract deploy --wasm "$WASM_PATH" --source "$SOURCE_ACCOUNT" --network "$NETWORK")
-
-if [ -z "$CONTRACT_ID" ]; then
-  echo "Error: Deployment failed."
+WASM_PATH="$REPO_ROOT/target/wasm32v1-none/release/tipjar.wasm"
+if [[ ! -f "$WASM_PATH" ]]; then
+  echo "[deploy] ERROR: expected wasm artifact not found at $WASM_PATH" >&2
   exit 1
 fi
 
-echo "[Deploy] Contract deployed successfully: $CONTRACT_ID"
-
-# Track history
-TIMESTAMP=$(date +"%Y-%m-%dT%H:%M:%SZ")
-# Backup old history for potential manual rollback reference
-if jq --version &> /dev/null; then
-  jq --arg net "$NETWORK" --arg id "$CONTRACT_ID" --arg ts "$TIMESTAMP" \
-    '.[$net][$ts] = $id | .[$net].current = $id | .[$net].previous = .[$net].current' "$HISTORY_FILE" > temp.json && mv temp.json "$HISTORY_FILE"
+log "Step 2/6: Optimizing wasm..."
+if stellar contract optimize --help >/dev/null 2>&1; then
+  stellar contract optimize --wasm "$WASM_PATH"
+  OPTIMIZED_PATH="${WASM_PATH%.wasm}.optimized.wasm"
+  if [[ -f "$OPTIMIZED_PATH" ]]; then
+    WASM_PATH="$OPTIMIZED_PATH"
+    log "Using optimized artifact: $WASM_PATH"
+  fi
 else
-  echo "$TIMESTAMP: $CONTRACT_ID ($NETWORK)" >> "${HISTORY_FILE}.log"
+  log "stellar contract optimize is not available in this CLI version, skipping"
 fi
 
-echo "[Deploy] History tracking updated."
+log "Step 3/6: Ensuring deployer identity '$DEPLOYER_IDENTITY' exists..."
+if stellar keys address "$DEPLOYER_IDENTITY" >/dev/null 2>&1; then
+  log "Identity '$DEPLOYER_IDENTITY' already exists"
+else
+  stellar keys generate "$DEPLOYER_IDENTITY"
+fi
+DEPLOYER_ADDRESS="$(stellar keys address "$DEPLOYER_IDENTITY")"
+log "Deployer address: $DEPLOYER_ADDRESS"
 
-# Verification / Validation
-echo "[Deploy] Verifying deployment..."
-# For example, we want to fetch the code or init it...
-# We will just verify we can see it via info if supported, or just trust the ID is valid.
-# (Add actual post-deployment validation steps here if specific initialization is required immediately)
-echo "[Deploy] Validation passed."
+log "Step 4/6: Funding deployer via friendbot (idempotent)..."
+stellar keys fund "$DEPLOYER_IDENTITY" \
+  --rpc-url "$RPC_URL" \
+  --network-passphrase "$NETWORK_PASSPHRASE" \
+  || log "Funding request failed or account already funded — continuing"
 
-# Notifications
-if [ -n "$WEBHOOK_URL" ]; then
-  echo "[Deploy] Sending notification..."
-  curl -H "Content-Type: application/json" -X POST \
-    -d "{\"content\": \"🚀 Stellar Tip Jar deployed to **$NETWORK**! Contract ID: \`$CONTRACT_ID\` (Timestamp: $TIMESTAMP)\"}" "$WEBHOOK_URL"
+log "Step 5/6: Deploying contract..."
+CONTRACT_ID="$(stellar contract deploy \
+  --wasm "$WASM_PATH" \
+  --source-account "$DEPLOYER_IDENTITY" \
+  --rpc-url "$RPC_URL" \
+  --network-passphrase "$NETWORK_PASSPHRASE")"
+log "Deployed contract ID: $CONTRACT_ID"
+
+log "Step 6/6: Recording contract ID in $CONFIG_FILE..."
+mkdir -p "$(dirname "$CONFIG_FILE")"
+if [[ ! -f "$CONFIG_FILE" ]]; then
+  echo '{"networks":{}}' > "$CONFIG_FILE"
 fi
 
-echo "[Deploy] Pipeline execution completed."
+TMP_FILE="$(mktemp)"
+jq \
+  --arg net "$NETWORK_NAME" \
+  --arg id "$CONTRACT_ID" \
+  --arg rpc "$RPC_URL" \
+  --arg pass "$NETWORK_PASSPHRASE" \
+  '.networks[$net] = {"rpc_url": $rpc, "network_passphrase": $pass, "active_contract_id": $id}' \
+  "$CONFIG_FILE" > "$TMP_FILE"
+mv "$TMP_FILE" "$CONFIG_FILE"
+log "Wrote networks.$NETWORK_NAME.active_contract_id (other networks left untouched)"
 
-# Instructions for Rollback
-echo "[Rollback Notes] If a rollback is needed, update the frontend or referencing proxy contract to point to the PREVIOUS address found in deployments.json."
+if [[ -n "$TOKEN_ADDRESS" ]]; then
+  log "Initializing contract with token $TOKEN_ADDRESS..."
+  stellar contract invoke \
+    --id "$CONTRACT_ID" \
+    --source-account "$DEPLOYER_IDENTITY" \
+    --rpc-url "$RPC_URL" \
+    --network-passphrase "$NETWORK_PASSPHRASE" \
+    -- init --token "$TOKEN_ADDRESS"
+  log "Contract initialized with token $TOKEN_ADDRESS"
+else
+  log "No token address supplied (set TOKEN_ADDRESS env var or pass as \$1). Initialize manually with:"
+  cat <<EOF
+
+  stellar contract invoke \\
+    --id $CONTRACT_ID \\
+    --source-account $DEPLOYER_IDENTITY \\
+    --rpc-url $RPC_URL \\
+    --network-passphrase "$NETWORK_PASSPHRASE" \\
+    -- init --token <TOKEN_CONTRACT_ADDRESS>
+
+EOF
+fi
+
+log "Done. Contract ID: $CONTRACT_ID"

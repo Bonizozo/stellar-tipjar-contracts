@@ -6,7 +6,7 @@ use soroban_sdk::{
     testutils::{Address as _, Ledger},
     Address, Env,
 };
-use tipjar::{TipJarContract, TipJarContractClient, TipJarError};
+use tipjar_legacy::{TipJarContract, TipJarContractClient, TipJarError};
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 

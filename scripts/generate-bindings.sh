@@ -1,29 +1,57 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Generates TypeScript client bindings for the `tipjar` contract and vendors
+# them into packages/contract-client/src/generated.ts.
+#
+# Usage:
+#   scripts/generate-bindings.sh [network]
+#
+# [network] defaults to "testnet" and must have an entry in
+# deployment/config.json (written by scripts/deploy.sh), unless CONTRACT_ID
+# is set explicitly.
+
 NETWORK="${1:-testnet}"
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-OUTPUT_DIR="$REPO_ROOT/packages/contract-client/src"
 CONFIG_FILE="$REPO_ROOT/deployment/config.json"
+PACKAGE_DIR="$REPO_ROOT/packages/contract-client"
+
+log() { echo "[bindings] $*"; }
 
 CONTRACT_ID="${CONTRACT_ID:-}"
 if [[ -z "$CONTRACT_ID" ]]; then
-  if [[ -f "$CONFIG_FILE" ]]; then
-    CONTRACT_ID="$(jq -r --arg net "$NETWORK" '.networks[$net].active_contract_id // empty' "$CONFIG_FILE")"
+  if [[ ! -f "$CONFIG_FILE" ]]; then
+    echo "[bindings] ERROR: $CONFIG_FILE not found. Run scripts/deploy.sh first, or set CONTRACT_ID." >&2
+    exit 1
   fi
+  CONTRACT_ID="$(jq -r --arg net "$NETWORK" '.networks[$net].active_contract_id // empty' "$CONFIG_FILE")"
 fi
 
 if [[ -z "$CONTRACT_ID" ]]; then
-  echo "ERROR: CONTRACT_ID is required. Set CONTRACT_ID env var or configure deployment/config.json." >&2
+  echo "[bindings] ERROR: no contract ID found for network '$NETWORK' in $CONFIG_FILE." >&2
+  echo "[bindings]        Deploy first with scripts/deploy.sh, or set CONTRACT_ID explicitly." >&2
   exit 1
 fi
 
-echo "[bindings] Generating TypeScript bindings for contract $CONTRACT_ID on $NETWORK"
+log "Network:     $NETWORK"
+log "Contract ID: $CONTRACT_ID"
 
+TMP_PARENT="$(mktemp -d)"
+trap 'rm -rf "$TMP_PARENT"' EXIT
+# --output-dir's basename must be a valid (lowercase) npm package name.
+TMP_DIR="$TMP_PARENT/bindings"
+
+log "Running stellar contract bindings typescript..."
 stellar contract bindings typescript \
-  --network "$NETWORK" \
   --contract-id "$CONTRACT_ID" \
-  --output-dir "$OUTPUT_DIR"
+  --network "$NETWORK" \
+  --output-dir "$TMP_DIR" \
+  --overwrite
 
-echo "[bindings] Bindings generated at $OUTPUT_DIR"
+mkdir -p "$PACKAGE_DIR/src"
+cp "$TMP_DIR/src/index.ts" "$PACKAGE_DIR/src/generated.ts"
+
+log "Wrote $PACKAGE_DIR/src/generated.ts"
+log "Run 'npm install && npm run build' in $PACKAGE_DIR to compile the package."

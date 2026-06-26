@@ -9,5 +9,5 @@ name = "tip_flow_test"
 path = "tip_flow_test.rs"
 
 [dev-dependencies]
-tipjar = { path = "../../contracts/tipjar" }
+tipjar-legacy = { path = "../../contracts/tipjar-legacy" }
 soroban-sdk = { version = "22.0.0", features = ["testutils"] }
