@@ -1323,8 +1323,6 @@ pub enum DataKey {
     RecoveryAttempts(Address),
     /// Global counter for recovery request IDs.
     RecoveryCounter,
-    /// Minimum tip amount in stroops (i128).
-    MinTipAmount,
 }
 
 /// Granular operation scopes that can be independently paused.
@@ -1475,8 +1473,6 @@ pub enum TipJarError {
     FeeBpsTooHigh = 290,
     /// No accumulated platform fees are available to withdraw.
     NoFeesToWithdraw = 291,
-    /// Tip amount is below the configured minimum.
-    BelowMinimumTip = 292,
 }
 
 impl From<CoreError> for TipJarError {
@@ -2367,9 +2363,6 @@ impl TipJarContract {
             .instance()
             .set(&DataKey::Fee(FeeKey::BasisPoints), &0u32);
         env.storage().instance().set(&DataKey::RefundWindow, &0u64);
-        env.storage()
-            .instance()
-            .set(&DataKey::MinTipAmount, &10_000i128);
 
         // Store semantic version string for on-chain queryability and upgrade tooling.
         let version_str = soroban_sdk::String::from_str(&env, CONTRACT_VERSION);
@@ -2457,35 +2450,6 @@ impl TipJarContract {
             .instance()
             .get(&DataKey::Fee(FeeKey::BasisPoints))
             .unwrap_or(0)
-    }
-
-    /// Returns the current minimum tip amount in stroops (defaults to `10_000`).
-    ///
-    /// Read-only: performs no state changes.
-    pub fn get_min_tip(env: Env) -> i128 {
-        env.storage()
-            .instance()
-            .get(&DataKey::MinTipAmount)
-            .unwrap_or(10_000)
-    }
-
-    /// Sets the minimum tip amount in stroops. Admin only.
-    ///
-    /// Tips below this threshold are rejected with [`TipJarError::BelowMinimumTip`].
-    /// Emits `("min_tip",)` with data `amount`.
-    pub fn set_min_tip(env: Env, admin: Address, amount: i128) {
-        admin.require_auth();
-        let stored_admin: Address = env.storage().instance().get(&DataKey::Admin).unwrap();
-        if admin != stored_admin {
-            panic_with_error!(&env, TipJarError::Unauthorized);
-        }
-        if amount <= 0 {
-            panic_with_error!(&env, TipJarError::InvalidAmount);
-        }
-        env.storage()
-            .instance()
-            .set(&DataKey::MinTipAmount, &amount);
-        env.events().publish((symbol_short!("min_tip"),), amount);
     }
 
     /// Returns the accumulated platform fee balance for `token` (defaults to `0`).
@@ -3054,14 +3018,6 @@ impl TipJarContract {
         sender.require_auth();
         if amount <= 0 {
             panic_with_error!(&env, TipJarError::InvalidAmount);
-        }
-        let min_tip: i128 = env
-            .storage()
-            .instance()
-            .get(&DataKey::MinTipAmount)
-            .unwrap_or(10_000);
-        if amount < min_tip {
-            panic_with_error!(&env, TipJarError::BelowMinimumTip);
         }
         // Enforce compliance / creator-preference access lists.
         access_lists::check_allowed(&env, &creator, &sender);
