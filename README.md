@@ -6,6 +6,13 @@ tokens are escrowed in the contract per creator; the contract tracks each
 creator's withdrawable balance and historical total, emits events on every
 tip and withdrawal, and lets creators withdraw their escrowed balance.
 
+## Related Repositories
+
+This contract is one part of the Stellar Tip Jar project:
+
+- [stellar-tipjar-backend](https://github.com/Bonizozo/stellar-tipjar-backend) — REST API that integrates with this contract on-chain
+- [stellar-tipjar-frontend](https://github.com/Bonizozo/stellar-tipjar-frontend) — Next.js web app for creators and supporters
+
 ## Repository Structure
 
 ```text
