@@ -167,11 +167,15 @@ fn parse_tip_message(event: &RawContractEvent) -> Result<Value, ParserError> {
 fn parse_withdraw(event: &RawContractEvent) -> Result<Value, ParserError> {
     let creator = topic_value(event, 1, "creator")?;
     let token = topic_value(event, 2, "token")?;
+    let data = value_array(event, "withdraw")?;
+    if data.is_empty() {
+        return Err(payload_err("withdraw", "expected [amount]"));
+    }
 
     Ok(json!({
         "creator": creator,
         "token": token,
-        "amount": value_to_i128(&event.value),
+        "amount": value_to_i128(&data[0]),
     }))
 }
 

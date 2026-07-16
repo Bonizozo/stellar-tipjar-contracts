@@ -32,8 +32,8 @@ pub struct Tip {
     amount: i128,
 }
 
-/// Topics `("withdraw", creator)`, data `amount`.
-#[contractevent(data_format = "single-value")]
+/// Topics `("withdraw", creator)`, data `[amount]`.
+#[contractevent(data_format = "vec")]
 pub struct Withdraw {
     #[topic]
     creator: Address,
