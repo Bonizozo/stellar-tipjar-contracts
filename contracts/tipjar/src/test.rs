@@ -212,8 +212,9 @@ fn withdraw_emits_withdraw_event_with_creator_topic_and_amount_data() {
 
 #[cfg(test)]
 mod fixtures {
+    extern crate std;
     use super::*;
-    use soroban_sdk::{xdr::ToXdr, Address, Env, IntoVal, String as SorobanString};
+    use soroban_sdk::{xdr::ToXdr, testutils::Events, Address, Env, IntoVal, String as SorobanString};
     use std::{fs, path::PathBuf};
 
     #[test]
@@ -237,6 +238,7 @@ mod fixtures {
         client.withdraw(&creator);
 
         let events = env.events().all().filter_by_contract(&contract_id);
+        // soroban_sdk::Vec requires get_unchecked or getting the item
         let tip_event = events.get(0).unwrap();
         let withdraw_event = events.get(1).unwrap();
 
@@ -254,13 +256,13 @@ mod fixtures {
 
     fn assert_fixture(name: &str, actual_xdr: &[u8]) {
         let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").unwrap();
-        let fixture_path = PathBuf::from(manifest_dir).join("tests").join("fixtures").join(format!("{}.xdr", name));
+        let fixture_path = PathBuf::from(manifest_dir).join("tests").join("fixtures").join(std::format!("{}.xdr", name));
 
         if std::env::var("UPDATE_FIXTURES").is_ok() {
             fs::create_dir_all(fixture_path.parent().unwrap()).unwrap();
             fs::write(&fixture_path, actual_xdr).unwrap();
         } else {
-            let expected_xdr = fs::read(&fixture_path).expect(&format!("Fixture missing: {:?}. Run with UPDATE_FIXTURES=1", fixture_path));
+            let expected_xdr = fs::read(&fixture_path).expect(&std::format!("Fixture missing: {:?}. Run with UPDATE_FIXTURES=1", fixture_path));
             assert_eq!(expected_xdr, actual_xdr, "Fixture {} mismatch! Run with UPDATE_FIXTURES=1 to update.", name);
         }
     }
