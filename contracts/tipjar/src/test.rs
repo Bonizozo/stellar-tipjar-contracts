@@ -214,56 +214,81 @@ fn withdraw_emits_withdraw_event_with_creator_topic_and_amount_data() {
 mod fixtures {
     extern crate std;
     use super::*;
-    use soroban_sdk::{xdr::ToXdr, testutils::Events, Address, Env, IntoVal, String as SorobanString};
+    use soroban_sdk::{testutils::Events, xdr::WriteXdr, Address, Env, IntoVal};
     use std::{fs, path::PathBuf};
 
     #[test]
     fn event_schema_golden_fixtures() {
         let env = Env::default();
         env.mock_all_auths();
-        
+
         let contract_id = env.register(TipJar, ());
         let client = TipJarClient::new(&env, &contract_id);
-        
+
         let token_admin = Address::generate(&env);
-        let token = env.register_stellar_asset_contract_v2(token_admin).address();
+        let token = env
+            .register_stellar_asset_contract_v2(token_admin)
+            .address();
         client.init(&token);
 
-        let creator = Address::from_string(&SorobanString::from_str(&env, "GBAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWH"));
-        let sender = Address::from_string(&SorobanString::from_str(&env, "GCAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWG"));
-        
+        let creator = Address::generate(&env);
+        let sender = Address::generate(&env);
+
         token::StellarAssetClient::new(&env, &token).mint(&sender, &1_000);
 
         client.tip(&sender, &creator, &250);
+        let events_after_tip = env.events().all().filter_by_contract(&contract_id);
+        let tip_event = events_after_tip.events().last().unwrap().clone();
+
         client.withdraw(&creator);
+        let events_after_withdraw = env.events().all().filter_by_contract(&contract_id);
+        let withdraw_event = events_after_withdraw.events().last().unwrap().clone();
 
-        let events = env.events().all().filter_by_contract(&contract_id);
-        // soroban_sdk::Vec requires get_unchecked or getting the item
-        let tip_event = events.get(0).unwrap();
-        let withdraw_event = events.get(1).unwrap();
+        let (tip_topics_val, tip_data_val) = match &tip_event.body {
+            soroban_sdk::xdr::ContractEventBody::V0(v0) => (&v0.topics, &v0.data),
+        };
+        let (withdraw_topics_val, withdraw_data_val) = match &withdraw_event.body {
+            soroban_sdk::xdr::ContractEventBody::V0(v0) => (&v0.topics, &v0.data),
+        };
 
-        let tip_topics_val: soroban_sdk::xdr::ScVec = tip_event.1.try_into_val(&env).unwrap();
-        let tip_data_val: soroban_sdk::xdr::ScVal = tip_event.2.try_into_val(&env).unwrap();
-
-        let withdraw_topics_val: soroban_sdk::xdr::ScVec = withdraw_event.1.try_into_val(&env).unwrap();
-        let withdraw_data_val: soroban_sdk::xdr::ScVal = withdraw_event.2.try_into_val(&env).unwrap();
-
-        assert_fixture("tip_topics", &tip_topics_val.to_xdr().unwrap());
-        assert_fixture("tip_data", &tip_data_val.to_xdr().unwrap());
-        assert_fixture("withdraw_topics", &withdraw_topics_val.to_xdr().unwrap());
-        assert_fixture("withdraw_data", &withdraw_data_val.to_xdr().unwrap());
+        assert_fixture(
+            "tip_topics",
+            &WriteXdr::to_xdr(tip_topics_val, soroban_sdk::xdr::Limits::none()).unwrap(),
+        );
+        assert_fixture(
+            "tip_data",
+            &WriteXdr::to_xdr(tip_data_val, soroban_sdk::xdr::Limits::none()).unwrap(),
+        );
+        assert_fixture(
+            "withdraw_topics",
+            &WriteXdr::to_xdr(withdraw_topics_val, soroban_sdk::xdr::Limits::none()).unwrap(),
+        );
+        assert_fixture(
+            "withdraw_data",
+            &WriteXdr::to_xdr(withdraw_data_val, soroban_sdk::xdr::Limits::none()).unwrap(),
+        );
     }
 
     fn assert_fixture(name: &str, actual_xdr: &[u8]) {
         let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").unwrap();
-        let fixture_path = PathBuf::from(manifest_dir).join("tests").join("fixtures").join(std::format!("{}.xdr", name));
+        let fixture_path = PathBuf::from(manifest_dir)
+            .join("tests")
+            .join("fixtures")
+            .join(std::format!("{}.xdr", name));
 
         if std::env::var("UPDATE_FIXTURES").is_ok() {
             fs::create_dir_all(fixture_path.parent().unwrap()).unwrap();
             fs::write(&fixture_path, actual_xdr).unwrap();
         } else {
-            let expected_xdr = fs::read(&fixture_path).expect(&std::format!("Fixture missing: {:?}. Run with UPDATE_FIXTURES=1", fixture_path));
-            assert_eq!(expected_xdr, actual_xdr, "Fixture {} mismatch! Run with UPDATE_FIXTURES=1 to update.", name);
+            let expected_xdr = fs::read(&fixture_path).expect(&std::format!(
+                "Fixture missing: {:?}. Run with UPDATE_FIXTURES=1",
+                fixture_path
+            ));
+            assert_eq!(
+                expected_xdr, actual_xdr,
+                "Fixture {} mismatch! Run with UPDATE_FIXTURES=1 to update.",
+                name
+            );
         }
     }
 }
