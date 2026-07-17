@@ -16,7 +16,51 @@ All data payloads are serialized in Soroban as arrays (using `data_format = "vec
 - **Data (Vec)**: `[amount: i128]`
 - **Semantics**: Emitted when a creator withdraws their tips. `amount` is the total withdrawn balance.
 
-*(Additional legacy events exist in `tipjar-legacy` and follow similar patterns.)*
+*(Note: The `Withdraw` event's data payload was recently normalized to use `data_format = "vec"` for trailing-field evolution. Legacy events did not use this format.)*
+
+## Legacy Events (TipJarLegacy)
+
+The following events are emitted by the `tipjar-legacy` contract and may not use the `data_format = "vec"` serialization pattern.
+
+### `tip_msg`
+Emitted when a tip is sent with an attached message via `tip_with_message`.
+- **Topics**: `["tip_msg", creator: Address]`
+- **Data**: `[sender: Address, amount: i128, message: String, metadata: Map<String, String>]`
+
+### `delegate`
+Emitted when a creator grants withdrawal authorization to a delegate.
+- **Topics**: `["delegate", creator: Address]`
+- **Data**: `[delegate: Address, max_amount: i128, expires_at: u64]`
+
+### `delegate_withdraw`
+Emitted when a delegate successfully withdraws on behalf of a creator.
+- **Topics**: `["del_wdr", creator: Address]`
+- **Data**: `[delegate: Address, amount: i128, token: Address]`
+
+### `delegate_revoked`
+Emitted when a creator revokes a delegation.
+- **Topics**: `["del_rev", creator: Address]`
+- **Data**: `[delegate: Address]`
+
+### `tip_expired`
+Emitted when an unclaimed time-locked tip is refunded after its expiration window.
+- **Topics**: `["tip_expired", creator: Address]`
+- **Data**: `[sender: Address, amount: i128, expires_at: u64, lock_id: u64]`
+
+### `stream_created`
+Emitted when a new continuous tip stream is initialized.
+- **Topics**: `["strm_new", stream_id: u64]`
+- **Data**: `[sender: Address, creator: Address, token: Address, total: i128, rate: i128]`
+
+### `claim_submitted`
+Emitted when an insurance claim is submitted.
+- **Topics**: `["clm_sub"]`
+- **Data**: `[claim_id: u64, creator: Address, token: Address, amount: i128]`
+
+### `claim_paid`
+Emitted when an insurance claim is successfully paid out.
+- **Topics**: `["clm_paid"]`
+- **Data**: `[claim_id: u64, amount: i128, creator: Address]`
 
 ## Versioning Convention for Evolution
 
