@@ -269,6 +269,7 @@ impl TipJarContract {
 
     /// Moves `amount` tokens from `sender` into contract escrow for `creator`.
     pub fn tip(env: Env, sender: Address, creator: Address, token: Address, amount: i128) {
+        // ──── CHECKS ────
         if Self::is_paused(&env) {
             panic!("Contract is paused");
         }
@@ -281,9 +282,7 @@ impl TipJarContract {
 
         sender.require_auth();
 
-        let token_client = token::Client::new(&env, &token);
-        token_client.transfer(&sender, &env.current_contract_address(), &amount);
-
+        // ──── EFFECTS ────
         let balance_key = DataKey::CreatorBalance(creator.clone(), token.clone());
         let total_key = DataKey::CreatorTotal(creator.clone(), token.clone());
         let storage = env.storage().persistent();
@@ -291,11 +290,11 @@ impl TipJarContract {
         let next_balance: i128 = storage.get(&balance_key).unwrap_or(0) + amount;
         let next_total: i128 = storage.get(&total_key).unwrap_or(0) + amount;
 
-        let balance_key = DataKey::CreatorBalance(creator.clone(), token.clone());
-        let total_key = DataKey::CreatorTotal(creator.clone(), token.clone());
-        let storage = env.storage().persistent();
+        // Update storage before calling external token contract
+        storage.set(&balance_key, &next_balance);
+        storage.set(&total_key, &next_total);
 
-        // Record the tip for refund tracking.
+        // Record the tip for refund tracking
         let tip_id = next_tip_id(&env);
         let record = TipRecord {
             id: tip_id,
@@ -309,14 +308,18 @@ impl TipJarContract {
         };
         env.storage().persistent().set(&DataKey::TipRecord(tip_id), &record);
 
+        update_leaderboard_aggregates(&env, &sender, &creator, amount);
+
+        // ──── INTERACTIONS ────
+        let token_client = token::Client::new(&env, &token);
+        token_client.transfer(&sender, &env.current_contract_address(), &amount);
+
         env.events()
             .publish((symbol_short!("tip"), creator.clone(), token), (sender.clone(), amount));
-
-        update_leaderboard_aggregates(&env, &sender, &creator, amount);
-        tip_id
     }
 
     /// Allows supporters to attach a note and metadata to a tip.
+    /// Enforces strict checks-effects-interactions ordering.
     pub fn tip_with_message(
         env: Env,
         sender: Address,
@@ -326,6 +329,7 @@ impl TipJarContract {
         message: String,
         metadata: Map<String, String>,
     ) {
+        // ──── CHECKS ────
         if Self::is_paused(&env) {
             panic!("Contract is paused");
         }
@@ -341,9 +345,7 @@ impl TipJarContract {
 
         sender.require_auth();
 
-        let token_client = token::Client::new(&env, &token);
-        token_client.transfer(&sender, &env.current_contract_address(), &amount);
-
+        // ──── EFFECTS ────
         let balance_key = DataKey::CreatorBalance(creator.clone(), token.clone());
         let total_key = DataKey::CreatorTotal(creator.clone(), token.clone());
         let msgs_key = DataKey::CreatorMessages(creator.clone());
@@ -367,7 +369,7 @@ impl TipJarContract {
         messages.push_back(payload);
         env.storage().persistent().set(&msgs_key, &messages);
 
-        // Record the tip for refund tracking.
+        // Record the tip for refund tracking
         let tip_id = next_tip_id(&env);
         let record = TipRecord {
             id: tip_id,
@@ -381,12 +383,16 @@ impl TipJarContract {
         };
         env.storage().persistent().set(&DataKey::TipRecord(tip_id), &record);
 
+        update_leaderboard_aggregates(&env, &sender, &creator, amount);
+
+        // ──── INTERACTIONS ────
+        let token_client = token::Client::new(&env, &token);
+        token_client.transfer(&sender, &env.current_contract_address(), &amount);
+
         env.events().publish(
             (symbol_short!("tip_msg"), creator.clone()),
             (sender.clone(), amount, message, metadata),
         );
-
-        update_leaderboard_aggregates(&env, &sender, &creator, amount);
     }
 
     /// Returns total historical tips for a creator for a specific token.
@@ -408,7 +414,9 @@ impl TipJarContract {
     }
 
     /// Allows creator to withdraw their accumulated escrowed tips for a specific token.
+    /// Enforces strict checks-effects-interactions ordering: validates, zeroes balance, then transfers.
     pub fn withdraw(env: Env, creator: Address, token: Address) {
+        // ──── CHECKS ────
         if Self::is_paused(&env) {
             panic!("Contract is paused");
         }
@@ -421,11 +429,16 @@ impl TipJarContract {
             panic_with_error!(&env, TipJarError::NothingToWithdraw);
         }
 
+        // ──── EFFECTS ────
+        // Zero the balance BEFORE calling the token contract (effects before interactions).
+        // Even if the token transfer panics, the balance is already zeroed, and Soroban's
+        // atomicity ensures the entire transaction rolls back, maintaining consistency.
+        env.storage().persistent().set(&key, &0i128);
+
+        // ──── INTERACTIONS ────
         let token_client = token::Client::new(&env, &token);
         let contract_address = env.current_contract_address();
-
         token_client.transfer(&contract_address, &creator, &amount);
-        env.storage().persistent().set(&key, &0i128);
 
         env.events()
             .publish((symbol_short!("withdraw"), creator, token), amount);
@@ -863,6 +876,7 @@ impl TipJarContract {
     ///
     /// Requires the caller to hold the `Creator` role.
     pub fn withdraw_locked(env: Env, creator: Address, tip_id: u64) {
+        // ──── CHECKS ────
         // 1. Pause guard
         if Self::is_paused(&env) {
             panic!("Contract is paused");
@@ -884,14 +898,16 @@ impl TipJarContract {
             panic_with_error!(&env, TipJarError::TipStillLocked);
         }
 
-        // 6. Transfer tokens from contract to creator
-        let token_client = token::Client::new(&env, &locked_tip.token);
-        token_client.transfer(&env.current_contract_address(), &creator, &locked_tip.amount);
-
-        // 7. Remove the record
+        // ──── EFFECTS ────
+        // 6. Remove the record BEFORE transfer (effects before interactions)
         env.storage()
             .persistent()
             .remove(&DataKey::LockedTip(creator.clone(), tip_id));
+
+        // ──── INTERACTIONS ────
+        // 7. Transfer tokens from contract to creator
+        let token_client = token::Client::new(&env, &locked_tip.token);
+        token_client.transfer(&env.current_contract_address(), &creator, &locked_tip.amount);
 
         // 8. Emit event
         env.events().publish(

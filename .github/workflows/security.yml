@@ -1,0 +1,110 @@
+name: Security Testing Suite
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+    paths:
+      - "contracts/**"
+      - "security/**"
+      - ".github/workflows/security.yml"
+  pull_request:
+    branches:
+      - main
+      - develop
+    paths:
+      - "contracts/**"
+      - "security/**"
+
+env:
+  RUST_BACKTRACE: 1
+
+jobs:
+  security-tests:
+    name: Run Security Test Suite
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - name: Cache cargo registry
+        uses: actions/cache@v3
+        with:
+          path: ~/.cargo/registry
+          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Cache cargo index
+        uses: actions/cache@v3
+        with:
+          path: ~/.cargo/git
+          key: ${{ runner.os }}-cargo-git-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Cache cargo build
+        uses: actions/cache@v3
+        with:
+          path: target
+          key: ${{ runner.os }}-cargo-build-target-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Run security tests
+        run: cargo test -p security -- --nocapture --test-threads=1
+
+      - name: Build TipJar contract (release)
+        run: cargo build -p tipjar --target wasm32-unknown-unknown --release
+
+      - name: Run TipJar unit tests
+        run: cargo test -p tipjar
+
+      - name: Check code formatting
+        run: cargo fmt -- --check
+
+      - name: Run clippy lints
+        run: cargo clippy --workspace -- -D warnings
+
+  build-wasm:
+    name: Verify WASM Compilation
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - name: Build adversarial token WASM
+        run: cargo build -p security --lib --target wasm32-unknown-unknown --release
+
+      - name: Build TipJar WASM
+        run: cargo build -p tipjar --target wasm32-unknown-unknown --release
+
+      - name: Verify WASM artifacts exist
+        run: |
+          test -f target/wasm32-unknown-unknown/release/tipjar.wasm || exit 1
+          echo "✅ TipJar WASM artifact generated"
+
+  threat-model-review:
+    name: Threat Model Documentation
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Verify threat model exists
+        run: |
+          test -f security/THREAT_MODEL.md || (echo "❌ THREAT_MODEL.md not found" && exit 1)
+          echo "✅ THREAT_MODEL.md present"
+
+      - name: Verify threat model contains required sections
+        run: |
+          grep -q "Trust Assumptions" security/THREAT_MODEL.md || (echo "❌ Missing 'Trust Assumptions'" && exit 1)
+          grep -q "Storage Invariants" security/THREAT_MODEL.md || (echo "❌ Missing 'Storage Invariants'" && exit 1)
+          grep -q "Checks-Effects-Interactions" security/THREAT_MODEL.md || (echo "❌ Missing 'Checks-Effects-Interactions'" && exit 1)
+          grep -q "Accepted Risks" security/THREAT_MODEL.md || (echo "❌ Missing 'Accepted Risks'" && exit 1)
+          echo "✅ All required sections present in THREAT_MODEL.md"

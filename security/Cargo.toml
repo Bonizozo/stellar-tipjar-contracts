@@ -1,0 +1,22 @@
+[package]
+name = "security"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+soroban-sdk = { version = "21.4", features = ["testutils"] }
+soroban-token-sdk = "21.4"
+
+[[bin]]
+name = "adversarial_token"
+path = "src/adversarial_token.rs"
+crate-type = ["cdylib"]
+
+[profile.release]
+opt-level = "z"
+strip = true
+lto = true
