@@ -71,18 +71,27 @@ export class TipJarContract {
   }
 
   /**
-   * Withdraw the full escrowed balance for a creator.
-   * @param creator - Stellar address of the creator.
-   * @returns WithdrawResult with transaction hash, creator, and withdrawn amount.
+   * Withdraw full or partial escrowed balance.
+   * @param caller - Address of the caller (creator or operator).
+   * @param creator - Address of the creator.
+   * @param to - Payout address (must match contract's configured payout address).
+   * @param amount - Optional partial amount to withdraw. Withdraws all if undefined.
+   * @returns WithdrawResult with transaction hash, creator, to, and withdrawn amount.
    * @throws TransactionFailedError if the transaction fails.
    * @example
-   * const result = await sdk.withdraw('G...');
+   * const result = await sdk.withdraw('G...', 'G...', 'G...');
    */
-  async withdraw(creator: string): Promise<WithdrawResult> {
+  async withdraw(caller: string, creator: string, to: string, amount?: bigint): Promise<WithdrawResult> {
     const balanceBefore = await this.getBalance(creator);
-    const op = this.contract.call('withdraw', nativeToScVal(creator, { type: 'address' }));
+    const amountVal = amount !== undefined ? nativeToScVal(amount, { type: 'i128' }) : xdr.ScVal.scvVoid();
+    const op = this.contract.call('withdraw', 
+        nativeToScVal(caller, { type: 'address' }),
+        nativeToScVal(creator, { type: 'address' }),
+        nativeToScVal(to, { type: 'address' }),
+        amountVal
+    );
     const txHash = await withRetry(() => this.buildAndSubmit(op));
-    return { txHash, creator, amount: balanceBefore };
+    return { txHash, creator, amount: amount ?? balanceBefore, to };
   }
 
   /**
@@ -122,7 +131,12 @@ export class TipJarContract {
     return withRetry(async () => {
       const result = await this.server.simulateTransaction(
         await this.buildReadTx(
-          this.contract.call('withdraw', nativeToScVal(creator, { type: 'address' })),
+          this.contract.call('withdraw', 
+            nativeToScVal(creator, { type: 'address' }),
+            nativeToScVal(creator, { type: 'address' }),
+            nativeToScVal(creator, { type: 'address' }),
+            xdr.ScVal.scvVoid()
+          ),
         ),
       );
       if (SorobanRpc.Api.isSimulationError(result)) {

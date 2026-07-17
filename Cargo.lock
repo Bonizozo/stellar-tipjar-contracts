@@ -4104,6 +4104,7 @@ dependencies = [
  "reqwest",
  "serde",
  "serde_json",
+ "soroban-sdk 22.0.11",
  "sqlx",
  "thiserror 2.0.18",
  "tokio",

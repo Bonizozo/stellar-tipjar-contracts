@@ -21,6 +21,11 @@ pub enum EventKind {
     MatchApplied,
     MatchCancelled,
     Upgraded,
+    PayoutChangeProposed,
+    PayoutChangeApplied,
+    PayoutChangeCancelled,
+    OperatorAuthorized,
+    OperatorRevoked,
     Unknown,
 }
 
@@ -116,6 +121,31 @@ pub fn parse_event(event: &RawContractEvent) -> Result<ParsedEvent, ParserError>
             topic: topic_symbol,
             fields: parse_upgraded(event)?,
         },
+        "payout_change_proposed" => ParsedEvent {
+            kind: EventKind::PayoutChangeProposed,
+            topic: topic_symbol,
+            fields: parse_payout_change_proposed(event)?,
+        },
+        "payout_change_applied" => ParsedEvent {
+            kind: EventKind::PayoutChangeApplied,
+            topic: topic_symbol,
+            fields: parse_payout_change_applied(event)?,
+        },
+        "payout_change_cancelled" => ParsedEvent {
+            kind: EventKind::PayoutChangeCancelled,
+            topic: topic_symbol,
+            fields: parse_payout_change_cancelled(event)?,
+        },
+        "operator_authorized" => ParsedEvent {
+            kind: EventKind::OperatorAuthorized,
+            topic: topic_symbol,
+            fields: parse_operator_authorized(event)?,
+        },
+        "operator_revoked" => ParsedEvent {
+            kind: EventKind::OperatorRevoked,
+            topic: topic_symbol,
+            fields: parse_operator_revoked(event)?,
+        },
         _ => ParsedEvent {
             kind: EventKind::Unknown,
             topic: topic_symbol,
@@ -166,12 +196,13 @@ fn parse_withdraw(event: &RawContractEvent) -> Result<Value, ParserError> {
     let creator = topic_value(event, 1, "creator")?;
     let data = value_array(event, "withdraw")?;
     if data.is_empty() {
-        return Err(payload_err("withdraw", "expected [amount]"));
+        return Err(payload_err("withdraw", "expected [amount, to]"));
     }
 
     Ok(json!({
         "creator": creator,
         "amount": value_to_i128(&data[0]),
+        "to": data.get(1).and_then(value_to_string).unwrap_or_else(|| creator.clone()),
     }))
 }
 
@@ -322,6 +353,71 @@ fn parse_upgraded(event: &RawContractEvent) -> Result<Value, ParserError> {
     Ok(json!({
         "admin": admin,
         "version": value_to_u64(&event.value),
+    }))
+}
+
+fn parse_payout_change_proposed(event: &RawContractEvent) -> Result<Value, ParserError> {
+    let creator = topic_value(event, 1, "creator")?;
+    let data = value_array(event, "payout_change_proposed")?;
+    if data.len() < 2 {
+        return Err(payload_err(
+            "payout_change_proposed",
+            "expected [new_payout, effective_ledger]",
+        ));
+    }
+    Ok(json!({
+        "creator": creator,
+        "new_payout": value_to_string(&data[0]).unwrap_or_else(|| data[0].to_string()),
+        "effective_ledger": value_to_u64(&data[1]),
+    }))
+}
+
+fn parse_payout_change_applied(event: &RawContractEvent) -> Result<Value, ParserError> {
+    let creator = topic_value(event, 1, "creator")?;
+    let data = value_array(event, "payout_change_applied")?;
+    if data.is_empty() {
+        return Err(payload_err(
+            "payout_change_applied",
+            "expected [new_payout]",
+        ));
+    }
+    Ok(json!({
+        "creator": creator,
+        "new_payout": value_to_string(&data[0]).unwrap_or_else(|| data[0].to_string()),
+    }))
+}
+
+fn parse_payout_change_cancelled(event: &RawContractEvent) -> Result<Value, ParserError> {
+    let creator = topic_value(event, 1, "creator")?;
+    Ok(json!({
+        "creator": creator,
+    }))
+}
+
+fn parse_operator_authorized(event: &RawContractEvent) -> Result<Value, ParserError> {
+    let creator = topic_value(event, 1, "creator")?;
+    let operator = topic_value(event, 2, "operator")?;
+    let data = value_array(event, "operator_authorized")?;
+    if data.len() < 2 {
+        return Err(payload_err(
+            "operator_authorized",
+            "expected [allowance, expiry_ledger]",
+        ));
+    }
+    Ok(json!({
+        "creator": creator,
+        "operator": operator,
+        "allowance": value_to_i128(&data[0]),
+        "expiry_ledger": value_to_u64(&data[1]),
+    }))
+}
+
+fn parse_operator_revoked(event: &RawContractEvent) -> Result<Value, ParserError> {
+    let creator = topic_value(event, 1, "creator")?;
+    let operator = topic_value(event, 2, "operator")?;
+    Ok(json!({
+        "creator": creator,
+        "operator": operator,
     }))
 }
 
@@ -506,6 +602,7 @@ mod tests {
 
         let parsed_tip = parse_event(&tip_event).unwrap();
         assert_eq!(parsed_tip.kind, EventKind::Tip);
+        println!("✅ Tip event reconstruction assertion passed! parsed: {:?}", parsed_tip);
 
         let withdraw_topics_bytes =
             fs::read("../contracts/tipjar/tests/fixtures/withdraw_topics.xdr").unwrap();
@@ -522,5 +619,6 @@ mod tests {
 
         let parsed_withdraw = parse_event(&withdraw_event).unwrap();
         assert_eq!(parsed_withdraw.kind, EventKind::Withdraw);
+        println!("✅ Withdraw event reconstruction assertion passed! parsed: {:?}", parsed_withdraw);
     }
 }
