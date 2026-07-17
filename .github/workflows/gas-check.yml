@@ -1,0 +1,47 @@
+name: Gas Regression Check
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+jobs:
+  gas-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+
+      # Run benchmarks on the current branch and save the report
+      - name: Profile gas (current)
+        run: bash scripts/profile-gas.sh
+
+      - name: Upload gas report
+        uses: actions/upload-artifact@v4
+        with:
+          name: gas-report-${{ github.sha }}
+          path: gas-report.json
+
+      # On PRs, fetch the baseline from main and compare
+      - name: Download baseline report (main)
+        if: github.event_name == 'pull_request'
+        uses: dawidd6/action-download-artifact@v3
+        with:
+          workflow: gas-check.yml
+          branch: main
+          name: gas-report-${{ github.event.pull_request.base.sha }}
+          path: baseline/
+        continue-on-error: true   # no baseline on first run
+
+      - name: Compare against baseline
+        if: github.event_name == 'pull_request' && hashFiles('baseline/gas-report.json') != ''
+        run: |
+          bash scripts/profile-gas.sh --baseline baseline/gas-report.json

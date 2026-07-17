@@ -1,0 +1,33 @@
+{
+  "title": "Stellar Soroban Contract Monitoring Dashboard",
+  "panels": [
+    {
+      "title": "Transaction Volume",
+      "type": "graph",
+      "targets": [
+        { "expr": "rate(soroban_contract_transactions_total[1m])" }
+      ]
+    },
+    {
+      "title": "Error Rate",
+      "type": "stat",
+      "targets": [
+        { "expr": "rate(soroban_contract_errors_total[5m]) / rate(soroban_contract_transactions_total[5m])" }
+      ]
+    },
+    {
+      "title": "Gas Usage (per txn)",
+      "type": "gauge",
+      "targets": [
+        { "expr": "soroban_contract_gas_used" }
+      ]
+    },
+    {
+      "title": "Total Activity Breakdown",
+      "type": "piechart",
+      "targets": [
+        { "expr": "sum by (action) (soroban_contract_events_total)" }
+      ]
+    }
+  ]
+}

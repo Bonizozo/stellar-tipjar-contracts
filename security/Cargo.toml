@@ -1,22 +1,18 @@
 [package]
-name = "security"
+name = "tipjar-security"
 version = "0.1.0"
 edition = "2021"
-publish = false
-
-[lib]
-crate-type = ["cdylib"]
 
 [dependencies]
-soroban-sdk = { version = "21.4", features = ["testutils"] }
-soroban-token-sdk = "21.4"
+anyhow = "1"
+chrono = { version = "0.4", features = ["serde"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "time", "sync"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["fmt", "env-filter"] }
+uuid = { version = "1", features = ["v4", "serde"] }
 
-[[bin]]
-name = "adversarial_token"
-path = "src/adversarial_token.rs"
-crate-type = ["cdylib"]
-
-[profile.release]
-opt-level = "z"
-strip = true
-lto = true
+[dev-dependencies]
+tokio = { version = "1", features = ["full"] }

@@ -6,10 +6,11 @@ license = "MIT"
 publish = false
 
 [lib]
-crate-type = ["cdylib", "rlib"]
+crate-type = ["cdylib"]
+doctest = false
 
 [dependencies]
-soroban-sdk = { workspace = true }
+soroban-sdk = "26.1.0"
 
 [dev-dependencies]
-soroban-sdk = { workspace = true, features = ["testutils"] }
+soroban-sdk = { version = "26.1.0", features = ["testutils"] }

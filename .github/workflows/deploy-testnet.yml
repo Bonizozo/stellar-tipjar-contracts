@@ -1,0 +1,47 @@
+name: Deploy to Testnet
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  deploy-testnet:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32v1-none
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+
+      - name: Run tests before deploy
+        run: cargo test -p tipjar
+
+      - name: Build WASM
+        run: cargo build -p tipjar --target wasm32v1-none --release
+
+      - name: Install Stellar CLI
+        run: cargo install --locked stellar-cli
+
+      - name: Deploy to testnet
+        env:
+          DEPLOYER_SECRET: ${{ secrets.DEPLOYER_SECRET }}
+        run: bash scripts/deploy_testnet.sh
+
+      - name: Upload WASM artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: tipjar-wasm-${{ github.sha }}
+          path: target/wasm32v1-none/release/tipjar.wasm
+
+      - name: Report deployment result
+        if: always()
+        run: |
+          echo "Deployment status: ${{ job.status }}"
+          echo "Commit: ${{ github.sha }}"
+          echo "Branch: ${{ github.ref_name }}"

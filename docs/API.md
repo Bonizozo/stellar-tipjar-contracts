@@ -277,3 +277,99 @@ Resumes normal contract operations after a pause. Admin-only.
 **Authorization** — `admin.require_auth()`
 
 **Errors** — Panics with `"Unauthorized"` if `admin` does not match the stored admin.
+
+---
+
+## Streaming Functions
+
+### `create_stream`
+
+```rust
+pub fn create_stream(
+    env: Env,
+    sender: Address,
+    creator: Address,
+    token: Address,
+    amount_per_second: i128,
+    duration_seconds: u64,
+) -> u64
+```
+
+Creates a new continuous tip stream. The total amount (`amount_per_second * duration_seconds`) is transferred from `sender` to the contract escrow immediately.
+
+**Authorization** — `sender.require_auth()`
+
+**Events Emitted**
+- `("strm_new", stream_id)` with data `(sender, creator, token, total_amount, rate)`
+
+---
+
+### `withdraw_streamed`
+
+```rust
+pub fn withdraw_streamed(env: Env, creator: Address, stream_id: u64)
+```
+
+Withdraws all tokens that have been "unlocked" by the stream's progression since the last withdrawal.
+
+**Authorization** — `creator.require_auth()`
+
+---
+
+## Insurance Functions
+
+### `insurance_contribute`
+
+```rust
+pub fn insurance_contribute(env: Env, creator: Address, token: Address, amount: i128)
+```
+
+Creator contributes tokens to the insurance pool to gain coverage for potential failed transactions.
+
+**Parameters**
+- `amount`: Must be between `min_contribution` and `max_contribution` configured in the pool.
+
+**Authorization** — `creator.require_auth()`
+
+---
+
+### `insurance_submit_claim`
+
+```rust
+pub fn insurance_submit_claim(
+    env: Env,
+    creator: Address,
+    token: Address,
+    amount: i128,
+    tx_hash: BytesN<32>,
+) -> u64
+```
+
+Submits a claim for insurance payout. Requires that the creator has sufficient coverage.
+
+**Authorization** — `creator.require_auth()`
+
+**Errors**
+| Error | Condition |
+|---|---|
+| `NoCoverage` | Creator has no active insurance contribution or earned coverage |
+| `ClaimCooldownActive` | Less than `claim_cooldown` seconds since last claim |
+| `TooManyActiveClaims` | Creator already has the maximum allowed number of pending claims |
+
+---
+
+### `insurance_process_claims_batch`
+
+```rust
+pub fn insurance_process_claims_batch(
+    env: Env,
+    admin: Address,
+    claim_ids: Vec<u64>,
+    action: String,
+)
+```
+
+Allows an admin to approve or pay multiple claims in a single transaction.
+
+**Parameters**
+- `action`: Either `"approve"` or `"pay"`.

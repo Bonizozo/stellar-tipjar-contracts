@@ -1,0 +1,20 @@
+[package]
+name = "tipjar-gas-tools"
+version = "0.1.0"
+edition = "2021"
+description = "Gas profiling and optimization tools for TipJar"
+
+[[bin]]
+name = "gas-profiler"
+path = "gas_profiler.rs"
+
+[[bin]]
+name = "gas-analyzer"
+path = "gas_analyzer.rs"
+
+[dependencies]
+anyhow = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+chrono = { version = "0.4", features = ["serde"] }
+clap = { version = "4", features = ["derive"] }

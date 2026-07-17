@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>TipJar Event Monitor</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: system-ui, sans-serif; background: #0f1117; color: #e2e8f0; min-height: 100vh; }
+    header { padding: 1rem 1.5rem; background: #1a1d27; border-bottom: 1px solid #2d3148;
+             display: flex; align-items: center; gap: 1rem; }
+    header h1 { font-size: 1.1rem; font-weight: 600; }
+    #status { font-size: 0.75rem; padding: 0.2rem 0.6rem; border-radius: 9999px;
+              background: #374151; color: #9ca3af; }
+    #status.connected { background: #064e3b; color: #6ee7b7; }
+    #status.error     { background: #7f1d1d; color: #fca5a5; }
+
+    .stats { display: flex; gap: 1rem; padding: 1rem 1.5rem; flex-wrap: wrap; }
+    .stat  { background: #1a1d27; border: 1px solid #2d3148; border-radius: 8px;
+             padding: 0.75rem 1.25rem; min-width: 130px; }
+    .stat-label { font-size: 0.7rem; color: #6b7280; text-transform: uppercase; letter-spacing: .05em; }
+    .stat-value { font-size: 1.5rem; font-weight: 700; margin-top: 0.2rem; }
+
+    .controls { padding: 0 1.5rem 0.75rem; display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center; }
+    .controls label { font-size: 0.8rem; color: #9ca3af; }
+    select, input[type=text] { background: #1a1d27; border: 1px solid #2d3148; color: #e2e8f0;
+                                border-radius: 6px; padding: 0.3rem 0.6rem; font-size: 0.8rem; }
+    button { background: #3b4fd8; color: #fff; border: none; border-radius: 6px;
+             padding: 0.35rem 0.9rem; font-size: 0.8rem; cursor: pointer; }
+    button:hover { background: #4f63e8; }
+    button.danger { background: #7f1d1d; }
+    button.danger:hover { background: #991b1b; }
+
+    #event-list { padding: 0 1.5rem 1.5rem; display: flex; flex-direction: column; gap: 0.4rem; }
+    .event-row { background: #1a1d27; border: 1px solid #2d3148; border-radius: 8px;
+                 padding: 0.6rem 1rem; font-size: 0.8rem; display: grid;
+                 grid-template-columns: 80px 100px 1fr 1fr auto; gap: 0.5rem; align-items: center; }
+    .event-row.new { animation: flash 0.6s ease; }
+    @keyframes flash { from { border-color: #6366f1; } to { border-color: #2d3148; } }
+    .badge { display: inline-block; padding: 0.15rem 0.5rem; border-radius: 9999px;
+             font-size: 0.7rem; font-weight: 600; }
+    .badge-tip      { background: #1e3a5f; color: #93c5fd; }
+    .badge-withdraw { background: #1a3a2a; color: #6ee7b7; }
+    .badge-fee      { background: #3b2a1a; color: #fcd34d; }
+    .badge-other    { background: #2d2d3a; color: #a5b4fc; }
+    .mono { font-family: monospace; font-size: 0.75rem; color: #94a3b8; }
+    .amount { font-weight: 600; color: #f0abfc; }
+    details summary { cursor: pointer; color: #6b7280; font-size: 0.7rem; }
+    pre { margin-top: 0.4rem; background: #0f1117; padding: 0.5rem; border-radius: 4px;
+          overflow-x: auto; font-size: 0.7rem; color: #94a3b8; white-space: pre-wrap; }
+    #empty { text-align: center; color: #4b5563; padding: 3rem; font-size: 0.9rem; }
+  </style>
+</head>
+<body>
+<header>
+  <h1>⚡ TipJar Event Monitor</h1>
+  <span id="status">disconnected</span>
+</header>
+
+<div class="stats">
+  <div class="stat"><div class="stat-label">Total events</div><div class="stat-value" id="s-total">0</div></div>
+  <div class="stat"><div class="stat-label">Tips</div><div class="stat-value" id="s-tips">0</div></div>
+  <div class="stat"><div class="stat-label">Withdrawals</div><div class="stat-value" id="s-withdrawals">0</div></div>
+  <div class="stat"><div class="stat-label">Fees collected</div><div class="stat-value" id="s-fees">0</div></div>
+  <div class="stat"><div class="stat-label">Errors</div><div class="stat-value" id="s-errors">0</div></div>
+</div>
+
+<div class="controls">
+  <label>Filter topic:</label>
+  <select id="filter-topic">
+    <option value="">All</option>
+    <option value="tip">tip</option>
+    <option value="withdraw">withdraw</option>
+    <option value="fee">fee</option>
+    <option value="tip_msg">tip_msg</option>
+    <option value="tip_locked">tip_locked</option>
+    <option value="withdraw_locked">withdraw_locked</option>
+  </select>
+  <label>Creator:</label>
+  <input type="text" id="filter-creator" placeholder="G..." style="width:220px" />
+  <button onclick="applyFilter()">Apply</button>
+  <button class="danger" onclick="clearEvents()">Clear</button>
+  <button onclick="replayEvents()">↺ Replay</button>
+</div>
+
+<div id="event-list"><div id="empty">Waiting for events…</div></div>
+
+<script>
+  const API_BASE = window.location.origin + '/api';
+  const MAX_ROWS = 200;
+
+  let allEvents = [];
+  let filter = { topic: '', creator: '' };
+  let counts = { total: 0, tips: 0, withdrawals: 0, fees: 0, errors: 0 };
+  let es = null;
+
+  function connect() {
+    if (es) es.close();
+    es = new EventSource(`${API_BASE}/events/stream`);
+    es.addEventListener('contract_event', e => {
+      try { handleEvent(JSON.parse(e.data)); } catch (_) { counts.errors++; render(); }
+    });
+    es.onopen  = () => setStatus('connected');
+    es.onerror = () => { setStatus('error'); setTimeout(connect, 3000); };
+  }
+
+  function handleEvent(ev) {
+    allEvents.unshift(ev);
+    if (allEvents.length > MAX_ROWS * 2) allEvents.length = MAX_ROWS * 2;
+    counts.total++;
+    const t = ev.topic || '';
+    if (t === 'tip' || t === 'tip_msg') counts.tips++;
+    else if (t === 'withdraw' || t === 'withdraw_locked') counts.withdrawals++;
+    else if (t === 'fee') counts.fees++;
+    render();
+  }
+
+  function render() {
+    document.getElementById('s-total').textContent       = counts.total;
+    document.getElementById('s-tips').textContent        = counts.tips;
+    document.getElementById('s-withdrawals').textContent = counts.withdrawals;
+    document.getElementById('s-fees').textContent        = counts.fees;
+    document.getElementById('s-errors').textContent      = counts.errors;
+
+    const visible = allEvents.filter(ev => {
+      if (filter.topic && ev.topic !== filter.topic) return false;
+      if (filter.creator) {
+        const f = ev.parsed_data?.fields;
+        if (!f?.creator?.includes(filter.creator)) return false;
+      }
+      return true;
+    }).slice(0, MAX_ROWS);
+
+    const list = document.getElementById('event-list');
+    if (visible.length === 0) {
+      list.innerHTML = '<div id="empty">No events match the current filter.</div>';
+      return;
+    }
+
+    list.innerHTML = visible.map((ev, i) => {
+      const topic   = ev.topic || 'unknown';
+      const fields  = ev.parsed_data?.fields || {};
+      const amount  = fields.amount ?? '';
+      const creator = shorten(fields.creator || '');
+      const sender  = shorten(fields.sender  || '');
+      const ledger  = ev.ledger ?? '';
+      const badgeClass = topic.startsWith('tip') ? 'badge-tip'
+                       : topic.startsWith('withdraw') ? 'badge-withdraw'
+                       : topic === 'fee' ? 'badge-fee' : 'badge-other';
+      return `
+        <div class="event-row${i === 0 ? ' new' : ''}">
+          <span class="badge ${badgeClass}">${esc(topic)}</span>
+          <span class="mono">#${esc(String(ledger))}</span>
+          <span class="mono">${esc(creator)}</span>
+          <span class="amount">${esc(String(amount))}</span>
+          <details><summary>raw</summary><pre>${esc(JSON.stringify(ev, null, 2))}</pre></details>
+        </div>`;
+    }).join('');
+  }
+
+  function applyFilter() {
+    filter.topic   = document.getElementById('filter-topic').value;
+    filter.creator = document.getElementById('filter-creator').value.trim();
+    render();
+  }
+
+  function clearEvents() { allEvents = []; counts = { total:0, tips:0, withdrawals:0, fees:0, errors:0 }; render(); }
+
+  async function replayEvents() {
+    try {
+      const res = await fetch(`${API_BASE}/events/replay`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ persist_cursor: false }),
+      });
+      const summary = await res.json();
+      alert(`Replay complete: ${summary.indexed_events} indexed, ${summary.failed_events} failed`);
+    } catch (e) { alert('Replay failed: ' + e.message); }
+  }
+
+  function setStatus(s) {
+    const el = document.getElementById('status');
+    el.textContent = s; el.className = s;
+  }
+
+  function shorten(addr) {
+    return addr.length > 12 ? addr.slice(0, 6) + '…' + addr.slice(-4) : addr;
+  }
+
+  function esc(s) {
+    return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+
+  connect();
+</script>
+</body>
+</html>

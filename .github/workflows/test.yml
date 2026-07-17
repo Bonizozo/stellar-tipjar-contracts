@@ -1,0 +1,80 @@
+name: Contract Tests
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: ["**"]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32v1-none
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+
+      - name: Build contract (WASM)
+        run: cargo build -p tipjar --target wasm32v1-none --release
+
+      - name: Run unit & integration tests
+        run: cargo test -p tipjar -- --test-threads=4
+
+      - name: Run quickcheck property tests
+        run: cargo test -p tipjar --test quickcheck_properties
+
+      - name: Run integration test suite
+        run: cargo test -p tipjar-integration-tests
+
+      - name: Install cargo-tarpaulin
+        run: cargo install cargo-tarpaulin --locked
+
+      - name: Generate coverage report
+        run: >
+          cargo tarpaulin -p tipjar
+          --out Xml --output-dir coverage/
+          --exclude-files "*/benches/*"
+          --timeout 120
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          files: coverage/cobertura.xml
+          fail_ci_if_error: false
+
+      - name: Upload coverage artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-${{ github.sha }}
+          path: coverage/
+
+  benchmarks:
+    runs-on: ubuntu-latest
+    # Only run benchmarks on pushes to main to avoid noise on every PR.
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+
+      - name: Run gas benchmarks
+        run: cargo test -p tipjar --test gas_benchmarks -- --nocapture
+
+      - name: Upload benchmark results
+        uses: actions/upload-artifact@v4
+        with:
+          name: bench-${{ github.sha }}
+          path: gas-report.json
+        if: always()
