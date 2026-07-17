@@ -36,6 +36,7 @@ struct Config {
     start_ledger: Option<u64>,
     end_ledger: Option<u64>,
     replay_mode: bool,
+    persist_cursor: bool,
     page_size: usize,
 }
 
@@ -71,7 +72,12 @@ impl Config {
 
         let replay_mode = env::var("INDEXER_REPLAY_MODE")
             .map(|v| v == "true" || v == "1")
-            .unwrap_or(false) || end_ledger.is_some();
+            .unwrap_or(false)
+            || end_ledger.is_some();
+
+        let persist_cursor = env::var("INDEXER_PERSIST_CURSOR")
+            .map(|v| v == "true" || v == "1")
+            .unwrap_or(false);
 
         let page_size = env::var("INDEXER_PAGE_SIZE")
             .ok()
@@ -88,6 +94,7 @@ impl Config {
             start_ledger,
             end_ledger,
             replay_mode,
+            persist_cursor,
             page_size,
         })
     }
@@ -127,12 +134,14 @@ async fn main() -> Result<()> {
     ));
 
     if cfg.replay_mode {
-        let summary = listener.replay(crate::event_listener::ReplayRequest {
-            from_cursor: None,
-            from_ledger: cfg.start_ledger,
-            to_ledger: cfg.end_ledger,
-            persist_cursor: Some(env::var("INDEXER_PERSIST_CURSOR").map(|v| v == "true" || v == "1").unwrap_or(false)),
-        }).await?;
+        let summary = listener
+            .replay(crate::event_listener::ReplayRequest {
+                from_cursor: None,
+                from_ledger: cfg.start_ledger,
+                to_ledger: cfg.end_ledger,
+                persist_cursor: Some(cfg.persist_cursor),
+            })
+            .await?;
         info!(?summary, "replay mode complete");
         return Ok(());
     }
