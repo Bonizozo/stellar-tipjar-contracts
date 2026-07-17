@@ -373,6 +373,7 @@ impl EventListener {
         let mut indexed = 0usize;
         let mut failed = 0usize;
         let mut latest_ledger_seen = None;
+        let mut pages_processed = 0usize;
 
         loop {
             let page = self
@@ -391,6 +392,17 @@ impl EventListener {
                 info!(
                     latest_ledger = latest,
                     "latest ledger observed during replay"
+                );
+            }
+
+            pages_processed += 1;
+            if pages_processed % 10 == 0 {
+                info!(
+                    indexed_events = indexed,
+                    failed_events = failed,
+                    pages_processed,
+                    latest_ledger_seen = latest_ledger_seen.unwrap_or(0),
+                    "replay progress"
                 );
             }
 

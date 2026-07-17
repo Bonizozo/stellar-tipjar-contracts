@@ -131,7 +131,6 @@ pub fn parse_event(event: &RawContractEvent) -> Result<ParsedEvent, ParserError>
 
 fn parse_tip(event: &RawContractEvent) -> Result<Value, ParserError> {
     let creator = topic_value(event, 1, "creator")?;
-    let token = topic_value(event, 2, "token")?;
     let data = value_array(event, "tip")?;
     if data.len() < 2 {
         return Err(payload_err("tip", "expected [sender, amount]"));
@@ -139,7 +138,6 @@ fn parse_tip(event: &RawContractEvent) -> Result<Value, ParserError> {
 
     Ok(json!({
         "creator": creator,
-        "token": token,
         "sender": value_to_string(&data[0]).unwrap_or_else(|| data[0].to_string()),
         "amount": value_to_i128(&data[1]),
     }))
@@ -166,12 +164,14 @@ fn parse_tip_message(event: &RawContractEvent) -> Result<Value, ParserError> {
 
 fn parse_withdraw(event: &RawContractEvent) -> Result<Value, ParserError> {
     let creator = topic_value(event, 1, "creator")?;
-    let token = topic_value(event, 2, "token")?;
+    let data = value_array(event, "withdraw")?;
+    if data.is_empty() {
+        return Err(payload_err("withdraw", "expected [amount]"));
+    }
 
     Ok(json!({
         "creator": creator,
-        "token": token,
-        "amount": value_to_i128(&event.value),
+        "amount": value_to_i128(&data[0]),
     }))
 }
 
@@ -462,5 +462,65 @@ mod tests {
         let parsed = parse_event(&e).expect("unknown topic should parse");
         assert_eq!(parsed.kind, EventKind::Unknown);
         assert_eq!(parsed.topic, "custom");
+    }
+
+    fn scval_to_value(val: &soroban_sdk::xdr::ScVal) -> Value {
+        use soroban_sdk::xdr::ScVal;
+        match val {
+            ScVal::Symbol(sym) => json!({"symbol": sym.to_string()}),
+            ScVal::Address(_) => {
+                json!({"address": "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWH"})
+            }
+            ScVal::I128(i) => {
+                let hi = i.hi as i128;
+                let lo = i.lo as u64 as i128; // avoid negative lo
+                                              // actually wait, lo is u64
+                                              // wait, Int128Parts hi is i64, lo is u64
+                                              // but let's just use string mapping
+                let num: i128 = (hi << 64) | lo;
+                json!({"i128": num.to_string()})
+            }
+            ScVal::Vec(Some(v)) => Value::Array(v.iter().map(scval_to_value).collect()),
+            _ => Value::Null,
+        }
+    }
+
+    #[test]
+    fn golden_xdr_roundtrip() {
+        use soroban_sdk::xdr::{Limits, ReadXdr, ScVal, ScVec};
+        use std::fs;
+
+        let tip_topics_bytes =
+            fs::read("../contracts/tipjar/tests/fixtures/tip_topics.xdr").unwrap();
+        let tip_data_bytes = fs::read("../contracts/tipjar/tests/fixtures/tip_data.xdr").unwrap();
+
+        let tip_topics =
+            ScVec::from_xdr(&tip_topics_bytes, Limits::none()).unwrap();
+        let tip_data =
+            ScVal::from_xdr(&tip_data_bytes, Limits::none()).unwrap();
+
+        let tip_event = event(
+            tip_topics.iter().map(scval_to_value).collect(),
+            scval_to_value(&tip_data),
+        );
+
+        let parsed_tip = parse_event(&tip_event).unwrap();
+        assert_eq!(parsed_tip.kind, EventKind::Tip);
+
+        let withdraw_topics_bytes =
+            fs::read("../contracts/tipjar/tests/fixtures/withdraw_topics.xdr").unwrap();
+        let withdraw_data_bytes =
+            fs::read("../contracts/tipjar/tests/fixtures/withdraw_data.xdr").unwrap();
+
+        let withdraw_topics = ScVec::from_xdr(&withdraw_topics_bytes, Limits::none()).unwrap();
+        let withdraw_data = ScVal::from_xdr(&withdraw_data_bytes, Limits::none()).unwrap();
+
+        let withdraw_event = event(
+            withdraw_topics.iter().map(scval_to_value).collect(),
+            scval_to_value(&withdraw_data),
+        );
+
+        let parsed_withdraw = parse_event(&withdraw_event).unwrap();
+        assert_eq!(parsed_withdraw.kind, EventKind::Withdraw);
     }
 }
