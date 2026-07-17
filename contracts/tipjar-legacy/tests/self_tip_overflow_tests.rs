@@ -64,10 +64,7 @@ fn test_self_tip_rejected() {
     let user = Address::generate(&ctx.env);
     ctx.mint(&user, 1_000);
     let result = ctx.client.try_tip(&user, &user, &ctx.token, &100);
-    assert_eq!(
-        result.err().unwrap().unwrap(),
-        TipJarError::SelfTip.into()
-    );
+    assert_eq!(result.err().unwrap().unwrap(), TipJarError::SelfTip.into());
 }
 
 #[test]

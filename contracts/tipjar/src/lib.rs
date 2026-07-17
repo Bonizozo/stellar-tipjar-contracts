@@ -183,7 +183,13 @@ impl TipJar {
     /// Pays out a creator's full or partial withdrawable balance.
     /// If caller is an operator, checks their allowance and expiry.
     /// Applies any matured payout address change before transferring.
-    pub fn withdraw(env: Env, caller: Address, creator: Address, to: Address, amount: Option<i128>) {
+    pub fn withdraw(
+        env: Env,
+        caller: Address,
+        creator: Address,
+        to: Address,
+        amount: Option<i128>,
+    ) {
         caller.require_auth();
 
         let balance_key = DataKey::CreatorBalance(creator.clone());
@@ -214,8 +220,14 @@ impl TipJar {
                     if new_allowance == 0 {
                         env.storage().persistent().remove(&operator_key);
                     } else {
-                        env.storage().persistent().set(&operator_key, &(new_allowance, expiry_ledger));
-                        env.storage().persistent().extend_ttl(&operator_key, LEDGER_THRESHOLD, LEDGER_BUMP);
+                        env.storage()
+                            .persistent()
+                            .set(&operator_key, &(new_allowance, expiry_ledger));
+                        env.storage().persistent().extend_ttl(
+                            &operator_key,
+                            LEDGER_THRESHOLD,
+                            LEDGER_BUMP,
+                        );
                     }
                 }
                 None => {
@@ -227,21 +239,34 @@ impl TipJar {
         // Apply pending payout address change if matured
         let pending_key = DataKey::PendingPayoutChange(creator.clone());
         let payout_key = DataKey::PayoutAddress(creator.clone());
-        if let Some((new_payout, effective_ledger)) = env.storage().persistent().get::<_, (Address, u32)>(&pending_key) {
+        if let Some((new_payout, effective_ledger)) = env
+            .storage()
+            .persistent()
+            .get::<_, (Address, u32)>(&pending_key)
+        {
             if env.ledger().sequence() >= effective_ledger {
                 env.storage().persistent().set(&payout_key, &new_payout);
-                env.storage().persistent().extend_ttl(&payout_key, LEDGER_THRESHOLD, LEDGER_BUMP);
+                env.storage()
+                    .persistent()
+                    .extend_ttl(&payout_key, LEDGER_THRESHOLD, LEDGER_BUMP);
                 env.storage().persistent().remove(&pending_key);
                 PayoutChangeApplied {
                     creator: creator.clone(),
                     new_payout,
-                }.publish(&env);
+                }
+                .publish(&env);
             }
         }
 
-        let payout_address: Address = env.storage().persistent().get(&payout_key).unwrap_or(creator.clone());
+        let payout_address: Address = env
+            .storage()
+            .persistent()
+            .get(&payout_key)
+            .unwrap_or(creator.clone());
         if env.storage().persistent().has(&payout_key) {
-            env.storage().persistent().extend_ttl(&payout_key, LEDGER_THRESHOLD, LEDGER_BUMP);
+            env.storage()
+                .persistent()
+                .extend_ttl(&payout_key, LEDGER_THRESHOLD, LEDGER_BUMP);
         }
 
         if to != payout_address {
@@ -278,9 +303,15 @@ impl TipJar {
         creator.require_auth();
         let effective_ledger = env.ledger().sequence() + PAYOUT_DELAY_LEDGERS;
         let key = DataKey::PendingPayoutChange(creator.clone());
-        env.storage().persistent().set(&key, &(payout.clone(), effective_ledger));
-        env.storage().persistent().extend_ttl(&key, LEDGER_THRESHOLD, LEDGER_BUMP);
-        env.storage().instance().extend_ttl(LEDGER_THRESHOLD, LEDGER_BUMP);
+        env.storage()
+            .persistent()
+            .set(&key, &(payout.clone(), effective_ledger));
+        env.storage()
+            .persistent()
+            .extend_ttl(&key, LEDGER_THRESHOLD, LEDGER_BUMP);
+        env.storage()
+            .instance()
+            .extend_ttl(LEDGER_THRESHOLD, LEDGER_BUMP);
         PayoutChangeProposed {
             creator,
             new_payout: payout,
@@ -314,7 +345,9 @@ impl TipJar {
         env.storage()
             .persistent()
             .extend_ttl(&key, LEDGER_THRESHOLD, LEDGER_BUMP);
-        env.storage().instance().extend_ttl(LEDGER_THRESHOLD, LEDGER_BUMP);
+        env.storage()
+            .instance()
+            .extend_ttl(LEDGER_THRESHOLD, LEDGER_BUMP);
         OperatorAuthorized {
             creator,
             operator,

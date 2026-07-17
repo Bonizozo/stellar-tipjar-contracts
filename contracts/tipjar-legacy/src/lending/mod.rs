@@ -2,9 +2,9 @@
 
 use soroban_sdk::{contracttype, Address, Env};
 
-pub mod pool;
-pub mod loan;
 pub mod interest;
+pub mod loan;
+pub mod pool;
 
 /// Unique lending pool identifier.
 #[contracttype]

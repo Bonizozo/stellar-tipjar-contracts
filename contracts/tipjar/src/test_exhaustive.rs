@@ -17,7 +17,9 @@ impl Ctx {
         let env = Env::default();
         env.mock_all_auths();
         let token_admin = Address::generate(&env);
-        let token = env.register_stellar_asset_contract_v2(token_admin).address();
+        let token = env
+            .register_stellar_asset_contract_v2(token_admin)
+            .address();
         let contract_id = env.register(TipJar, ());
         let client = TipJarClient::new(&env, &contract_id);
         client.init(&token);
@@ -55,53 +57,79 @@ fn test_exhaustive_auth_matrix() {
 
     // Set payout address
     client.set_payout_address(&creator, &payout);
-    
+
     // Jump past delay
     ctx.env.ledger().with_mut(|li| li.sequence_number += 17280);
 
     // Matrix tests:
-    // {creator, operator-within-allowance, operator-over-allowance, operator-after-expiry, operator-after-revocation, stranger} 
+    // {creator, operator-within-allowance, operator-over-allowance, operator-after-expiry, operator-after-revocation, stranger}
     // × {withdraw-to-payout, attempt-withdraw-to-other-address}
 
-    client.authorize_operator(&creator, &operator, &500, &(ctx.env.ledger().sequence() + 100));
+    client.authorize_operator(
+        &creator,
+        &operator,
+        &500,
+        &(ctx.env.ledger().sequence() + 100),
+    );
 
     // 1. stranger
     assert_eq!(
-        client.try_withdraw(&stranger, &creator, &payout, &Some(10)).unwrap_err().unwrap(),
+        client
+            .try_withdraw(&stranger, &creator, &payout, &Some(10))
+            .unwrap_err()
+            .unwrap(),
         Error::InvalidOperator.into()
     );
     assert_eq!(
-        client.try_withdraw(&stranger, &creator, &other_address, &Some(10)).unwrap_err().unwrap(),
+        client
+            .try_withdraw(&stranger, &creator, &other_address, &Some(10))
+            .unwrap_err()
+            .unwrap(),
         Error::InvalidOperator.into()
     );
 
     // 2. operator-over-allowance
     assert_eq!(
-        client.try_withdraw(&operator, &creator, &payout, &Some(600)).unwrap_err().unwrap(),
+        client
+            .try_withdraw(&operator, &creator, &payout, &Some(600))
+            .unwrap_err()
+            .unwrap(),
         Error::InsufficientAllowance.into()
     );
     assert_eq!(
-        client.try_withdraw(&operator, &creator, &other_address, &Some(600)).unwrap_err().unwrap(),
+        client
+            .try_withdraw(&operator, &creator, &other_address, &Some(600))
+            .unwrap_err()
+            .unwrap(),
         Error::InsufficientAllowance.into()
     );
 
     // 3. operator-within-allowance but to other address
     assert_eq!(
-        client.try_withdraw(&operator, &creator, &other_address, &Some(100)).unwrap_err().unwrap(),
+        client
+            .try_withdraw(&operator, &creator, &other_address, &Some(100))
+            .unwrap_err()
+            .unwrap(),
         Error::InvalidTarget.into()
     );
 
     // 4. operator-within-allowance to payout
     client.withdraw(&operator, &creator, &payout, &Some(100)); // Success!
-    
+
     // 5. operator-after-expiry
     ctx.env.ledger().with_mut(|li| li.sequence_number += 101);
     assert_eq!(
-        client.try_withdraw(&operator, &creator, &payout, &Some(10)).unwrap_err().unwrap(),
+        client
+            .try_withdraw(&operator, &creator, &payout, &Some(10))
+            .unwrap_err()
+            .unwrap(),
         Error::OperatorExpired.into()
     );
     assert_eq!(
-        client.try_withdraw(&operator, &creator, &other_address, &Some(10)).unwrap_err().unwrap(),
+        client
+            .try_withdraw(&operator, &creator, &other_address, &Some(10))
+            .unwrap_err()
+            .unwrap(),
         Error::OperatorExpired.into()
     );
 
@@ -109,17 +137,26 @@ fn test_exhaustive_auth_matrix() {
     ctx.env.ledger().with_mut(|li| li.sequence_number -= 101); // Go back to not be expired
     client.revoke_operator(&creator, &operator);
     assert_eq!(
-        client.try_withdraw(&operator, &creator, &payout, &Some(10)).unwrap_err().unwrap(),
+        client
+            .try_withdraw(&operator, &creator, &payout, &Some(10))
+            .unwrap_err()
+            .unwrap(),
         Error::InvalidOperator.into()
     );
     assert_eq!(
-        client.try_withdraw(&operator, &creator, &other_address, &Some(10)).unwrap_err().unwrap(),
+        client
+            .try_withdraw(&operator, &creator, &other_address, &Some(10))
+            .unwrap_err()
+            .unwrap(),
         Error::InvalidOperator.into()
     );
 
     // 7. creator to other address
     assert_eq!(
-        client.try_withdraw(&creator, &creator, &other_address, &Some(10)).unwrap_err().unwrap(),
+        client
+            .try_withdraw(&creator, &creator, &other_address, &Some(10))
+            .unwrap_err()
+            .unwrap(),
         Error::InvalidTarget.into()
     );
 
@@ -140,7 +177,10 @@ fn test_payout_delay_and_cancellation() {
 
     // Before delay, old address (creator) is used
     client.withdraw(&creator, &creator, &creator, &Some(100));
-    assert_eq!(token::TokenClient::new(&ctx.env, &ctx.token).balance(&creator), 100);
+    assert_eq!(
+        token::TokenClient::new(&ctx.env, &ctx.token).balance(&creator),
+        100
+    );
 
     // Cancel payout change
     client.cancel_payout_address(&creator);
@@ -150,7 +190,10 @@ fn test_payout_delay_and_cancellation() {
 
     // It should still go to creator, since change was cancelled
     client.withdraw(&creator, &creator, &creator, &Some(100));
-    assert_eq!(token::TokenClient::new(&ctx.env, &ctx.token).balance(&creator), 200);
+    assert_eq!(
+        token::TokenClient::new(&ctx.env, &ctx.token).balance(&creator),
+        200
+    );
 
     // Set again and let it mature
     let new_payout = Address::generate(&ctx.env);
@@ -158,7 +201,10 @@ fn test_payout_delay_and_cancellation() {
     ctx.env.ledger().with_mut(|li| li.sequence_number += 17280);
 
     client.withdraw(&creator, &creator, &new_payout, &Some(100));
-    assert_eq!(token::TokenClient::new(&ctx.env, &ctx.token).balance(&new_payout), 100);
+    assert_eq!(
+        token::TokenClient::new(&ctx.env, &ctx.token).balance(&new_payout),
+        100
+    );
 }
 
 #[test]
@@ -174,12 +220,15 @@ fn test_partial_withdraw_edges() {
     client.withdraw(&creator, &creator, &creator, &Some(1));
     // amount == balance + 1
     assert_eq!(
-        client.try_withdraw(&creator, &creator, &creator, &Some(100)).unwrap_err().unwrap(),
+        client
+            .try_withdraw(&creator, &creator, &creator, &Some(100))
+            .unwrap_err()
+            .unwrap(),
         Error::InvalidAmount.into()
     );
     // amount == balance
     client.withdraw(&creator, &creator, &creator, &Some(99));
-    
+
     // Test repeated partials
     let creator2 = Address::generate(&ctx.env);
     let sender2 = ctx.fund(100);
@@ -187,9 +236,12 @@ fn test_partial_withdraw_edges() {
     client.withdraw(&creator2, &creator2, &creator2, &Some(20));
     client.withdraw(&creator2, &creator2, &creator2, &Some(30));
     client.withdraw(&creator2, &creator2, &creator2, &Some(50));
-    
+
     assert_eq!(
-        client.try_withdraw(&creator2, &creator2, &creator2, &Some(1)).unwrap_err().unwrap(),
+        client
+            .try_withdraw(&creator2, &creator2, &creator2, &Some(1))
+            .unwrap_err()
+            .unwrap(),
         Error::NothingToWithdraw.into()
     );
 }
@@ -209,7 +261,10 @@ fn test_ttl_resurrection_prevention() {
     let sender = ctx.fund(1000);
     client.tip(&sender, &creator, &1000);
     assert_eq!(
-        client.try_withdraw(&operator, &creator, &creator, &Some(10)).unwrap_err().unwrap(),
+        client
+            .try_withdraw(&operator, &creator, &creator, &Some(10))
+            .unwrap_err()
+            .unwrap(),
         Error::InvalidOperator.into()
     );
 }

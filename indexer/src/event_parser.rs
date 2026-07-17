@@ -590,10 +590,8 @@ mod tests {
             fs::read("../contracts/tipjar/tests/fixtures/tip_topics.xdr").unwrap();
         let tip_data_bytes = fs::read("../contracts/tipjar/tests/fixtures/tip_data.xdr").unwrap();
 
-        let tip_topics =
-            ScVec::from_xdr(&tip_topics_bytes, Limits::none()).unwrap();
-        let tip_data =
-            ScVal::from_xdr(&tip_data_bytes, Limits::none()).unwrap();
+        let tip_topics = ScVec::from_xdr(&tip_topics_bytes, Limits::none()).unwrap();
+        let tip_data = ScVal::from_xdr(&tip_data_bytes, Limits::none()).unwrap();
 
         let tip_event = event(
             tip_topics.iter().map(scval_to_value).collect(),
@@ -602,7 +600,10 @@ mod tests {
 
         let parsed_tip = parse_event(&tip_event).unwrap();
         assert_eq!(parsed_tip.kind, EventKind::Tip);
-        println!("✅ Tip event reconstruction assertion passed! parsed: {:?}", parsed_tip);
+        println!(
+            "✅ Tip event reconstruction assertion passed! parsed: {:?}",
+            parsed_tip
+        );
 
         let withdraw_topics_bytes =
             fs::read("../contracts/tipjar/tests/fixtures/withdraw_topics.xdr").unwrap();
@@ -619,6 +620,9 @@ mod tests {
 
         let parsed_withdraw = parse_event(&withdraw_event).unwrap();
         assert_eq!(parsed_withdraw.kind, EventKind::Withdraw);
-        println!("✅ Withdraw event reconstruction assertion passed! parsed: {:?}", parsed_withdraw);
+        println!(
+            "✅ Withdraw event reconstruction assertion passed! parsed: {:?}",
+            parsed_withdraw
+        );
     }
 }

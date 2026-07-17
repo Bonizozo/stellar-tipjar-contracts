@@ -15,8 +15,8 @@ pub enum RecoveryStatus {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Guardian {
     pub address: Address,
-    pub weight: u32,        // Voting weight (typically 1)
-    pub added_at: u64,      // Timestamp when added
+    pub weight: u32,          // Voting weight (typically 1)
+    pub added_at: u64,        // Timestamp when added
     pub revocation_time: u64, // Time when revocation becomes effective (0 = active)
 }
 
@@ -53,7 +53,7 @@ impl RecoveryConfig {
     pub fn default() -> Self {
         RecoveryConfig {
             approval_threshold: 66,
-            timelock_delay: 604800, // 7 days
+            timelock_delay: 604800,           // 7 days
             guardian_revocation_delay: 86400, // 1 day
         }
     }
@@ -64,11 +64,11 @@ pub fn init_recovery(env: &Env, creator: &Address) {
     let key = crate::DataKey::RecoveryGuardians(creator.clone());
     let guardians: Vec<Guardian> = Vec::new(env);
     env.storage().instance().set(&key, &guardians);
-    
+
     let attempts_key = crate::DataKey::RecoveryAttempts(creator.clone());
     let attempts: Vec<RecoveryAttempt> = Vec::new(env);
     env.storage().instance().set(&attempts_key, &attempts);
-    
+
     let counter_key = crate::DataKey::RecoveryCounter;
     env.storage().instance().set(&counter_key, &0u64);
 }
@@ -76,11 +76,7 @@ pub fn init_recovery(env: &Env, creator: &Address) {
 /// Add a guardian for account recovery
 pub fn add_guardian(env: &Env, creator: &Address, guardian: &Address, weight: u32) {
     let key = crate::DataKey::RecoveryGuardians(creator.clone());
-    let mut guardians: Vec<Guardian> = env
-        .storage()
-        .instance()
-        .get(&key)
-        .unwrap_or(Vec::new(env));
+    let mut guardians: Vec<Guardian> = env.storage().instance().get(&key).unwrap_or(Vec::new(env));
 
     // Check guardian not already exists (active)
     for g in guardians.iter() {
@@ -102,11 +98,7 @@ pub fn add_guardian(env: &Env, creator: &Address, guardian: &Address, weight: u3
 /// Initiate revocation of a guardian (with delay)
 pub fn revoke_guardian(env: &Env, creator: &Address, guardian: &Address) {
     let key = crate::DataKey::RecoveryGuardians(creator.clone());
-    let mut guardians: Vec<Guardian> = env
-        .storage()
-        .instance()
-        .get(&key)
-        .unwrap_or(Vec::new(env));
+    let mut guardians: Vec<Guardian> = env.storage().instance().get(&key).unwrap_or(Vec::new(env));
 
     let config = RecoveryConfig::default();
     let revocation_time = env.ledger().timestamp() + config.guardian_revocation_delay;
@@ -128,11 +120,7 @@ pub fn revoke_guardian(env: &Env, creator: &Address, guardian: &Address) {
 /// Get active guardians for creator
 fn get_active_guardians(env: &Env, creator: &Address) -> Vec<Guardian> {
     let key = crate::DataKey::RecoveryGuardians(creator.clone());
-    let guardians: Vec<Guardian> = env
-        .storage()
-        .instance()
-        .get(&key)
-        .unwrap_or(Vec::new(env));
+    let guardians: Vec<Guardian> = env.storage().instance().get(&key).unwrap_or(Vec::new(env));
 
     let now = env.ledger().timestamp();
     let mut active = Vec::new(env);
@@ -161,11 +149,7 @@ pub fn create_recovery_request(env: &Env, creator: &Address, new_owner: &Address
 
     // Get and increment counter
     let counter_key = crate::DataKey::RecoveryCounter;
-    let mut counter: u64 = env
-        .storage()
-        .instance()
-        .get(&counter_key)
-        .unwrap_or(0u64);
+    let mut counter: u64 = env.storage().instance().get(&counter_key).unwrap_or(0u64);
     counter += 1;
     env.storage().instance().set(&counter_key, &counter);
 
@@ -191,7 +175,7 @@ pub fn create_recovery_request(env: &Env, creator: &Address, new_owner: &Address
         .instance()
         .get(&attempts_key)
         .unwrap_or(Vec::new(env));
-    
+
     attempts.push_back(RecoveryAttempt {
         request_id: counter,
         timestamp: env.ledger().timestamp(),
@@ -250,7 +234,7 @@ pub fn approve_recovery(env: &Env, request_id: u64, guardian: &Address) {
         // Move to locked state
         request.status = RecoveryStatus::Locked;
         request.timelock_end = env.ledger().timestamp() + config.timelock_delay;
-        
+
         env.events().publish(
             ("recovery", "threshold_reached"),
             (request.creator.clone(), request_id),
@@ -287,7 +271,11 @@ pub fn execute_recovery(env: &Env, request_id: u64) -> Address {
 
     env.events().publish(
         ("recovery", "executed"),
-        (request.creator.clone(), request_id, request.new_owner.clone()),
+        (
+            request.creator.clone(),
+            request_id,
+            request.new_owner.clone(),
+        ),
     );
 
     request.new_owner.clone()

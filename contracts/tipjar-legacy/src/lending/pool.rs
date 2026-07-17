@@ -2,9 +2,9 @@
 
 use soroban_sdk::{token, Address, Env};
 
-use crate::TipJarError;
-use super::{Pool, PoolId, Deposit, LendingKey, LendingError};
 use super::interest::calculate_rate;
+use super::{Deposit, LendingError, LendingKey, Pool, PoolId};
+use crate::TipJarError;
 
 /// Create a new lending pool for a token.
 pub fn create_pool(env: &Env, token: Address) -> Result<PoolId, TipJarError> {
@@ -13,7 +13,7 @@ pub fn create_pool(env: &Env, token: Address) -> Result<PoolId, TipJarError> {
         .instance()
         .get(&(LendingKey::PoolCounter))
         .unwrap_or(0u64);
-    
+
     let pool_id = PoolId(counter + 1);
     let pool = Pool {
         id: pool_id,
@@ -22,14 +22,14 @@ pub fn create_pool(env: &Env, token: Address) -> Result<PoolId, TipJarError> {
         total_borrowed: 0,
         accumulated_interest: 0,
     };
-    
+
     env.storage()
         .instance()
         .set(&(LendingKey::Pool(pool_id)), &pool);
     env.storage()
         .instance()
         .set(&(LendingKey::PoolCounter), &(counter + 1));
-    
+
     Ok(pool_id)
 }
 
@@ -103,11 +103,8 @@ pub fn withdraw(
     // Calculate interest accrued
     let current_rate = calculate_rate(pool.total_borrowed, pool.total_liquidity);
     let time_elapsed = env.ledger().timestamp() - deposit.deposit_timestamp;
-    let interest_accrued = super::interest::calculate_interest(
-        deposit.amount,
-        current_rate,
-        time_elapsed,
-    );
+    let interest_accrued =
+        super::interest::calculate_interest(deposit.amount, current_rate, time_elapsed);
 
     let total_to_withdraw = amount + interest_accrued;
     if pool.total_liquidity < total_to_withdraw {

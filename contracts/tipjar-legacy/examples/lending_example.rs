@@ -1,5 +1,5 @@
 //! Example usage of the lending protocol.
-//! 
+//!
 //! This demonstrates how to integrate and use the lending protocol
 //! for peer-to-peer lending of tip tokens.
 
@@ -16,7 +16,7 @@ pub struct LendingApp;
 #[contractimpl]
 impl LendingApp {
     /// Initialize a new lending pool for a token
-    /// 
+    ///
     /// # Example
     /// ```
     /// let pool_id = create_lending_pool(env, token_address);
@@ -31,7 +31,7 @@ impl LendingApp {
     }
 
     /// Deposit tokens into a lending pool to earn interest
-    /// 
+    ///
     /// # Example
     /// ```
     /// deposit_to_pool(env, pool_id, lender_address, 1000);
@@ -50,7 +50,7 @@ impl LendingApp {
     }
 
     /// Withdraw tokens and earned interest from a lending pool
-    /// 
+    ///
     /// # Example
     /// ```
     /// withdraw_from_pool(env, pool_id, lender_address, 500);
@@ -69,18 +69,18 @@ impl LendingApp {
     }
 
     /// Borrow tokens from a pool with collateral
-    /// 
+    ///
     /// # Requirements
     /// - Collateral must be at least 150% of the loan amount
     /// - Pool must have sufficient liquidity
-    /// 
+    ///
     /// # Example
     /// ```
     /// // Borrow 1000 tokens with 1500 collateral (150% ratio)
     /// let loan_id = borrow_from_pool(
-    ///     env, 
-    ///     pool_id, 
-    ///     borrower_address, 
+    ///     env,
+    ///     pool_id,
+    ///     borrower_address,
     ///     1000,  // amount
     ///     1500   // collateral
     /// );
@@ -100,7 +100,7 @@ impl LendingApp {
     }
 
     /// Repay a loan with accrued interest
-    /// 
+    ///
     /// # Example
     /// ```
     /// // Repay a 1000 token loan with interest
@@ -115,11 +115,11 @@ impl LendingApp {
     }
 
     /// Liquidate an undercollateralized loan
-    /// 
+    ///
     /// When a loan's collateral falls below 110% of the loan amount,
     /// it becomes liquidatable. This function seizes the collateral
     /// and returns excess to the borrower.
-    /// 
+    ///
     /// # Example
     /// ```
     /// // Loan: 1000 amount, 1080 collateral (108% ratio, undercollateralized)
@@ -153,27 +153,27 @@ impl LendingApp {
     }
 }
 
-/// Usage Scenario
-/// 
-/// 1. Creator creates a lending pool for their tip token
-///    pool_id = create_lending_pool(env, tip_token)
-/// 
-/// 2. Supporters (lenders) deposit tokens to earn yield
-///    deposit_to_pool(env, pool_id, supporter_address, 1000)
-///    // Supporter earns interest as the pool lends out tokens
-/// 
-/// 3. Other creators (borrowers) borrow against collateral
-///    loan_id = borrow_from_pool(env, pool_id, creator_address, 1000, 1500)
-///    // Creator receives 1000 tokens, must maintain 1500 collateral
-/// 
-/// 4. Borrower repays the loan with accrued interest
-///    repay_loan(env, loan_id, 1050)  // 1000 principal + ~50 interest
-///    // Collateral returned to borrower
-/// 
-/// 5. If collateral value drops below 110% of loan, liquidation occurs
-///    liquidate_loan(env, loan_id)
-///    // Collateral seized, excess returned to borrower
-/// 
-/// 6. Lender can withdraw their deposit + interest
-///    withdraw_from_pool(env, pool_id, supporter_address, 1000)
-///    // Returns 1000 + earned interest
+// Usage Scenario
+//
+// 1. Creator creates a lending pool for their tip token
+//    pool_id = create_lending_pool(env, tip_token)
+//
+// 2. Supporters (lenders) deposit tokens to earn yield
+//    deposit_to_pool(env, pool_id, supporter_address, 1000)
+//    // Supporter earns interest as the pool lends out tokens
+//
+// 3. Other creators (borrowers) borrow against collateral
+//    loan_id = borrow_from_pool(env, pool_id, creator_address, 1000, 1500)
+//    // Creator receives 1000 tokens, must maintain 1500 collateral
+//
+// 4. Borrower repays the loan with accrued interest
+//    repay_loan(env, loan_id, 1050)  // 1000 principal + ~50 interest
+//    // Collateral returned to borrower
+//
+// 5. If collateral value drops below 110% of loan, liquidation occurs
+//    liquidate_loan(env, loan_id)
+//    // Collateral seized, excess returned to borrower
+//
+// 6. Lender can withdraw their deposit + interest
+//    withdraw_from_pool(env, pool_id, supporter_address, 1000)
+//    // Returns 1000 + earned interest

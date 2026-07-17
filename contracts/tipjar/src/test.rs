@@ -124,7 +124,11 @@ fn withdraw_pays_out_full_balance_resets_it_and_keeps_total() {
     assert_eq!(ctx.client().get_total_tips(&creator), 700);
 
     // Withdrawable balance is now zero: a second withdraw must fail.
-    let err = ctx.client().try_withdraw(&creator, &creator, &creator, &None).unwrap_err().unwrap();
+    let err = ctx
+        .client()
+        .try_withdraw(&creator, &creator, &creator, &None)
+        .unwrap_err()
+        .unwrap();
     assert_eq!(err, Error::NothingToWithdraw.into());
 }
 
@@ -161,7 +165,11 @@ fn withdraw_with_nothing_to_withdraw_errors() {
     let ctx = Ctx::new();
     let creator = Address::generate(&ctx.env);
 
-    let err = ctx.client().try_withdraw(&creator, &creator, &creator, &None).unwrap_err().unwrap();
+    let err = ctx
+        .client()
+        .try_withdraw(&creator, &creator, &creator, &None)
+        .unwrap_err()
+        .unwrap();
     assert_eq!(err, Error::NothingToWithdraw.into());
 }
 

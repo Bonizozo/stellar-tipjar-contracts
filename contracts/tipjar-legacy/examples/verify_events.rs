@@ -12,7 +12,13 @@ fn main() {
         let addr = Address::generate(&env);
 
         // Verify all 9 event emission functions exist with correct signatures
-        tipjar_legacy::synthetic::emit_synthetic_asset_created(&env, 1, addr.clone(), addr.clone(), 15000);
+        tipjar_legacy::synthetic::emit_synthetic_asset_created(
+            &env,
+            1,
+            addr.clone(),
+            addr.clone(),
+            15000,
+        );
         tipjar_legacy::synthetic::emit_synthetic_tokens_minted(&env, 1, addr.clone(), 1000, 1500);
         tipjar_legacy::synthetic::emit_synthetic_tokens_redeemed(&env, 1, addr.clone(), 500, 750);
         tipjar_legacy::synthetic::emit_price_updated(&env, 1, 1200);

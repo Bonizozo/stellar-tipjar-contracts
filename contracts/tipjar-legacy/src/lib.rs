@@ -41,9 +41,9 @@ use soroban_sdk::{
 use circuit_breaker::EnhancedCircuitBreakerConfig;
 
 pub mod circuit_breaker;
+pub mod recovery;
 pub mod storage;
 pub mod upgrade;
-pub mod recovery;
 
 const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
 
@@ -8228,11 +8228,7 @@ impl TipJarContract {
 
         // Automatic premium coverage estimate from tips received
         let tot_key = DataKey::CreatorTotal(creator, token);
-        let total_received: i128 = env
-            .storage()
-            .persistent()
-            .get(&tot_key)
-            .unwrap_or(0);
+        let total_received: i128 = env.storage().persistent().get(&tot_key).unwrap_or(0);
         storage::bump_persistent_if_exists(&env, &tot_key);
 
         // Since CreatorTotal is net of fees and premiums, we approximate the original gross
@@ -12605,7 +12601,11 @@ impl TipJarContract {
     }
 
     /// Get recent recovery attempts for a creator (for rate limiting analysis).
-    pub fn recovery_get_recent_attempts(env: Env, creator: Address, since_timestamp: u64) -> Vec<u64> {
+    pub fn recovery_get_recent_attempts(
+        env: Env,
+        creator: Address,
+        since_timestamp: u64,
+    ) -> Vec<u64> {
         recovery::get_recent_attempts(&env, &creator, since_timestamp)
     }
 }
