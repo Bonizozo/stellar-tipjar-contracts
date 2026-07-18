@@ -13,6 +13,9 @@ pub mod upgrade;
 #[cfg(test)]
 extern crate std;
 
+#[cfg(test)]
+mod ttl_tests;
+
 // Advanced Event System
 pub mod events;
 

@@ -1,0 +1,105 @@
+name: Gas Regression Check
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+jobs:
+  budget-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32v1-none
+          components: rustfmt, clippy
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+
+      # Run budget assertion tests
+      - name: Run budget tests
+        run: cargo test -p tipjar budget_ -- --nocapture --test-threads=1
+        continue-on-error: false
+
+      # Build release WASM
+      - name: Build release WASM
+        run: cargo build -p tipjar --target wasm32v1-none --release
+
+      # Check WASM size against budget
+      - name: Check WASM size budget
+        run: |
+          WASM_PATH="target/wasm32v1-none/release/tipjar.wasm"
+          if [ -f "$WASM_PATH" ]; then
+            WASM_SIZE=$(stat -c%s "$WASM_PATH" 2>/dev/null || stat -f%z "$WASM_PATH")
+            BUDGET=153600  # 150 KB in bytes
+            echo "WASM size: $WASM_SIZE bytes (budget: $BUDGET bytes)"
+            if [ "$WASM_SIZE" -gt "$BUDGET" ]; then
+              echo "❌ WASM size exceeds budget!"
+              exit 1
+            else
+              PERCENT=$((WASM_SIZE * 100 / BUDGET))
+              echo "✅ WASM size within budget: $PERCENT% of limit"
+            fi
+          else
+            echo "⚠️  WASM artifact not found at $WASM_PATH"
+            exit 1
+          fi
+
+      # Profile current branch
+      - name: Profile gas (current)
+        run: bash scripts/profile-gas.sh
+
+      - name: Upload gas report
+        uses: actions/upload-artifact@v4
+        with:
+          name: gas-report-${{ github.sha }}
+          path: gas-report.json
+
+      # On PRs, fetch the baseline from main and compare
+      - name: Download baseline report (main)
+        if: github.event_name == 'pull_request'
+        uses: dawidd6/action-download-artifact@v3
+        with:
+          workflow: gas-check.yml
+          branch: main
+          name: gas-report-${{ github.event.pull_request.base.sha }}
+          path: baseline/
+        continue-on-error: true
+
+      # Compare and generate delta table
+      - name: Compare and generate PR comment
+        if: github.event_name == 'pull_request' && hashFiles('baseline/gas-report.json') != ''
+        run: |
+          bash scripts/profile-gas.sh --baseline baseline/gas-report.json
+          python3 scripts/gas-delta-table.py gas-report.json baseline/gas-report.json > gas-delta.md || true
+
+      # Post delta table as PR comment
+      - name: Comment PR with gas delta
+        if: github.event_name == 'pull_request' && hashFiles('gas-delta.md') != ''
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const fs = require('fs');
+            const deltaTable = fs.readFileSync('gas-delta.md', 'utf8');
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: `## 📊 Gas Report\n\n${deltaTable}\n\n**Legend:**\n- ✅ Within tolerance (+5%)\n- 🟡 At warning threshold (3-5%)\n- 🔴 Regression detected (>5%)\n\nSee [Resource Budgets](https://github.com/${context.repo.owner}/${context.repo.repo}/blob/main/docs/RESOURCE_BUDGETS.md) for details.`
+            })
+
+      # Archive delta for review
+      - name: Upload delta table
+        if: github.event_name == 'pull_request'
+        uses: actions/upload-artifact@v4
+        with:
+          name: gas-delta-${{ github.sha }}
+          path: gas-delta.md
