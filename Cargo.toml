@@ -1,5 +1,5 @@
 [workspace]
-members = ["contracts/tipjar"]
+members = ["contracts/tipjar", "contracts/tipjar-legacy", "contracts/derivatives", "contracts/risk-management", "contracts/limit-orders", "contracts/arbitrage", "indexer", "sdk", "tests/integration", "security", "simulator", "tools/gas-estimator", "tools/gas"]
 resolver = "2"
 
 [workspace.package]
@@ -9,3 +9,13 @@ repository = "https://github.com/your-org/stellar-tipjar-contracts"
 
 [workspace.dependencies]
 soroban-sdk = "22.0.0"
+
+# Cargo only honors [profile.*] tables from the workspace root, so this lives
+# here rather than in contracts/tipjar/Cargo.toml. Only affects `--release`
+# builds; `cargo test` (without --release) is unaffected.
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true

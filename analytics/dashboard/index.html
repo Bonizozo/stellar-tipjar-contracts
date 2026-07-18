@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TipJar Analytics Dashboard</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+        
+        header {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            margin-bottom: 30px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        
+        h1 {
+            color: #333;
+            margin-bottom: 10px;
+        }
+        
+        .subtitle {
+            color: #666;
+            font-size: 14px;
+        }
+        
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+        
+        .metric-card {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        
+        .metric-label {
+            color: #666;
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 10px;
+        }
+        
+        .metric-value {
+            font-size: 32px;
+            font-weight: bold;
+            color: #333;
+        }
+        
+        .metric-change {
+            font-size: 12px;
+            color: #999;
+            margin-top: 10px;
+        }
+        
+        .charts-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+        
+        .chart-container {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        
+        .chart-title {
+            font-size: 16px;
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 20px;
+        }
+        
+        .leaderboard {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        
+        .leaderboard-title {
+            font-size: 18px;
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 20px;
+        }
+        
+        .leaderboard-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px 0;
+            border-bottom: 1px solid #eee;
+        }
+        
+        .leaderboard-item:last-child {
+            border-bottom: none;
+        }
+        
+        .leaderboard-rank {
+            font-weight: bold;
+            color: #667eea;
+            min-width: 30px;
+        }
+        
+        .leaderboard-name {
+            flex: 1;
+            margin-left: 15px;
+            color: #333;
+            font-size: 14px;
+        }
+        
+        .leaderboard-amount {
+            font-weight: 600;
+            color: #333;
+        }
+        
+        .controls {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            margin-bottom: 30px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        
+        .control-group {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+        
+        input, select, button {
+            padding: 10px 15px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-size: 14px;
+        }
+        
+        button {
+            background: #667eea;
+            color: white;
+            border: none;
+            cursor: pointer;
+            font-weight: 600;
+        }
+        
+        button:hover {
+            background: #5568d3;
+        }
+        
+        .export-buttons {
+            display: flex;
+            gap: 10px;
+        }
+        
+        .export-btn {
+            padding: 8px 15px;
+            font-size: 12px;
+        }
+        
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #666;
+        }
+        
+        .error {
+            background: #fee;
+            color: #c33;
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>📊 TipJar Analytics Dashboard</h1>
+            <p class="subtitle">Real-time metrics and insights for the Stellar tipping platform</p>
+        </header>
+        
+        <div class="controls">
+            <div class="control-group">
+                <input type="date" id="startDate" placeholder="Start Date">
+                <input type="date" id="endDate" placeholder="End Date">
+                <button onclick="loadMetrics()">Load Metrics</button>
+                <div class="export-buttons">
+                    <button class="export-btn" onclick="exportJSON()">Export JSON</button>
+                    <button class="export-btn" onclick="exportCSV()">Export CSV</button>
+                </div>
+            </div>
+        </div>
+        
+        <div id="error" class="error" style="display: none;"></div>
+        
+        <div class="metrics-grid">
+            <div class="metric-card">
+                <div class="metric-label">Total Tips</div>
+                <div class="metric-value" id="totalTips">-</div>
+                <div class="metric-change">All time</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-label">Total Volume</div>
+                <div class="metric-value" id="totalVolume">-</div>
+                <div class="metric-change">XLM</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-label">Active Creators</div>
+                <div class="metric-value" id="activeCreators">-</div>
+                <div class="metric-change">Unique</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-label">Active Tippers</div>
+                <div class="metric-value" id="activeTippers">-</div>
+                <div class="metric-change">Unique</div>
+            </div>
+        </div>
+        
+        <div class="charts-grid">
+            <div class="chart-container">
+                <div class="chart-title">Daily Tips Trend</div>
+                <canvas id="dailyChart"></canvas>
+            </div>
+            <div class="chart-container">
+                <div class="chart-title">Volume Distribution</div>
+                <canvas id="volumeChart"></canvas>
+            </div>
+        </div>
+        
+        <div class="leaderboard">
+            <div class="leaderboard-title">🏆 Top Creators</div>
+            <div id="topCreators"></div>
+        </div>
+        
+        <div style="margin-top: 30px;" class="leaderboard">
+            <div class="leaderboard-title">💰 Top Tippers</div>
+            <div id="topTippers"></div>
+        </div>
+    </div>
+    
+    <script>
+        // Initialize date inputs with last 30 days
+        const endDate = new Date();
+        const startDate = new Date(endDate.getTime() - 30 * 24 * 60 * 60 * 1000);
+        
+        document.getElementById('startDate').valueAsDate = startDate;
+        document.getElementById('endDate').valueAsDate = endDate;
+        
+        async function loadMetrics() {
+            const start = document.getElementById('startDate').value;
+            const end = document.getElementById('endDate').value;
+            
+            try {
+                // Fetch metrics from API
+                const response = await fetch(`/api/metrics?start=${start}&end=${end}`);
+                const data = await response.json();
+                
+                // Update metric cards
+                document.getElementById('totalTips').textContent = data.total_tips.toLocaleString();
+                document.getElementById('totalVolume').textContent = data.total_volume.toLocaleString();
+                document.getElementById('activeCreators').textContent = data.unique_creators;
+                document.getElementById('activeTippers').textContent = data.unique_tippers;
+                
+                // Update leaderboards
+                updateLeaderboards(data);
+            } catch (error) {
+                showError('Failed to load metrics: ' + error.message);
+            }
+        }
+        
+        function updateLeaderboards(data) {
+            // Top creators
+            const creatorsHtml = data.top_creators
+                .map((c, i) => `
+                    <div class="leaderboard-item">
+                        <span class="leaderboard-rank">#${i + 1}</span>
+                        <span class="leaderboard-name">${c.creator}</span>
+                        <span class="leaderboard-amount">${c.total.toLocaleString()} XLM</span>
+                    </div>
+                `).join('');
+            document.getElementById('topCreators').innerHTML = creatorsHtml;
+            
+            // Top tippers
+            const tippersHtml = data.top_tippers
+                .map((t, i) => `
+                    <div class="leaderboard-item">
+                        <span class="leaderboard-rank">#${i + 1}</span>
+                        <span class="leaderboard-name">${t.sender}</span>
+                        <span class="leaderboard-amount">${t.total.toLocaleString()} XLM</span>
+                    </div>
+                `).join('');
+            document.getElementById('topTippers').innerHTML = tippersHtml;
+        }
+        
+        function exportJSON() {
+            const start = document.getElementById('startDate').value;
+            const end = document.getElementById('endDate').value;
+            window.location.href = `/api/export/json?start=${start}&end=${end}`;
+        }
+        
+        function exportCSV() {
+            const start = document.getElementById('startDate').value;
+            const end = document.getElementById('endDate').value;
+            window.location.href = `/api/export/csv?start=${start}&end=${end}`;
+        }
+        
+        function showError(message) {
+            const errorDiv = document.getElementById('error');
+            errorDiv.textContent = message;
+            errorDiv.style.display = 'block';
+        }
+        
+        // Load initial metrics
+        loadMetrics();
+    </script>
+</body>
+</html>

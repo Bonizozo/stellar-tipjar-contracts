@@ -1,0 +1,19 @@
+# TipJar Contract Monitoring Configuration
+
+contract_id: "CABC..."  # Replace with deployed contract ID
+network: "testnet"      # testnet | mainnet
+
+alert_thresholds:
+  max_tip_amount: 10000000000      # 1000 XLM (in stroops)
+  max_tips_per_hour: 1000
+  min_balance_warning: 100000000   # 10 XLM (in stroops)
+  error_rate_threshold: 0.05       # 5%
+
+alert_channels:
+  - type: slack
+    webhook_url: "${SLACK_WEBHOOK_URL}"
+  - type: email
+    recipients:
+      - admin@example.com
+
+polling_interval_seconds: 60

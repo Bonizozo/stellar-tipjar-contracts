@@ -1,104 +1,81 @@
-# TipJar Contract — Events Reference
+# Event Schema Contract and Versioning Policy
 
-All events are emitted via `env.events().publish(topics, data)` and are queryable from Stellar's event streaming API.
+## Event Schemas
 
----
+The following events are emitted by the `tipjar` contract. Off-chain consumers (like the indexer) must adhere to these schemas.
 
-## `tip`
+All data payloads are serialized in Soroban as arrays (using `data_format = "vec"` in the contract definition).
 
-Emitted when a plain tip is successfully transferred into escrow.
+### 1. `Tip`
+- **Topics**: `["tip", creator: Address]`
+- **Data (Vec)**: `[sender: Address, amount: i128]`
+- **Semantics**: Emitted when a user tips a creator. `amount` represents the amount of tokens transferred.
 
-**Topics**
+### 2. `Withdraw`
+- **Topics**: `["withdraw", creator: Address]`
+- **Data (Vec)**: `[amount: i128]`
+- **Semantics**: Emitted when a creator withdraws their tips. `amount` is the total withdrawn balance.
 
-| Position | Value | Type |
-|---|---|---|
-| 0 | `"tip"` | `Symbol` |
-| 1 | `creator` | `Address` |
+*(Note: The `Withdraw` event's data payload was recently normalized to use `data_format = "vec"` for trailing-field evolution. Legacy events did not use this format.)*
 
-**Data**
+## Legacy Events (TipJarLegacy)
 
-| Field | Type | Description |
-|---|---|---|
-| `sender` | `Address` | The address that sent the tip |
-| `amount` | `i128` | Token amount transferred |
+The following events are emitted by the `tipjar-legacy` contract and may not use the `data_format = "vec"` serialization pattern.
 
-**Example (conceptual)**
-```
-topics: ["tip", "GCREATOR..."]
-data:   ["GSENDER...", 250]
-```
-
----
-
-## `tip_msg`
-
+### `tip_msg`
 Emitted when a tip is sent with an attached message via `tip_with_message`.
+- **Topics**: `["tip_msg", creator: Address]`
+- **Data**: `[sender: Address, amount: i128, message: String, metadata: Map<String, String>]`
 
-**Topics**
+### `delegate`
+Emitted when a creator grants withdrawal authorization to a delegate.
+- **Topics**: `["delegate", creator: Address]`
+- **Data**: `[delegate: Address, max_amount: i128, expires_at: u64]`
 
-| Position | Value | Type |
-|---|---|---|
-| 0 | `"tip_msg"` | `Symbol` |
-| 1 | `creator` | `Address` |
+### `delegate_withdraw`
+Emitted when a delegate successfully withdraws on behalf of a creator.
+- **Topics**: `["del_wdr", creator: Address]`
+- **Data**: `[delegate: Address, amount: i128, token: Address]`
 
-**Data**
+### `delegate_revoked`
+Emitted when a creator revokes a delegation.
+- **Topics**: `["del_rev", creator: Address]`
+- **Data**: `[delegate: Address]`
 
-| Field | Type | Description |
-|---|---|---|
-| `sender` | `Address` | The address that sent the tip |
-| `amount` | `i128` | Token amount transferred |
-| `message` | `String` | The attached message text |
-| `metadata` | `Map<String, String>` | Arbitrary key-value metadata |
+### `tip_expired`
+Emitted when an unclaimed time-locked tip is refunded after its expiration window.
+- **Topics**: `["tip_expired", creator: Address]`
+- **Data**: `[sender: Address, amount: i128, expires_at: u64, lock_id: u64]`
 
-**Example (conceptual)**
-```
-topics: ["tip_msg", "GCREATOR..."]
-data:   ["GSENDER...", 500, "Great content!", {"platform": "web"}]
-```
+### `stream_created`
+Emitted when a new continuous tip stream is initialized.
+- **Topics**: `["strm_new", stream_id: u64]`
+- **Data**: `[sender: Address, creator: Address, token: Address, total: i128, rate: i128]`
 
----
+### `claim_submitted`
+Emitted when an insurance claim is submitted.
+- **Topics**: `["clm_sub"]`
+- **Data**: `[claim_id: u64, creator: Address, token: Address, amount: i128]`
 
-## `withdraw`
+### `claim_paid`
+Emitted when an insurance claim is successfully paid out.
+- **Topics**: `["clm_paid"]`
+- **Data**: `[claim_id: u64, amount: i128, creator: Address]`
 
-Emitted when a creator successfully withdraws their escrowed balance.
+## Versioning Convention for Evolution
 
-**Topics**
+To ensure backwards compatibility and smooth upgrades, the following policy applies to all event schema changes:
 
-| Position | Value | Type |
-|---|---|---|
-| 0 | `"withdraw"` | `Symbol` |
-| 1 | `creator` | `Address` |
+1. **Additive Changes**: Additive changes **must** append new fields to the end of the data payload. Off-chain consumers (e.g., the indexer) **must** tolerate trailing, unknown fields in the array.
+2. **Breaking Changes**: Any breaking change (modifying existing field types, removing fields, or changing topics) **requires a new event name** (e.g., `TipV2`).
+3. **Deprecation Window**: For breaking changes, a dual-emission deprecation window must be documented and implemented across contract upgrades. During this window, the contract emits both the old and the new events to allow off-chain consumers time to migrate.
 
-**Data**
+## PR Review Checklist
 
-| Field | Type | Description |
-|---|---|---|
-| `amount` | `i128` | Total amount withdrawn |
+Reviewers must verify the following before approving changes to event structures:
 
-**Example (conceptual)**
-```
-topics: ["withdraw", "GCREATOR..."]
-data:   400
-```
-
----
-
-## Querying Events
-
-Use the Stellar CLI to stream or query events from a deployed contract:
-
-```bash
-stellar events \
-  --network testnet \
-  --contract-id <CONTRACT_ID> \
-  --start-ledger <LEDGER>
-```
-
-Filter by topic to watch only tip events:
-
-```bash
-stellar events \
-  --network testnet \
-  --contract-id <CONTRACT_ID> \
-  --topic1 tip
-```
+- [ ] Does this change modify an existing event?
+  - If **Yes**, does it strictly append new fields to the end of the `data_format = "vec"` structure?
+    - If it's a breaking change (removal, type change, reordering), does it create a new event (e.g., `V2`) and implement dual-emission?
+- [ ] Have the golden XDR fixtures been updated in this PR? (Failing CI tests will catch this if missed).
+- [ ] Does the off-chain indexer tolerate the new trailing fields or correctly parse the new event version?

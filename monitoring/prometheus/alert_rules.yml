@@ -1,0 +1,47 @@
+groups:
+  - name: stellar_contract_alerts
+    rules:
+      - alert: HighTransactionVolume
+        expr: rate(soroban_contract_transactions_total[5m]) > 100
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High transaction volume detected"
+          description: "Contract transactions are exceeding 100 per 5 minutes."
+
+      - alert: ContractErrorRateHigh
+        expr: rate(soroban_contract_errors_total[5m]) / rate(soroban_contract_transactions_total[5m]) > 0.05
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "High error rate detected"
+          description: "Contract error rate is above 5% over the last 5 minutes."
+
+      - alert: ExcessiveGasUsage
+        expr: avg_over_time(soroban_contract_gas_used[10m]) > 5000000
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High gas usage trend"
+          description: "Average gas usage per transaction is consistently high."
+
+      - alert: EventProcessingFailures
+        expr: increase(tipjar_event_failures_total[5m]) > 10
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Event processing failures detected"
+          description: "More than 10 event processing failures in the last 5 minutes."
+
+      - alert: EventMonitorLagging
+        expr: tipjar_indexer_ledger_lag > 100
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Event monitor is lagging behind the network"
+          description: "The indexer cursor is more than 100 ledgers behind the latest ledger."

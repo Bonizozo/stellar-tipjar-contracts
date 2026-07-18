@@ -1,0 +1,29 @@
+[package]
+name = "gas-estimator"
+version = "0.1.0"
+edition = "2021"
+description = "Gas cost estimation tool for TipJar contract operations"
+
+[[bin]]
+name = "gas-estimator"
+path = "src/main.rs"
+
+[lib]
+name = "gas_estimator"
+path = "src/lib.rs"
+
+[dependencies]
+anyhow = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+chrono = { version = "0.4", features = ["serde"] }
+clap = { version = "4", features = ["derive"] }
+
+[[test]]
+name = "estimate"
+path = "tests/estimate.rs"
+
+[dev-dependencies]
+soroban-sdk = { version = "22.0.0", features = ["testutils"] }
+tipjar-legacy = { path = "../../contracts/tipjar-legacy" }
+chrono = { version = "0.4", features = ["serde"] }

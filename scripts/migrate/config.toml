@@ -1,0 +1,81 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# TipJar Contract State Migration Configuration
+# ─────────────────────────────────────────────────────────────────────────────
+# Copy this file to config.local.toml and fill in real values.
+# Never commit config.local.toml — it contains sensitive contract IDs.
+
+[migration]
+# Human-readable label for this migration run (used in history log).
+label = "v1-to-v2"
+
+# Source contract to export state from.
+source_contract_id = "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABSC4"
+
+# Target contract to import state into.
+target_contract_id = "CBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBSC4"
+
+# Stellar network to operate on: "testnet" | "mainnet" | "futurenet" | "local"
+network = "testnet"
+
+# RPC endpoint for the chosen network.
+# Testnet:  https://soroban-testnet.stellar.org
+# Mainnet:  https://soroban-mainnet.stellar.org
+rpc_url = "https://soroban-testnet.stellar.org"
+
+# Network passphrase (must match `network`).
+# Testnet:  "Test SDF Network ; September 2015"
+# Mainnet:  "Public Global Stellar Network ; September 2015"
+network_passphrase = "Test SDF Network ; September 2015"
+
+# Admin secret key (Stellar keypair) that has upgrade/migrate authority.
+# Prefer loading from the environment variable MIGRATION_ADMIN_SECRET instead.
+# admin_secret = "S..."
+
+# ── Safety flags ──────────────────────────────────────────────────────────────
+
+# When true, the export and transform phases run normally but import is skipped.
+# No on-chain writes are performed.  Use this to validate the snapshot first.
+dry_run = true
+
+# Maximum number of RPC retry attempts per call before aborting.
+max_retries = 3
+
+# Delay in milliseconds between retry attempts.
+retry_delay_ms = 1000
+
+# ── Snapshot / backup ─────────────────────────────────────────────────────────
+
+# Directory where snapshot JSON files are written.
+snapshot_dir = "./migration-snapshots"
+
+# Filename for the pre-migration backup snapshot (relative to snapshot_dir).
+backup_filename = "pre-migration-backup.json"
+
+# Filename for the exported source snapshot (relative to snapshot_dir).
+export_filename = "source-snapshot.json"
+
+# Filename for the transformed snapshot ready for import (relative to snapshot_dir).
+transformed_filename = "transformed-snapshot.json"
+
+# ── History log ───────────────────────────────────────────────────────────────
+
+# Local file that accumulates migration run history.
+history_file = "./migration-history.json"
+
+# ── Schema version ────────────────────────────────────────────────────────────
+
+# Source schema version (matches ContractVersion stored on-chain).
+source_version = 1
+
+# Target schema version the transformed snapshot must conform to.
+target_version = 2
+
+# ── Batch / progress ──────────────────────────────────────────────────────────
+
+# Number of records to process per progress report line.
+progress_batch_size = 50
+
+# ── Verification ──────────────────────────────────────────────────────────────
+
+# Abort the import if verification detects any mismatch.
+abort_on_verify_failure = true

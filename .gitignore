@@ -1,4 +1,15 @@
+# Rust / Cargo
 target/
-**/*.wasm
+
+# Soroban / WASM build artifacts
+*.wasm
+
+# Node / TypeScript
+node_modules/
+dist/
+
+# Editor / OS
 .DS_Store
+
+# Secrets / local env
 .env

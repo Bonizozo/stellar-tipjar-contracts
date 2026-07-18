@@ -1,0 +1,38 @@
+# Event monitoring configuration for the TipJar contract.
+# Consumed by the indexer service and the monitoring binary.
+
+[network]
+# Stellar Horizon REST or Soroban RPC endpoint.
+# Override with STELLAR_HORIZON_URL / STELLAR_RPC_URL env vars.
+rpc_url = "https://horizon-testnet.stellar.org"
+
+[listener]
+# How often to poll for new events (seconds).
+poll_interval_secs = 5
+# Maximum retry attempts with exponential back-off before skipping an event.
+max_retries = 5
+# Starting ledger when no cursor is persisted (0 = latest).
+start_ledger = 0
+# Number of events fetched per page.
+page_size = 100
+
+[storage]
+# PostgreSQL connection string.
+# Override with DATABASE_URL env var.
+database_url = "postgres://tipjar:tipjar@localhost:5432/tipjar"
+
+[api]
+# Address the HTTP/SSE API binds to.
+bind = "0.0.0.0:8080"
+
+[events]
+# Topics to index. Unknown topics are stored with kind = "unknown".
+topics = ["tip", "tip_msg", "withdraw", "tip_locked", "withdraw_locked",
+          "refund", "refund_req", "refund_ok", "role_grant", "role_revoke",
+          "match_new", "match_apply", "match_cancel", "upgraded", "fee"]
+
+[notifications]
+# Optional webhook URL for tip / withdrawal events.
+webhook_url = ""
+# Minimum tip amount (in stroops) to trigger a webhook notification.
+webhook_min_amount = 0
