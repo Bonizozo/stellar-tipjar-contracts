@@ -10,7 +10,13 @@ use tipjar_legacy::{TipJarContract, TipJarContractClient, TipJarError};
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
-fn setup() -> (Env, TipJarContractClient<'static>, Address, Address, Address) {
+fn setup() -> (
+    Env,
+    TipJarContractClient<'static>,
+    Address,
+    Address,
+    Address,
+) {
     let env = Env::default();
     env.mock_all_auths();
 
@@ -211,7 +217,7 @@ fn test_negative_tip_amount_rejected() {
 fn test_tip_with_non_whitelisted_token_rejected() {
     let (env, client, _admin, _token_id, sender) = setup();
     let creator = Address::generate(&env);
-    
+
     // Create a new non-whitelisted token
     let token_admin = Address::generate(&env);
     let non_whitelisted_token = env.register_stellar_asset_contract(token_admin.clone());

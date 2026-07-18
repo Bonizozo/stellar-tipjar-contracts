@@ -2,10 +2,10 @@
 
 use soroban_sdk::{token, Address, Env, Vec};
 
-use crate::TipJarError;
-use super::{Loan, LoanStatus, PoolId, LendingKey};
-use super::pool::{get_pool};
 use super::interest::{calculate_rate, is_liquidatable};
+use super::pool::get_pool;
+use super::{LendingKey, Loan, LoanStatus, PoolId};
+use crate::TipJarError;
 
 const COLLATERAL_RATIO: i128 = 150; // 150% minimum collateral ratio
 const LIQUIDATION_BONUS: i128 = 110; // 110% threshold for liquidation
@@ -76,9 +76,10 @@ pub fn borrow(
         .get(&(LendingKey::BorrowerLoans(borrower.clone())))
         .unwrap_or_else(|| Vec::new(env));
     borrower_loans.push_back(loan_id);
-    env.storage()
-        .instance()
-        .set(&(LendingKey::BorrowerLoans(borrower.clone())), &borrower_loans);
+    env.storage().instance().set(
+        &(LendingKey::BorrowerLoans(borrower.clone())),
+        &borrower_loans,
+    );
 
     // Update pool
     pool.total_liquidity -= amount;
@@ -107,7 +108,8 @@ pub fn repay(env: &Env, loan_id: u64, amount: i128) -> Result<(), TipJarError> {
     // Calculate interest accrued
     let time_elapsed = env.ledger().timestamp() - loan.borrow_timestamp;
     let current_rate = calculate_rate(pool.total_borrowed, pool.total_liquidity);
-    let interest_accrued = super::interest::calculate_interest(loan.amount, current_rate, time_elapsed);
+    let interest_accrued =
+        super::interest::calculate_interest(loan.amount, current_rate, time_elapsed);
 
     let total_owed = loan.amount + interest_accrued;
 
@@ -117,12 +119,20 @@ pub fn repay(env: &Env, loan_id: u64, amount: i128) -> Result<(), TipJarError> {
 
     // Transfer repayment + collateral back to borrower
     let token_client = token::Client::new(env, &pool.token);
-    token_client.transfer(&env.current_contract_address(), &loan.borrower, &loan.collateral);
-    
+    token_client.transfer(
+        &env.current_contract_address(),
+        &loan.borrower,
+        &loan.collateral,
+    );
+
     // If overpayment, return excess to borrower
     let overpayment = amount - total_owed;
     if overpayment > 0 {
-        token_client.transfer(&env.current_contract_address(), &loan.borrower, &overpayment);
+        token_client.transfer(
+            &env.current_contract_address(),
+            &loan.borrower,
+            &overpayment,
+        );
     }
 
     // Update loan and pool

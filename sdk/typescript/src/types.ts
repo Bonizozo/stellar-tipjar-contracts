@@ -24,6 +24,7 @@ export interface WithdrawResult {
   txHash: string;
   creator: string;
   amount: bigint;
+  to: string;
 }
 
 export interface TipEvent {
@@ -33,6 +34,7 @@ export interface TipEvent {
 
 export interface WithdrawEvent {
   amount: bigint;
+  to: string;
 }
 
 /** Creator profile with optional category and tags. */

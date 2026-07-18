@@ -16,11 +16,12 @@ export function parseTipEvent(event: SorobanRpc.Api.EventResponse): TipEvent {
 
 /**
  * Parse a raw Soroban event into a typed WithdrawEvent.
- * Expects event value to be `(amount: i128)`.
+ * Expects event value to be `(amount: i128, to: Address)`.
  */
 export function parseWithdrawEvent(event: SorobanRpc.Api.EventResponse): WithdrawEvent {
-  const [amountVal] = event.value as unknown[];
+  const [amountVal, toVal] = event.value as unknown[];
   return {
     amount: BigInt(scValToNative(amountVal as Parameters<typeof scValToNative>[0]) as string),
+    to: scValToNative(toVal as Parameters<typeof scValToNative>[0]) as string,
   };
 }

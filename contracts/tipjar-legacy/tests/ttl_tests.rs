@@ -50,7 +50,10 @@ fn test_tip_bumps_ttl_and_balance_survives() {
     ctx.mint(&sender, 1000);
 
     ctx.client.tip(&sender, &creator, &ctx.token, &500);
-    assert_eq!(ctx.client.get_withdrawable_balance(&creator, &ctx.token), 500);
+    assert_eq!(
+        ctx.client.get_withdrawable_balance(&creator, &ctx.token),
+        500
+    );
     assert_eq!(ctx.client.get_total_tips(&creator, &ctx.token), 500);
 }
 
@@ -87,7 +90,10 @@ fn test_bump_entry_extends_existing() {
     ctx.client.bump_entry(&creator, &ctx.token);
 
     // Balance should still be intact
-    assert_eq!(ctx.client.get_withdrawable_balance(&creator, &ctx.token), 500);
+    assert_eq!(
+        ctx.client.get_withdrawable_balance(&creator, &ctx.token),
+        500
+    );
     assert_eq!(ctx.client.get_total_tips(&creator, &ctx.token), 500);
 }
 
@@ -106,7 +112,10 @@ fn test_bump_entry_callable_by_anyone() {
     // Called by a different "user" context - still works
     ctx.client.bump_entry(&random_caller, &ctx.token);
 
-    assert_eq!(ctx.client.get_withdrawable_balance(&creator, &ctx.token), 500);
+    assert_eq!(
+        ctx.client.get_withdrawable_balance(&creator, &ctx.token),
+        500
+    );
 }
 
 #[test]
@@ -120,7 +129,10 @@ fn test_multiple_tips_bump_ttl() {
     ctx.client.tip(&sender, &creator, &ctx.token, &200);
     ctx.client.tip(&sender, &creator, &ctx.token, &300);
 
-    assert_eq!(ctx.client.get_withdrawable_balance(&creator, &ctx.token), 600);
+    assert_eq!(
+        ctx.client.get_withdrawable_balance(&creator, &ctx.token),
+        600
+    );
     assert_eq!(ctx.client.get_total_tips(&creator, &ctx.token), 600);
 }
 
@@ -134,5 +146,8 @@ fn test_partial_withdraw_bumps_ttl() {
     ctx.client.tip(&sender, &creator, &ctx.token, &500);
     ctx.client.withdraw(&creator, &ctx.token, &Some(200));
 
-    assert_eq!(ctx.client.get_withdrawable_balance(&creator, &ctx.token), 300);
+    assert_eq!(
+        ctx.client.get_withdrawable_balance(&creator, &ctx.token),
+        300
+    );
 }

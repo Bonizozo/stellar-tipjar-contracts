@@ -73,7 +73,7 @@ fn tip_escrows_tokens_and_updates_balance_and_total() {
     // Withdrawable balance rose by the same amount: with a single creator and
     // a single tip, the full escrowed amount must be exactly what withdraw()
     // pays out.
-    ctx.client().withdraw(&creator);
+    ctx.client().withdraw(&creator, &creator, &creator, &None);
     assert_eq!(ctx.token_client().balance(&creator), 400);
 }
 
@@ -90,7 +90,7 @@ fn multiple_tips_accumulate_for_the_same_creator() {
     assert_eq!(ctx.client().get_total_tips(&creator), 600);
     assert_eq!(ctx.token_client().balance(&ctx.contract_id), 600);
 
-    ctx.client().withdraw(&creator);
+    ctx.client().withdraw(&creator, &creator, &creator, &None);
     assert_eq!(ctx.token_client().balance(&creator), 600);
     // Historical total survives the withdrawal.
     assert_eq!(ctx.client().get_total_tips(&creator), 600);
@@ -117,14 +117,18 @@ fn withdraw_pays_out_full_balance_resets_it_and_keeps_total() {
     let creator = Address::generate(&ctx.env);
 
     ctx.client().tip(&sender, &creator, &700);
-    ctx.client().withdraw(&creator);
+    ctx.client().withdraw(&creator, &creator, &creator, &None);
 
     assert_eq!(ctx.token_client().balance(&creator), 700);
     assert_eq!(ctx.token_client().balance(&ctx.contract_id), 0);
     assert_eq!(ctx.client().get_total_tips(&creator), 700);
 
     // Withdrawable balance is now zero: a second withdraw must fail.
-    let err = ctx.client().try_withdraw(&creator).unwrap_err().unwrap();
+    let err = ctx
+        .client()
+        .try_withdraw(&creator, &creator, &creator, &None)
+        .unwrap_err()
+        .unwrap();
     assert_eq!(err, Error::NothingToWithdraw.into());
 }
 
@@ -161,7 +165,11 @@ fn withdraw_with_nothing_to_withdraw_errors() {
     let ctx = Ctx::new();
     let creator = Address::generate(&ctx.env);
 
-    let err = ctx.client().try_withdraw(&creator).unwrap_err().unwrap();
+    let err = ctx
+        .client()
+        .try_withdraw(&creator, &creator, &creator, &None)
+        .unwrap_err()
+        .unwrap();
     assert_eq!(err, Error::NothingToWithdraw.into());
 }
 
@@ -194,7 +202,7 @@ fn withdraw_emits_withdraw_event_with_creator_topic_and_amount_data() {
     let creator = Address::generate(&ctx.env);
 
     ctx.client().tip(&sender, &creator, &250);
-    ctx.client().withdraw(&creator);
+    ctx.client().withdraw(&creator, &creator, &creator, &None);
 
     let events = ctx.env.events().all().filter_by_contract(&ctx.contract_id);
     assert_eq!(
@@ -204,7 +212,7 @@ fn withdraw_emits_withdraw_event_with_creator_topic_and_amount_data() {
             (
                 ctx.contract_id.clone(),
                 (symbol_short!("withdraw"), creator.clone()).into_val(&ctx.env),
-                (250i128,).into_val(&ctx.env),
+                (250i128, creator.clone()).into_val(&ctx.env),
             ),
         ]
     );
@@ -240,7 +248,7 @@ mod fixtures {
         let events_after_tip = env.events().all().filter_by_contract(&contract_id);
         let tip_event = events_after_tip.events().last().unwrap().clone();
 
-        client.withdraw(&creator);
+        client.withdraw(&creator, &creator, &creator, &None);
         let events_after_withdraw = env.events().all().filter_by_contract(&contract_id);
         let withdraw_event = events_after_withdraw.events().last().unwrap().clone();
 

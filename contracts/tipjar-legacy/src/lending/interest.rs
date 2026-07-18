@@ -27,9 +27,8 @@ pub fn calculate_interest(principal: i128, rate: u32, seconds: u64) -> i128 {
     // Annual rate: rate / 10000 (basis points to decimal)
     // Per-second rate: annual_rate / 31536000 (seconds per year)
     // Interest = principal * rate / 10000 * seconds / 31536000
-    let interest = (principal * (rate as i128) * (seconds as i128))
-        / (10000 * 31536000);
-    
+    let interest = (principal * (rate as i128) * (seconds as i128)) / (10000 * 31536000);
+
     interest.max(0)
 }
 
