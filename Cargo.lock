@@ -4079,6 +4079,7 @@ checksum = "1f3ccbac311fea05f86f61904b462b55fb3df8837a366dfc601a0161d0532f20"
 name = "tipjar"
 version = "0.1.0"
 dependencies = [
+ "proptest",
  "soroban-sdk 26.1.0",
 ]
 
@@ -4104,6 +4105,7 @@ dependencies = [
  "reqwest",
  "serde",
  "serde_json",
+ "soroban-sdk 22.0.11",
  "sqlx",
  "thiserror 2.0.18",
  "tokio",
