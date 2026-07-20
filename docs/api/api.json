@@ -1,0 +1,175 @@
+{
+  "contract": "TipJarContract",
+  "functions": [
+    {
+      "name": "init",
+      "doc": "One-time configuration of the token this jar accepts. Errors if called twice.",
+      "params": [
+        {
+          "name": "token",
+          "ty": "Address"
+        }
+      ],
+      "returns": "()"
+    },
+    {
+      "name": "tip",
+      "doc": "Escrows `amount` of the configured token from `sender` for `creator`.",
+      "params": [
+        {
+          "name": "sender",
+          "ty": "Address"
+        },
+        {
+          "name": "creator",
+          "ty": "Address"
+        },
+        {
+          "name": "amount",
+          "ty": "i128"
+        }
+      ],
+      "returns": "()"
+    },
+    {
+      "name": "get_total_tips",
+      "doc": "Historical total ever tipped to `creator`. Zero if the creator has never been tipped.",
+      "params": [
+        {
+          "name": "creator",
+          "ty": "Address"
+        }
+      ],
+      "returns": "i128"
+    },
+    {
+      "name": "withdraw",
+      "doc": "Pays out a creator's full or partial withdrawable balance.\nIf caller is an operator, checks their allowance and expiry.\nApplies any matured payout address change before transferring.",
+      "params": [
+        {
+          "name": "caller",
+          "ty": "Address"
+        },
+        {
+          "name": "creator",
+          "ty": "Address"
+        },
+        {
+          "name": "to",
+          "ty": "Address"
+        },
+        {
+          "name": "amount",
+          "ty": "Option<i128>"
+        }
+      ],
+      "returns": "()"
+    },
+    {
+      "name": "set_payout_address",
+      "doc": "",
+      "params": [
+        {
+          "name": "creator",
+          "ty": "Address"
+        },
+        {
+          "name": "payout",
+          "ty": "Address"
+        }
+      ],
+      "returns": "()"
+    },
+    {
+      "name": "cancel_payout_address",
+      "doc": "",
+      "params": [
+        {
+          "name": "creator",
+          "ty": "Address"
+        }
+      ],
+      "returns": "()"
+    },
+    {
+      "name": "authorize_operator",
+      "doc": "",
+      "params": [
+        {
+          "name": "creator",
+          "ty": "Address"
+        },
+        {
+          "name": "operator",
+          "ty": "Address"
+        },
+        {
+          "name": "allowance",
+          "ty": "i128"
+        },
+        {
+          "name": "expiry_ledger",
+          "ty": "u32"
+        }
+      ],
+      "returns": "()"
+    },
+    {
+      "name": "revoke_operator",
+      "doc": "",
+      "params": [
+        {
+          "name": "creator",
+          "ty": "Address"
+        },
+        {
+          "name": "operator",
+          "ty": "Address"
+        }
+      ],
+      "returns": "()"
+    }
+  ],
+  "errors": [
+    {
+      "name": "AlreadyInitialized",
+      "code": 1
+    },
+    {
+      "name": "NotInitialized",
+      "code": 2
+    },
+    {
+      "name": "InvalidAmount",
+      "code": 3
+    },
+    {
+      "name": "NothingToWithdraw",
+      "code": 4
+    },
+    {
+      "name": "InvalidOperator",
+      "code": 5
+    },
+    {
+      "name": "OperatorExpired",
+      "code": 6
+    },
+    {
+      "name": "InsufficientAllowance",
+      "code": 7
+    },
+    {
+      "name": "PendingPayoutChangeActive",
+      "code": 8
+    },
+    {
+      "name": "NoPendingPayoutChange",
+      "code": 9
+    },
+    {
+      "name": "InvalidTarget",
+      "code": 10
+    }
+  ]
+}

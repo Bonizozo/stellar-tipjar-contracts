@@ -4084,6 +4084,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "tipjar-doc-generator"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "clap",
+ "quote",
+ "serde",
+ "serde_json",
+ "syn 2.0.117",
+]
+
+[[package]]
 name = "tipjar-gas-tools"
 version = "0.1.0"
 dependencies = [
