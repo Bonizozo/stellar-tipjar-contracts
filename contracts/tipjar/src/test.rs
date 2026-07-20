@@ -17,6 +17,7 @@ struct Ctx {
     env: Env,
     contract_id: Address,
     token: Address,
+    admin: Address,
 }
 
 impl Ctx {
@@ -29,14 +30,16 @@ impl Ctx {
             .register_stellar_asset_contract_v2(token_admin)
             .address();
 
+        let admin = Address::generate(&env);
         let contract_id = env.register(TipJar, ());
         let client = TipJarClient::new(&env, &contract_id);
-        client.init(&token);
+        client.init(&token, &admin);
 
         Ctx {
             env,
             contract_id,
             token,
+            admin,
         }
     }
 
@@ -156,7 +159,11 @@ fn tip_rejects_zero_and_negative_amounts() {
 fn double_init_is_rejected() {
     let ctx = Ctx::new();
 
-    let err = ctx.client().try_init(&ctx.token).unwrap_err().unwrap();
+    let err = ctx
+        .client()
+        .try_init(&ctx.token, &ctx.admin)
+        .unwrap_err()
+        .unwrap();
     assert_eq!(err, Error::AlreadyInitialized.into());
 }
 
@@ -222,7 +229,7 @@ fn withdraw_emits_withdraw_event_with_creator_topic_and_amount_data() {
 mod fixtures {
     extern crate std;
     use super::*;
-    use soroban_sdk::{testutils::Events, xdr::WriteXdr, Address, Env, IntoVal};
+    use soroban_sdk::{testutils::Events, xdr::WriteXdr, Address, Env};
     use std::{fs, path::PathBuf};
 
     #[test]
@@ -237,7 +244,8 @@ mod fixtures {
         let token = env
             .register_stellar_asset_contract_v2(token_admin)
             .address();
-        client.init(&token);
+        let admin = Address::generate(&env);
+        client.init(&token, &admin);
 
         let creator = Address::generate(&env);
         let sender = Address::generate(&env);
@@ -288,10 +296,12 @@ mod fixtures {
             fs::create_dir_all(fixture_path.parent().unwrap()).unwrap();
             fs::write(&fixture_path, actual_xdr).unwrap();
         } else {
-            let expected_xdr = fs::read(&fixture_path).expect(&std::format!(
-                "Fixture missing: {:?}. Run with UPDATE_FIXTURES=1",
-                fixture_path
-            ));
+            let expected_xdr = fs::read(&fixture_path).unwrap_or_else(|_| {
+                panic!(
+                    "Fixture missing: {:?}. Run with UPDATE_FIXTURES=1",
+                    fixture_path
+                )
+            });
             assert_eq!(
                 expected_xdr, actual_xdr,
                 "Fixture {} mismatch! Run with UPDATE_FIXTURES=1 to update.",
