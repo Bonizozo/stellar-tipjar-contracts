@@ -13,6 +13,10 @@ use soroban_sdk::{
     token, vec, Address, Env, IntoVal,
 };
 
+/// Timelock used by unit tests that don't specifically exercise the upgrade
+/// flow's timing; small enough to jump past with a couple of ledger bumps.
+const TEST_UPGRADE_TIMELOCK: u32 = 1000;
+
 struct Ctx {
     env: Env,
     contract_id: Address,
@@ -28,10 +32,11 @@ impl Ctx {
         let token = env
             .register_stellar_asset_contract_v2(token_admin)
             .address();
+        let admin = Address::generate(&env);
 
         let contract_id = env.register(TipJar, ());
         let client = TipJarClient::new(&env, &contract_id);
-        client.init(&token);
+        client.init(&token, &admin, &TEST_UPGRADE_TIMELOCK);
 
         Ctx {
             env,
@@ -156,8 +161,31 @@ fn tip_rejects_zero_and_negative_amounts() {
 fn double_init_is_rejected() {
     let ctx = Ctx::new();
 
-    let err = ctx.client().try_init(&ctx.token).unwrap_err().unwrap();
+    let other_admin = Address::generate(&ctx.env);
+    let err = ctx
+        .client()
+        .try_init(&ctx.token, &other_admin, &TEST_UPGRADE_TIMELOCK)
+        .unwrap_err()
+        .unwrap();
     assert_eq!(err, Error::AlreadyInitialized.into());
+}
+
+#[test]
+fn init_rejects_zero_timelock() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let token_admin = Address::generate(&env);
+    let token = env
+        .register_stellar_asset_contract_v2(token_admin)
+        .address();
+    let admin = Address::generate(&env);
+
+    let contract_id = env.register(TipJar, ());
+    let client = TipJarClient::new(&env, &contract_id);
+
+    let err = client.try_init(&token, &admin, &0).unwrap_err().unwrap();
+    assert_eq!(err, Error::InvalidTimelock.into());
 }
 
 #[test]
@@ -222,7 +250,7 @@ fn withdraw_emits_withdraw_event_with_creator_topic_and_amount_data() {
 mod fixtures {
     extern crate std;
     use super::*;
-    use soroban_sdk::{testutils::Events, xdr::WriteXdr, Address, Env, IntoVal};
+    use soroban_sdk::{testutils::Events, xdr::WriteXdr, Address, Env};
     use std::{fs, path::PathBuf};
 
     #[test]
@@ -237,7 +265,8 @@ mod fixtures {
         let token = env
             .register_stellar_asset_contract_v2(token_admin)
             .address();
-        client.init(&token);
+        let admin = Address::generate(&env);
+        client.init(&token, &admin, &TEST_UPGRADE_TIMELOCK);
 
         let creator = Address::generate(&env);
         let sender = Address::generate(&env);
@@ -288,10 +317,12 @@ mod fixtures {
             fs::create_dir_all(fixture_path.parent().unwrap()).unwrap();
             fs::write(&fixture_path, actual_xdr).unwrap();
         } else {
-            let expected_xdr = fs::read(&fixture_path).expect(&std::format!(
-                "Fixture missing: {:?}. Run with UPDATE_FIXTURES=1",
-                fixture_path
-            ));
+            let expected_xdr = fs::read(&fixture_path).unwrap_or_else(|_| {
+                panic!(
+                    "Fixture missing: {:?}. Run with UPDATE_FIXTURES=1",
+                    fixture_path
+                )
+            });
             assert_eq!(
                 expected_xdr, actual_xdr,
                 "Fixture {} mismatch! Run with UPDATE_FIXTURES=1 to update.",

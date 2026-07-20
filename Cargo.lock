@@ -4104,6 +4104,7 @@ dependencies = [
  "reqwest",
  "serde",
  "serde_json",
+ "soroban-sdk 22.0.11",
  "sqlx",
  "thiserror 2.0.18",
  "tokio",
@@ -4116,8 +4117,8 @@ dependencies = [
 name = "tipjar-integration-tests"
 version = "0.1.0"
 dependencies = [
- "soroban-sdk 22.0.11",
- "tipjar-legacy",
+ "soroban-sdk 26.1.0",
+ "tipjar",
 ]
 
 [[package]]
@@ -4172,6 +4173,13 @@ dependencies = [
  "serde_json",
  "soroban-sdk 22.0.11",
  "tipjar-legacy",
+]
+
+[[package]]
+name = "tipjar-v2-fixture"
+version = "0.1.0"
+dependencies = [
+ "soroban-sdk 26.1.0",
 ]
 
 [[package]]

@@ -1,20 +1,24 @@
 # Contract Upgrade and Migration System — Tasks
 
+> **Status: implemented** (issue #358). Rewritten to reflect the task list
+> actually completed — the original list described a single-step
+> `upgrade()`/`TipJarError` design that was superseded by the timelocked
+> flow below before any of it was built.
+
 ## Task List
 
-- [ ] 1. Add `DataKey::ContractVersion` variant to the `DataKey` enum in `contracts/tipjar/src/lib.rs`
-- [ ] 2. Add `TipJarError::UpgradeUnauthorized = 23` to the `TipJarError` enum in `contracts/tipjar/src/lib.rs`
-- [ ] 3. Implement `pub fn upgrade(env: Env, admin: Address, new_wasm_hash: soroban_sdk::BytesN<32>)` inside the `#[contractimpl]` block
-  - [ ] 3.1 Call `admin.require_auth()`
-  - [ ] 3.2 Verify `admin` matches stored admin; panic with `UpgradeUnauthorized` otherwise
-  - [ ] 3.3 Call `env.deployer().update_current_contract_wasm(new_wasm_hash)`
-  - [ ] 3.4 Increment `DataKey::ContractVersion` in instance storage
-  - [ ] 3.5 Emit `("upgrade", contract_address)` event with new version
-- [ ] 4. Implement `pub fn version(env: Env) -> u32` inside the `#[contractimpl]` block — returns `ContractVersion` from instance storage (default `1`)
-- [ ] 5. Write unit tests in `contracts/tipjar/src/lib.rs` (or a test module)
-  - [ ] 5.1 Test: admin can call `upgrade` successfully and version increments
-  - [ ] 5.2 Test: non-admin call to `upgrade` panics with `UpgradeUnauthorized`
-  - [ ] 5.3 Test: `version()` returns `1` before any upgrade
-- [ ] 6. Create `scripts/upgrade_contract.sh` — Bash upgrade script
-- [ ] 7. Create `docs/UPGRADE_GUIDE.md` — end-to-end upgrade documentation
-- [ ] 8. Run `cargo test --manifest-path contracts/tipjar/Cargo.toml` and confirm all 52+ tests pass
+- [x] 1. Add `DataKey::Admin`, `PendingAdmin`, `UpgradeTimelockLedgers`, `PendingUpgrade`, `DataVersion` variants to `contracts/tipjar/src/lib.rs`
+- [x] 2. Add `Error::Unauthorized`, `NoPendingAdmin`, `InvalidTimelock`, `UpgradeAlreadyPending`, `NoPendingUpgrade`, `TimelockNotElapsed`
+- [x] 3. Extend `init` to take `admin: Address` and `upgrade_timelock_ledgers: u32`, storing both plus the initial `DataVersion`
+- [x] 4. Implement `propose_upgrade`, `execute_upgrade`, `cancel_upgrade` (timelocked, admin-gated proposal/cancellation, permissionless execution past the timelock)
+- [x] 5. Implement `propose_admin` / `accept_admin` two-step admin transfer
+- [x] 6. Implement `migrate(admin)` — idempotent, version-gated against `DATA_VERSION`
+- [x] 7. Emit `UpgradeProposed`, `UpgradeExecuted`, `UpgradeCancelled`, `Migrated`, `AdminTransferProposed`, `AdminTransferAccepted`
+- [x] 8. Build `contracts/tipjar-v2-fixture` — a genuinely distinct compiled WASM used to test the swap end-to-end via `soroban_sdk::contractimport!`
+- [x] 9. Write `contracts/tipjar/src/test_upgrade.rs`: balance/total preservation, timelock boundary (unlock−1 / unlock), cancellation, non-admin rejection, double-proposal rejection, migrate idempotency, admin transfer, event-schema assertions
+- [x] 10. Update existing `test.rs`/`test_exhaustive.rs` call sites for the new `init` signature; regenerate golden event XDR fixtures
+- [x] 11. Retire competing upgrade paths: delete orphaned `migrations/upgrade_v1_to_v2.rs` and unreferenced `contracts/tipjar-legacy/src/proxy.rs`; document `contracts/tipjar-legacy`'s own `upgrade()`/`get_version()`/`migrate_state()` as retired (crate kept alive for `simulator`/`tools/gas-estimator`, which depend on its broader feature set)
+- [x] 12. Point `tests/integration/tip_flow_test.rs` at `contracts/tipjar` instead of `tipjar-legacy`
+- [x] 13. Rewrite `docs/UPGRADE_GUIDE.md`; write `docs/UPGRADE_RUNBOOK.md` (propose → monitor → execute → verify, rollback stance, `scripts/migrate` wiring); update `docs/EVENTS.md`
+- [x] 14. Wire `.github/workflows/test.yml` and `contract-ci.yml` to build the v2 fixture WASM before running `tipjar` tests
+- [x] 15. `cargo test -p tipjar` (29 tests), `cargo test -p tipjar-integration-tests` (11 tests), `cargo fmt --check`, `cargo clippy --all-targets -D warnings`, `cargo build -p tipjar --target wasm32v1-none --release`
