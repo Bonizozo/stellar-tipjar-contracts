@@ -83,8 +83,7 @@ fn main() -> Result<()> {
     let source = std::fs::read_to_string(&cli.input)
         .with_context(|| format!("cannot read {}", cli.input.display()))?;
 
-    let doc = parser::parse_contract(&source, &cli.contract)
-        .context("failed to parse contract")?;
+    let doc = parser::parse_contract(&source, &cli.contract).context("failed to parse contract")?;
 
     std::fs::create_dir_all(&cli.out_dir)
         .with_context(|| format!("cannot create {}", cli.out_dir.display()))?;
