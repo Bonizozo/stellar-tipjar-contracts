@@ -18,6 +18,26 @@ All data payloads are serialized in Soroban as arrays (using `data_format = "vec
 
 *(Note: The `Withdraw` event's data payload was recently normalized to use `data_format = "vec"` for trailing-field evolution. Legacy events did not use this format.)*
 
+### 3. `FeeCharged`
+- **Topics**: `["fee_charged", creator: Address]`
+- **Data (Vec)**: `[gross: i128, fee: i128, net: i128]`
+- **Semantics**: Emitted from `tip()` alongside `Tip`, but only when a nonzero protocol fee rate is configured (a `fee_bps` of 0 is a true no-op: no `FeeCharged` event, no fee storage write). `gross` is the full tipped amount (equal to `Tip.amount`), `fee` is `floor(gross * fee_bps / 10_000)`, and `net` is the amount credited to the creator's withdrawable balance. `fee + net == gross` always holds, including when `fee` floors to 0 for small `gross`. Consumers can reconstruct fee accounting from this event alone, without needing to know the fee schedule that was active at tip time.
+
+### 4. `FeeConfigured`
+- **Topics**: `["fee_configured", admin: Address]`
+- **Data (Vec)**: `[bps: u32, collector: Address]`
+- **Semantics**: Emitted by `set_fee()` whenever the admin changes the protocol fee rate and/or collector. `bps` is hard-capped on-chain at 1,000 (10%).
+
+### 5. `FeeWithdraw`
+- **Topics**: `["fee_withdraw", collector: Address]`
+- **Data (Vec)**: `[amount: i128]`
+- **Semantics**: Emitted by `withdraw_fees()` when the fee collector withdraws its accrued share of `FeeBalance`.
+
+### 6. `AdminTransferProposed` / `AdminTransferAccepted` / `AdminTransferCancelled`
+- **Topics**: `["admin_transfer_proposed", current_admin: Address]`, `["admin_transfer_accepted", new_admin: Address]`, `["admin_transfer_cancelled", admin: Address]`
+- **Data (Vec)**: `[pending_admin: Address]`, `[]`, `[]` respectively
+- **Semantics**: Track the two-step admin handover (`propose_admin` / `accept_admin` / `cancel_admin_transfer`). Governance only takes effect once the proposed address itself calls `accept_admin`, so a typoed address can never brick the contract.
+
 ## Legacy Events (TipJarLegacy)
 
 The following events are emitted by the `tipjar-legacy` contract and may not use the `data_format = "vec"` serialization pattern.

@@ -3,10 +3,14 @@
   "functions": [
     {
       "name": "init",
-      "doc": "One-time configuration of the token this jar accepts. Errors if called twice.",
+      "doc": "One-time configuration of the token this jar accepts and its admin.\nErrors if called twice.",
       "params": [
         {
           "name": "token",
+          "ty": "Address"
+        },
+        {
+          "name": "admin",
           "ty": "Address"
         }
       ],
@@ -14,7 +18,7 @@
     },
     {
       "name": "tip",
-      "doc": "Escrows `amount` of the configured token from `sender` for `creator`.",
+      "doc": "Escrows `amount` of the configured token from `sender` for `creator`,\nless the protocol fee (if one is configured). The creator's balance is\ncredited with `amount - fee`; the fee itself accrues to `FeeBalance`\nfor later withdrawal by the fee collector. `fee + net == amount` holds\nfor every input.",
       "params": [
         {
           "name": "sender",
@@ -128,6 +132,122 @@
         }
       ],
       "returns": "()"
+    },
+    {
+      "name": "set_fee",
+      "doc": "Sets the protocol fee rate and its collector. Admin-only; `bps` is\nhard-capped at `MAX_FEE_BPS`. Setting `bps` to 0 disables fees.",
+      "params": [
+        {
+          "name": "caller",
+          "ty": "Address"
+        },
+        {
+          "name": "bps",
+          "ty": "u32"
+        },
+        {
+          "name": "collector",
+          "ty": "Address"
+        }
+      ],
+      "returns": "()"
+    },
+    {
+      "name": "withdraw_fees",
+      "doc": "Pays out the fee collector's full or partial share of `FeeBalance`.\nMirrors `withdraw`'s pattern, including TTL extension.",
+      "params": [
+        {
+          "name": "caller",
+          "ty": "Address"
+        },
+        {
+          "name": "amount",
+          "ty": "Option<i128>"
+        }
+      ],
+      "returns": "()"
+    },
+    {
+      "name": "propose_admin",
+      "doc": "Proposes `new_admin` as the next admin. Takes effect only once\n`new_admin` calls `accept_admin`, so a typoed address can't brick\ngovernance. Admin-only.",
+      "params": [
+        {
+          "name": "caller",
+          "ty": "Address"
+        },
+        {
+          "name": "new_admin",
+          "ty": "Address"
+        }
+      ],
+      "returns": "()"
+    },
+    {
+      "name": "accept_admin",
+      "doc": "Completes a two-step admin transfer. Callable only by the address\ncurrently proposed as the pending admin.",
+      "params": [
+        {
+          "name": "caller",
+          "ty": "Address"
+        }
+      ],
+      "returns": "()"
+    },
+    {
+      "name": "cancel_admin_transfer",
+      "doc": "Abandons a pending admin transfer, leaving the current admin in\nplace. Admin-only.",
+      "params": [
+        {
+          "name": "caller",
+          "ty": "Address"
+        }
+      ],
+      "returns": "()"
+    },
+    {
+      "name": "get_admin",
+      "doc": "",
+      "params": [],
+      "returns": "Address"
+    },
+    {
+      "name": "get_pending_admin",
+      "doc": "",
+      "params": [],
+      "returns": "Option<Address>"
+    },
+    {
+      "name": "get_fee_bps",
+      "doc": "",
+      "params": [],
+      "returns": "u32"
+    },
+    {
+      "name": "get_fee_collector",
+      "doc": "",
+      "params": [],
+      "returns": "Option<Address>"
+    },
+    {
+      "name": "get_fee_balance",
+      "doc": "",
+      "params": [],
+      "returns": "i128"
+    },
+    {
+      "name": "preview_fee",
+      "doc": "Computes `(fee, net)` for `amount` at `bps` without touching storage.\nExposed read-only so off-chain callers (SDKs, indexers, tests) can\npreview the exact split the contract will apply.",
+      "params": [
+        {
+          "name": "amount",
+          "ty": "i128"
+        },
+        {
+          "name": "bps",
+          "ty": "u32"
+        }
+      ],
+      "returns": "(i128, i128)"
     }
   ],
   "errors": [
@@ -170,6 +290,30 @@
     {
       "name": "InvalidTarget",
       "code": 10
+    },
+    {
+      "name": "NotAdmin",
+      "code": 11
+    },
+    {
+      "name": "NotPendingAdmin",
+      "code": 12
+    },
+    {
+      "name": "NoPendingAdminProposal",
+      "code": 13
+    },
+    {
+      "name": "InvalidFee",
+      "code": 14
+    },
+    {
+      "name": "FeeOverflow",
+      "code": 15
+    },
+    {
+      "name": "NotFeeCollector",
+      "code": 16
     }
   ]
 }
