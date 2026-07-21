@@ -2,13 +2,15 @@
 
 use soroban_sdk::{
     contract, contracterror, contractevent, contractimpl, contracttype, panic_with_error, token,
-    Address, Env, MuxedAddress,
+    Address, Env, MuxedAddress, Vec,
 };
 
 #[cfg(test)]
 mod test;
 #[cfg(test)]
 mod test_exhaustive;
+#[cfg(test)]
+mod test_multitoken;
 
 /// Ledger TTL bump applied to instance and persistent storage on every write.
 const LEDGER_THRESHOLD: u32 = 100_000;
@@ -16,15 +18,30 @@ const LEDGER_BUMP: u32 = 120_960; // ~7 days at 5s/ledger
 
 const PAYOUT_DELAY_LEDGERS: u32 = 17280; // ~1 day at 5s/ledger
 
+/// Current data version for migration tracking.
+const CURRENT_DATA_VERSION: u32 = 2;
+const V1_DATA_VERSION: u32 = 1;
+
+/// Maximum number of tokens that can be in the allowlist.
+const MAX_ALLOWED_TOKENS: u32 = 50;
+
 #[contracttype]
 #[derive(Clone)]
 pub enum DataKey {
-    /// Address of the SEP-41 token this jar accepts.
+    /// Legacy: Address of the SEP-41 token this jar accepts (v1 only).
     Token,
-    /// Withdrawable balance escrowed for a creator.
+    /// Legacy: Withdrawable balance escrowed for a creator (v1 only).
     CreatorBalance(Address),
-    /// Historical total ever tipped to a creator (never decreases).
+    /// Legacy: Historical total ever tipped to a creator (v1 only).
     CreatorTotal(Address),
+    /// Current data version for migration tracking.
+    DataVersion,
+    /// Token allowlist for multi-token support.
+    AllowedTokens,
+    /// Withdrawable balance escrowed for a (creator, token) pair.
+    Balance(Address, Address),
+    /// Historical total ever tipped to a (creator, token) pair.
+    Total(Address, Address),
     /// Payout address designated for a creator.
     PayoutAddress(Address),
     /// Pending change to payout address: (creator) -> (new_payout, effective_ledger)
@@ -33,20 +50,22 @@ pub enum DataKey {
     Operator(Address, Address),
 }
 
-/// Topics `("tip", creator)`, data `(sender, amount)`.
+/// Topics `("tip", creator)`, data `(token, sender, amount)`.
 #[contractevent(data_format = "vec")]
 pub struct Tip {
     #[topic]
     creator: Address,
+    token: Address,
     sender: Address,
     amount: i128,
 }
 
-/// Topics `("withdraw", creator)`, data `[amount, to]`.
+/// Topics `("withdraw", creator)`, data `[token, amount, to]`.
 #[contractevent(data_format = "vec")]
 pub struct Withdraw {
     #[topic]
     creator: Address,
+    token: Address,
     amount: i128,
     to: Address,
 }
@@ -104,6 +123,10 @@ pub enum Error {
     PendingPayoutChangeActive = 8,
     NoPendingPayoutChange = 9,
     InvalidTarget = 10,
+    TokenNotAllowed = 11,
+    TokenAlreadyExists = 12,
+    MaxTokensReached = 13,
+    Unauthorized = 14,
 }
 
 #[contract]
@@ -112,25 +135,39 @@ pub struct TipJar;
 #[contractimpl]
 impl TipJar {
     /// One-time configuration of the token this jar accepts. Errors if called twice.
+    /// For v2: initializes with a single token in the allowlist.
     pub fn init(env: Env, token: Address) {
-        if env.storage().instance().has(&DataKey::Token) {
+        if env.storage().instance().has(&DataKey::DataVersion) {
             panic_with_error!(&env, Error::AlreadyInitialized);
         }
-        env.storage().instance().set(&DataKey::Token, &token);
+        
+        // Initialize v2 directly
+        env.storage()
+            .instance()
+            .set(&DataKey::DataVersion, &CURRENT_DATA_VERSION);
+        
+        let mut allowed_tokens = Vec::new(&env);
+        allowed_tokens.push_back(token);
+        env.storage()
+            .instance()
+            .set(&DataKey::AllowedTokens, &allowed_tokens);
+            
         env.storage()
             .instance()
             .extend_ttl(LEDGER_THRESHOLD, LEDGER_BUMP);
     }
 
-    /// Escrows `amount` of the configured token from `sender` for `creator`.
-    pub fn tip(env: Env, sender: Address, creator: Address, amount: i128) {
+    /// Escrows `amount` of the specified `token` from `sender` for `creator`.
+    pub fn tip(env: Env, sender: Address, creator: Address, token: Address, amount: i128) {
         sender.require_auth();
 
         if amount <= 0 {
             panic_with_error!(&env, Error::InvalidAmount);
         }
 
-        let token = Self::token_address(&env);
+        Self::ensure_initialized(&env);
+        Self::ensure_token_allowed(&env, &token);
+
         let contract_address = env.current_contract_address();
 
         token::TokenClient::new(&env, &token).transfer(
@@ -139,8 +176,8 @@ impl TipJar {
             &amount,
         );
 
-        let balance_key = DataKey::CreatorBalance(creator.clone());
-        let total_key = DataKey::CreatorTotal(creator.clone());
+        let balance_key = DataKey::Balance(creator.clone(), token.clone());
+        let total_key = DataKey::Total(creator.clone(), token.clone());
 
         let balance: i128 = env.storage().persistent().get(&balance_key).unwrap_or(0);
         let total: i128 = env.storage().persistent().get(&total_key).unwrap_or(0);
@@ -166,33 +203,55 @@ impl TipJar {
 
         Tip {
             creator,
+            token,
             sender,
             amount,
         }
         .publish(&env);
     }
 
-    /// Historical total ever tipped to `creator`. Zero if the creator has never been tipped.
-    pub fn get_total_tips(env: Env, creator: Address) -> i128 {
+    /// Historical total ever tipped to `creator` for a specific `token`. Zero if never tipped.
+    pub fn get_total_tips(env: Env, creator: Address, token: Address) -> i128 {
+        Self::maybe_migrate_creator_data(&env, &creator, &token);
         env.storage()
             .persistent()
-            .get(&DataKey::CreatorTotal(creator))
+            .get(&DataKey::Total(creator, token))
             .unwrap_or(0)
     }
 
-    /// Pays out a creator's full or partial withdrawable balance.
-    /// If caller is an operator, checks their allowance and expiry.
-    /// Applies any matured payout address change before transferring.
+    /// Gets the withdrawable balance for a creator and specific token.
+    pub fn get_balance(env: Env, creator: Address, token: Address) -> i128 {
+        Self::maybe_migrate_creator_data(&env, &creator, &token);
+        env.storage()
+            .persistent()
+            .get(&DataKey::Balance(creator, token))
+            .unwrap_or(0)
+    }
+
+    /// Returns the list of allowed tokens.
+    pub fn get_tokens(env: Env) -> Vec<Address> {
+        Self::ensure_initialized(&env);
+        env.storage()
+            .instance()
+            .get(&DataKey::AllowedTokens)
+            .unwrap_or_else(|| Vec::new(&env))
+    }
+
+    /// Pays out a creator's withdrawable balance for a specific token.
     pub fn withdraw(
         env: Env,
         caller: Address,
         creator: Address,
+        token: Address,
         to: Address,
         amount: Option<i128>,
     ) {
         caller.require_auth();
 
-        let balance_key = DataKey::CreatorBalance(creator.clone());
+        Self::ensure_initialized(&env);
+        Self::maybe_migrate_creator_data(&env, &creator, &token);
+
+        let balance_key = DataKey::Balance(creator.clone(), token.clone());
         let balance: i128 = env.storage().persistent().get(&balance_key).unwrap_or(0);
 
         if balance == 0 {
@@ -273,7 +332,6 @@ impl TipJar {
             panic_with_error!(&env, Error::InvalidTarget);
         }
 
-        let token = Self::token_address(&env);
         let contract_address = env.current_contract_address();
 
         token::TokenClient::new(&env, &token).transfer(
@@ -293,10 +351,79 @@ impl TipJar {
 
         Withdraw {
             creator,
+            token,
             amount: amount_to_withdraw,
             to: payout_address,
         }
         .publish(&env);
+    }
+
+    /// Adds a token to the allowlist. Admin-only operation.
+    pub fn add_token(env: Env, admin: Address, token: Address) {
+        admin.require_auth();
+
+        Self::ensure_initialized(&env);
+
+        let mut allowed_tokens: Vec<Address> = env
+            .storage()
+            .instance()
+            .get(&DataKey::AllowedTokens)
+            .unwrap_or_else(|| Vec::new(&env));
+
+        if allowed_tokens.len() >= MAX_ALLOWED_TOKENS {
+            panic_with_error!(&env, Error::MaxTokensReached);
+        }
+
+        // Check if token already exists
+        for existing_token in allowed_tokens.iter() {
+            if existing_token == token {
+                panic_with_error!(&env, Error::TokenAlreadyExists);
+            }
+        }
+
+        allowed_tokens.push_back(token);
+        env.storage()
+            .instance()
+            .set(&DataKey::AllowedTokens, &allowed_tokens);
+        env.storage()
+            .instance()
+            .extend_ttl(LEDGER_THRESHOLD, LEDGER_BUMP);
+    }
+
+    /// Removes a token from the allowlist. Admin-only operation.
+    /// Existing balances remain withdrawable.
+    pub fn remove_token(env: Env, admin: Address, token: Address) {
+        admin.require_auth();
+
+        Self::ensure_initialized(&env);
+
+        let mut allowed_tokens: Vec<Address> = env
+            .storage()
+            .instance()
+            .get(&DataKey::AllowedTokens)
+            .unwrap_or_else(|| Vec::new(&env));
+
+        let mut found = false;
+        let mut new_tokens = Vec::new(&env);
+        
+        for existing_token in allowed_tokens.iter() {
+            if existing_token != token {
+                new_tokens.push_back(existing_token);
+            } else {
+                found = true;
+            }
+        }
+
+        if !found {
+            panic_with_error!(&env, Error::TokenNotAllowed);
+        }
+
+        env.storage()
+            .instance()
+            .set(&DataKey::AllowedTokens, &new_tokens);
+        env.storage()
+            .instance()
+            .extend_ttl(LEDGER_THRESHOLD, LEDGER_BUMP);
     }
 
     pub fn set_payout_address(env: Env, creator: Address, payout: Address) {
@@ -364,10 +491,139 @@ impl TipJar {
         OperatorRevoked { creator, operator }.publish(&env);
     }
 
-    fn token_address(env: &Env) -> Address {
+    // Legacy method for backward compatibility (v1 contracts)
+    pub fn token_address(env: Env) -> Address {
         match env.storage().instance().get(&DataKey::Token) {
             Some(token) => token,
-            None => panic_with_error!(env, Error::NotInitialized),
+            None => panic_with_error!(&env, Error::NotInitialized),
+        }
+    }
+
+    // Legacy methods for backward compatibility with v1 API
+    // These use the first token in the allowlist as the default token
+    pub fn tip_legacy(env: Env, sender: Address, creator: Address, amount: i128) {
+        sender.require_auth();
+        
+        let tokens = Self::get_tokens(env.clone());
+        if tokens.is_empty() {
+            panic_with_error!(&env, Error::NotInitialized);
+        }
+        let default_token = tokens.first().unwrap();
+        
+        Self::tip(env, sender, creator, default_token, amount);
+    }
+
+    pub fn get_total_tips_legacy(env: Env, creator: Address) -> i128 {
+        let tokens = Self::get_tokens(env.clone());
+        if tokens.is_empty() {
+            return 0;
+        }
+        let default_token = tokens.first().unwrap();
+        
+        Self::get_total_tips(env, creator, default_token)
+    }
+
+    pub fn withdraw_legacy(
+        env: Env,
+        caller: Address,
+        creator: Address,
+        to: Address,
+        amount: Option<i128>,
+    ) {
+        let tokens = Self::get_tokens(env.clone());
+        if tokens.is_empty() {
+            panic_with_error!(&env, Error::NotInitialized);
+        }
+        let default_token = tokens.first().unwrap();
+        
+        Self::withdraw(env, caller, creator, default_token, to, amount);
+    }
+
+    // Internal helper methods
+    fn ensure_initialized(env: &Env) {
+        let version: u32 = env
+            .storage()
+            .instance()
+            .get(&DataKey::DataVersion)
+            .unwrap_or(V1_DATA_VERSION);
+        
+        if version < V1_DATA_VERSION {
+            panic_with_error!(env, Error::NotInitialized);
+        }
+    }
+
+    fn ensure_token_allowed(env: &Env, token: &Address) {
+        let allowed_tokens: Vec<Address> = env
+            .storage()
+            .instance()
+            .get(&DataKey::AllowedTokens)
+            .unwrap_or_else(|| Vec::new(env));
+
+        for allowed_token in allowed_tokens.iter() {
+            if &allowed_token == token {
+                return;
+            }
+        }
+
+        panic_with_error!(env, Error::TokenNotAllowed);
+    }
+
+    /// Lazy migration: Migrates v1 creator data to v2 format on first access.
+    fn maybe_migrate_creator_data(env: &Env, creator: &Address, token: &Address) {
+        let version: u32 = env
+            .storage()
+            .instance()
+            .get(&DataKey::DataVersion)
+            .unwrap_or(V1_DATA_VERSION);
+
+        if version == V1_DATA_VERSION {
+            // Check if we have v1 data for this creator
+            let v1_balance_key = DataKey::CreatorBalance(creator.clone());
+            let v1_total_key = DataKey::CreatorTotal(creator.clone());
+            let legacy_token_key = DataKey::Token;
+
+            if let Some(legacy_token) = env.storage().instance().get::<_, Address>(&legacy_token_key) {
+                if &legacy_token == token {
+                    // Migrate v1 data to v2 format
+                    if let Some(v1_balance) = env.storage().persistent().get::<_, i128>(&v1_balance_key) {
+                        let v2_balance_key = DataKey::Balance(creator.clone(), token.clone());
+                        env.storage().persistent().set(&v2_balance_key, &v1_balance);
+                        env.storage().persistent().extend_ttl(
+                            &v2_balance_key,
+                            LEDGER_THRESHOLD,
+                            LEDGER_BUMP,
+                        );
+                        env.storage().persistent().remove(&v1_balance_key);
+                    }
+
+                    if let Some(v1_total) = env.storage().persistent().get::<_, i128>(&v1_total_key) {
+                        let v2_total_key = DataKey::Total(creator.clone(), token.clone());
+                        env.storage().persistent().set(&v2_total_key, &v1_total);
+                        env.storage().persistent().extend_ttl(
+                            &v2_total_key,
+                            LEDGER_THRESHOLD,
+                            LEDGER_BUMP,
+                        );
+                        env.storage().persistent().remove(&v1_total_key);
+                    }
+                }
+            }
+
+            // Upgrade to v2 and initialize allowlist with legacy token
+            if let Some(legacy_token) = env.storage().instance().get::<_, Address>(&legacy_token_key) {
+                let mut allowed_tokens = Vec::new(env);
+                allowed_tokens.push_back(legacy_token);
+                env.storage()
+                    .instance()
+                    .set(&DataKey::AllowedTokens, &allowed_tokens);
+            }
+
+            env.storage()
+                .instance()
+                .set(&DataKey::DataVersion, &CURRENT_DATA_VERSION);
+            env.storage()
+                .instance()
+                .extend_ttl(LEDGER_THRESHOLD, LEDGER_BUMP);
         }
     }
 }

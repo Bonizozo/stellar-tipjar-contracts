@@ -53,6 +53,11 @@ impl Ctx {
         token::StellarAssetClient::new(&self.env, &self.token).mint(&holder, &amount);
         holder
     }
+    
+    // Helper method to get the default token for backward compatibility
+    fn get_token(&self) -> Address {
+        self.token.clone()
+    }
 }
 
 #[test]
@@ -61,19 +66,19 @@ fn tip_escrows_tokens_and_updates_balance_and_total() {
     let sender = ctx.fund(1_000);
     let creator = Address::generate(&ctx.env);
 
-    ctx.client().tip(&sender, &creator, &400);
+    ctx.client().tip(&sender, &creator, &ctx.get_token(), &400);
 
     // Tokens left the sender and landed in the contract's escrow.
     assert_eq!(ctx.token_client().balance(&sender), 600);
     assert_eq!(ctx.token_client().balance(&ctx.contract_id), 400);
 
     // Historical total rose by the tipped amount.
-    assert_eq!(ctx.client().get_total_tips(&creator), 400);
+    assert_eq!(ctx.client().get_total_tips(&creator, &ctx.get_token()), 400);
 
     // Withdrawable balance rose by the same amount: with a single creator and
     // a single tip, the full escrowed amount must be exactly what withdraw()
     // pays out.
-    ctx.client().withdraw(&creator, &creator, &creator, &None);
+    ctx.client().withdraw(&creator, &creator, &ctx.get_token(), &creator, &None);
     assert_eq!(ctx.token_client().balance(&creator), 400);
 }
 
@@ -83,17 +88,17 @@ fn multiple_tips_accumulate_for_the_same_creator() {
     let sender = ctx.fund(1_000);
     let creator = Address::generate(&ctx.env);
 
-    ctx.client().tip(&sender, &creator, &100);
-    ctx.client().tip(&sender, &creator, &200);
-    ctx.client().tip(&sender, &creator, &300);
+    ctx.client().tip(&sender, &creator, &ctx.get_token(), &100);
+    ctx.client().tip(&sender, &creator, &ctx.get_token(), &200);
+    ctx.client().tip(&sender, &creator, &ctx.get_token(), &300);
 
-    assert_eq!(ctx.client().get_total_tips(&creator), 600);
+    assert_eq!(ctx.client().get_total_tips(&creator, &ctx.get_token()), 600);
     assert_eq!(ctx.token_client().balance(&ctx.contract_id), 600);
 
-    ctx.client().withdraw(&creator, &creator, &creator, &None);
+    ctx.client().withdraw(&creator, &creator, &ctx.get_token(), &creator, &None);
     assert_eq!(ctx.token_client().balance(&creator), 600);
     // Historical total survives the withdrawal.
-    assert_eq!(ctx.client().get_total_tips(&creator), 600);
+    assert_eq!(ctx.client().get_total_tips(&creator, &ctx.get_token()), 600);
 }
 
 #[test]
@@ -101,13 +106,13 @@ fn get_total_tips_is_zero_for_unknown_creator_then_tracks_sum() {
     let ctx = Ctx::new();
     let creator = Address::generate(&ctx.env);
 
-    assert_eq!(ctx.client().get_total_tips(&creator), 0);
+    assert_eq!(ctx.client().get_total_tips(&creator, &ctx.get_token()), 0);
 
     let sender = ctx.fund(500);
-    ctx.client().tip(&sender, &creator, &150);
-    ctx.client().tip(&sender, &creator, &50);
+    ctx.client().tip(&sender, &creator, &ctx.get_token(), &150);
+    ctx.client().tip(&sender, &creator, &ctx.get_token(), &50);
 
-    assert_eq!(ctx.client().get_total_tips(&creator), 200);
+    assert_eq!(ctx.client().get_total_tips(&creator, &ctx.get_token()), 200);
 }
 
 #[test]
@@ -116,17 +121,17 @@ fn withdraw_pays_out_full_balance_resets_it_and_keeps_total() {
     let sender = ctx.fund(1_000);
     let creator = Address::generate(&ctx.env);
 
-    ctx.client().tip(&sender, &creator, &700);
-    ctx.client().withdraw(&creator, &creator, &creator, &None);
+    ctx.client().tip(&sender, &creator, &ctx.get_token(), &700);
+    ctx.client().withdraw(&creator, &creator, &ctx.get_token(), &creator, &None);
 
     assert_eq!(ctx.token_client().balance(&creator), 700);
     assert_eq!(ctx.token_client().balance(&ctx.contract_id), 0);
-    assert_eq!(ctx.client().get_total_tips(&creator), 700);
+    assert_eq!(ctx.client().get_total_tips(&creator, &ctx.get_token()), 700);
 
     // Withdrawable balance is now zero: a second withdraw must fail.
     let err = ctx
         .client()
-        .try_withdraw(&creator, &creator, &creator, &None)
+        .try_withdraw(&creator, &creator, &ctx.get_token(), &creator, &None)
         .unwrap_err()
         .unwrap();
     assert_eq!(err, Error::NothingToWithdraw.into());
@@ -141,7 +146,7 @@ fn tip_rejects_zero_and_negative_amounts() {
     for bad_amount in [0i128, -1i128] {
         let err = ctx
             .client()
-            .try_tip(&sender, &creator, &bad_amount)
+            .try_tip(&sender, &creator, &ctx.get_token(), &bad_amount)
             .unwrap_err()
             .unwrap();
         assert_eq!(err, Error::InvalidAmount.into());
@@ -149,7 +154,7 @@ fn tip_rejects_zero_and_negative_amounts() {
 
     // No tokens moved and no balance recorded for the rejected attempts.
     assert_eq!(ctx.token_client().balance(&sender), 1_000);
-    assert_eq!(ctx.client().get_total_tips(&creator), 0);
+    assert_eq!(ctx.client().get_total_tips(&creator, &ctx.get_token()), 0);
 }
 
 #[test]
@@ -167,7 +172,7 @@ fn withdraw_with_nothing_to_withdraw_errors() {
 
     let err = ctx
         .client()
-        .try_withdraw(&creator, &creator, &creator, &None)
+        .try_withdraw(&creator, &creator, &ctx.get_token(), &creator, &None)
         .unwrap_err()
         .unwrap();
     assert_eq!(err, Error::NothingToWithdraw.into());
@@ -179,7 +184,7 @@ fn tip_emits_tip_event_with_creator_topic_and_sender_amount_data() {
     let sender = ctx.fund(1_000);
     let creator = Address::generate(&ctx.env);
 
-    ctx.client().tip(&sender, &creator, &250);
+    ctx.client().tip(&sender, &creator, &ctx.get_token(), &250);
 
     let events = ctx.env.events().all().filter_by_contract(&ctx.contract_id);
     assert_eq!(
@@ -189,7 +194,7 @@ fn tip_emits_tip_event_with_creator_topic_and_sender_amount_data() {
             (
                 ctx.contract_id.clone(),
                 (symbol_short!("tip"), creator.clone()).into_val(&ctx.env),
-                (sender.clone(), 250i128).into_val(&ctx.env),
+                (ctx.get_token(), sender.clone(), 250i128).into_val(&ctx.env),
             ),
         ]
     );
@@ -201,20 +206,31 @@ fn withdraw_emits_withdraw_event_with_creator_topic_and_amount_data() {
     let sender = ctx.fund(1_000);
     let creator = Address::generate(&ctx.env);
 
-    ctx.client().tip(&sender, &creator, &250);
-    ctx.client().withdraw(&creator, &creator, &creator, &None);
+    ctx.client().tip(&sender, &creator, &ctx.get_token(), &250);
+    ctx.client().withdraw(&creator, &creator, &ctx.get_token(), &creator, &None);
 
     let events = ctx.env.events().all().filter_by_contract(&ctx.contract_id);
+    let tip_event = &events[0];
+    let withdraw_event = &events[1];
+    
+    // Check tip event
     assert_eq!(
-        events,
-        vec![
-            &ctx.env,
-            (
-                ctx.contract_id.clone(),
-                (symbol_short!("withdraw"), creator.clone()).into_val(&ctx.env),
-                (250i128, creator.clone()).into_val(&ctx.env),
-            ),
-        ]
+        tip_event.topics,
+        (symbol_short!("tip"), creator.clone()).into_val(&ctx.env)
+    );
+    assert_eq!(
+        tip_event.data,
+        (ctx.get_token(), sender.clone(), 250i128).into_val(&ctx.env)
+    );
+    
+    // Check withdraw event  
+    assert_eq!(
+        withdraw_event.topics,
+        (symbol_short!("withdraw"), creator.clone()).into_val(&ctx.env)
+    );
+    assert_eq!(
+        withdraw_event.data,
+        (ctx.get_token(), 250i128, creator.clone()).into_val(&ctx.env)
     );
 }
 
@@ -244,11 +260,11 @@ mod fixtures {
 
         token::StellarAssetClient::new(&env, &token).mint(&sender, &1_000);
 
-        client.tip(&sender, &creator, &250);
+        client.tip(&sender, &creator, &token, &250);
         let events_after_tip = env.events().all().filter_by_contract(&contract_id);
         let tip_event = events_after_tip.events().last().unwrap().clone();
 
-        client.withdraw(&creator, &creator, &creator, &None);
+        client.withdraw(&creator, &creator, &token, &creator, &None);
         let events_after_withdraw = env.events().all().filter_by_contract(&contract_id);
         let withdraw_event = events_after_withdraw.events().last().unwrap().clone();
 

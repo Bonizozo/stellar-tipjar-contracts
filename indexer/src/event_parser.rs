@@ -162,14 +162,15 @@ pub fn parse_event(event: &RawContractEvent) -> Result<ParsedEvent, ParserError>
 fn parse_tip(event: &RawContractEvent) -> Result<Value, ParserError> {
     let creator = topic_value(event, 1, "creator")?;
     let data = value_array(event, "tip")?;
-    if data.len() < 2 {
-        return Err(payload_err("tip", "expected [sender, amount]"));
+    if data.len() < 3 {
+        return Err(payload_err("tip", "expected [token, sender, amount]"));
     }
 
     Ok(json!({
         "creator": creator,
-        "sender": value_to_string(&data[0]).unwrap_or_else(|| data[0].to_string()),
-        "amount": value_to_i128(&data[1]),
+        "token": value_to_string(&data[0]).unwrap_or_else(|| data[0].to_string()),
+        "sender": value_to_string(&data[1]).unwrap_or_else(|| data[1].to_string()),
+        "amount": value_to_i128(&data[2]),
     }))
 }
 
@@ -195,14 +196,15 @@ fn parse_tip_message(event: &RawContractEvent) -> Result<Value, ParserError> {
 fn parse_withdraw(event: &RawContractEvent) -> Result<Value, ParserError> {
     let creator = topic_value(event, 1, "creator")?;
     let data = value_array(event, "withdraw")?;
-    if data.is_empty() {
-        return Err(payload_err("withdraw", "expected [amount, to]"));
+    if data.len() < 3 {
+        return Err(payload_err("withdraw", "expected [token, amount, to]"));
     }
 
     Ok(json!({
         "creator": creator,
-        "amount": value_to_i128(&data[0]),
-        "to": data.get(1).and_then(value_to_string).unwrap_or_else(|| creator.clone()),
+        "token": value_to_string(&data[0]).unwrap_or_else(|| data[0].to_string()),
+        "amount": value_to_i128(&data[1]),
+        "to": value_to_string(&data[2]).unwrap_or_else(|| creator.clone()),
     }))
 }
 
