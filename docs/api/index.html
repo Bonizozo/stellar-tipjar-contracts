@@ -34,13 +34,30 @@
 <li><a href="#fn-cancel_payout_address">cancel_payout_address</a></li>
 <li><a href="#fn-authorize_operator">authorize_operator</a></li>
 <li><a href="#fn-revoke_operator">revoke_operator</a></li>
-<li><a href="#fn-set_fee">set_fee</a></li>
-<li><a href="#fn-withdraw_fees">withdraw_fees</a></li>
 <li><a href="#fn-propose_admin">propose_admin</a></li>
 <li><a href="#fn-accept_admin">accept_admin</a></li>
 <li><a href="#fn-cancel_admin_transfer">cancel_admin_transfer</a></li>
 <li><a href="#fn-get_admin">get_admin</a></li>
 <li><a href="#fn-get_pending_admin">get_pending_admin</a></li>
+<li><a href="#fn-propose_upgrade">propose_upgrade</a></li>
+<li><a href="#fn-cancel_upgrade">cancel_upgrade</a></li>
+<li><a href="#fn-execute_upgrade">execute_upgrade</a></li>
+<li><a href="#fn-migrate">migrate</a></li>
+<li><a href="#fn-get_data_version">get_data_version</a></li>
+<li><a href="#fn-set_guardian">set_guardian</a></li>
+<li><a href="#fn-set_guardian_pause_duration">set_guardian_pause_duration</a></li>
+<li><a href="#fn-pause_tips">pause_tips</a></li>
+<li><a href="#fn-pause_withdrawals">pause_withdrawals</a></li>
+<li><a href="#fn-pause_all">pause_all</a></li>
+<li><a href="#fn-unpause_tips">unpause_tips</a></li>
+<li><a href="#fn-unpause_withdrawals">unpause_withdrawals</a></li>
+<li><a href="#fn-unpause_all">unpause_all</a></li>
+<li><a href="#fn-is_feature_paused">is_feature_paused</a></li>
+<li><a href="#fn-pause_flags">pause_flags</a></li>
+<li><a href="#fn-guardian_pause_expiry_ledger">guardian_pause_expiry_ledger</a></li>
+<li><a href="#fn-get_guardian">get_guardian</a></li>
+<li><a href="#fn-set_fee">set_fee</a></li>
+<li><a href="#fn-withdraw_fees">withdraw_fees</a></li>
 <li><a href="#fn-get_fee_bps">get_fee_bps</a></li>
 <li><a href="#fn-get_fee_collector">get_fee_collector</a></li>
 <li><a href="#fn-get_fee_balance">get_fee_balance</a></li>
@@ -56,22 +73,29 @@
 <tr><td><code>8</code></td><td><code>PendingPayoutChangeActive</code></td></tr>
 <tr><td><code>9</code></td><td><code>NoPendingPayoutChange</code></td></tr>
 <tr><td><code>10</code></td><td><code>InvalidTarget</code></td></tr>
-<tr><td><code>11</code></td><td><code>NotAdmin</code></td></tr>
-<tr><td><code>12</code></td><td><code>NotPendingAdmin</code></td></tr>
-<tr><td><code>13</code></td><td><code>NoPendingAdminProposal</code></td></tr>
-<tr><td><code>14</code></td><td><code>InvalidFee</code></td></tr>
-<tr><td><code>15</code></td><td><code>FeeOverflow</code></td></tr>
-<tr><td><code>16</code></td><td><code>NotFeeCollector</code></td></tr></tbody></table></section>
+<tr><td><code>11</code></td><td><code>Unauthorized</code></td></tr>
+<tr><td><code>12</code></td><td><code>NoPendingAdmin</code></td></tr>
+<tr><td><code>13</code></td><td><code>InvalidTimelock</code></td></tr>
+<tr><td><code>14</code></td><td><code>UpgradeAlreadyPending</code></td></tr>
+<tr><td><code>15</code></td><td><code>NoPendingUpgrade</code></td></tr>
+<tr><td><code>16</code></td><td><code>TimelockNotElapsed</code></td></tr>
+<tr><td><code>17</code></td><td><code>TipsPaused</code></td></tr>
+<tr><td><code>18</code></td><td><code>WithdrawalsPaused</code></td></tr>
+<tr><td><code>19</code></td><td><code>InvalidDuration</code></td></tr>
+<tr><td><code>20</code></td><td><code>InvalidFee</code></td></tr>
+<tr><td><code>21</code></td><td><code>FeeOverflow</code></td></tr>
+<tr><td><code>22</code></td><td><code>NotFeeCollector</code></td></tr></tbody></table></section>
 <h2>Functions</h2>
 <section class="fn-section" id="fn-init">
 <h3>init</h3>
-<p>One-time configuration of the token this jar accepts and its admin.<br>Errors if called twice.</p>
-<pre><code>pub fn init(token: Address, admin: Address) -&gt; ()</code></pre>
+<p>One-time configuration of the token this jar accepts, the upgrade<br>admin, and the ledger delay `execute_upgrade` must wait out after a<br>`propose_upgrade`. Errors if called twice.</p>
+<pre><code>pub fn init(token: Address, admin: Address, upgrade_timelock_ledgers: u32) -&gt; ()</code></pre>
 <h4>Parameters</h4><table><thead><tr><th>Name</th><th>Type</th></tr></thead><tbody><tr><td><code>token</code></td><td><code>Address</code></td></tr>
-<tr><td><code>admin</code></td><td><code>Address</code></td></tr></tbody></table>
+<tr><td><code>admin</code></td><td><code>Address</code></td></tr>
+<tr><td><code>upgrade_timelock_ledgers</code></td><td><code>u32</code></td></tr></tbody></table>
 
 <h4>Example</h4>
-<pre><code>client.init(&amp;token, &amp;admin);</code></pre>
+<pre><code>client.init(&amp;token, &amp;admin, &amp;upgrade_timelock_ledgers);</code></pre>
 </section>
 <section class="fn-section" id="fn-tip">
 <h3>tip</h3>
@@ -146,16 +170,218 @@
 <h4>Example</h4>
 <pre><code>client.revoke_operator(&amp;creator, &amp;operator);</code></pre>
 </section>
+<section class="fn-section" id="fn-propose_admin">
+<h3>propose_admin</h3>
+<p>Proposes `new_admin` as the next admin. Takes effect only once<br>`new_admin` calls `accept_admin` — a single-step transfer to a typo'd<br>or unreachable address can never permanently lock out administration.</p>
+<pre><code>pub fn propose_admin(admin: Address, new_admin: Address) -&gt; ()</code></pre>
+<h4>Parameters</h4><table><thead><tr><th>Name</th><th>Type</th></tr></thead><tbody><tr><td><code>admin</code></td><td><code>Address</code></td></tr>
+<tr><td><code>new_admin</code></td><td><code>Address</code></td></tr></tbody></table>
+
+<h4>Example</h4>
+<pre><code>client.propose_admin(&amp;admin, &amp;new_admin);</code></pre>
+</section>
+<section class="fn-section" id="fn-accept_admin">
+<h3>accept_admin</h3>
+<p>Completes a two-step admin transfer. Must be called by the address<br>named in the pending proposal.</p>
+<pre><code>pub fn accept_admin(new_admin: Address) -&gt; ()</code></pre>
+<h4>Parameters</h4><table><thead><tr><th>Name</th><th>Type</th></tr></thead><tbody><tr><td><code>new_admin</code></td><td><code>Address</code></td></tr></tbody></table>
+
+<h4>Example</h4>
+<pre><code>client.accept_admin(&amp;new_admin);</code></pre>
+</section>
+<section class="fn-section" id="fn-cancel_admin_transfer">
+<h3>cancel_admin_transfer</h3>
+<p>Abandons a pending admin transfer, leaving the current admin in<br>place. Admin-only.</p>
+<pre><code>pub fn cancel_admin_transfer(admin: Address) -&gt; ()</code></pre>
+<h4>Parameters</h4><table><thead><tr><th>Name</th><th>Type</th></tr></thead><tbody><tr><td><code>admin</code></td><td><code>Address</code></td></tr></tbody></table>
+
+<h4>Example</h4>
+<pre><code>client.cancel_admin_transfer(&amp;admin);</code></pre>
+</section>
+<section class="fn-section" id="fn-get_admin">
+<h3>get_admin</h3>
+<p>Current admin address.</p>
+<pre><code>pub fn get_admin() -&gt; Address</code></pre>
+
+<p><strong>Returns</strong> — <code>Address</code></p>
+<h4>Example</h4>
+<pre><code>client.get_admin();</code></pre>
+</section>
+<section class="fn-section" id="fn-get_pending_admin">
+<h3>get_pending_admin</h3>
+<p>Address currently proposed as the next admin, if any.</p>
+<pre><code>pub fn get_pending_admin() -&gt; Option<Address></code></pre>
+
+<p><strong>Returns</strong> — <code>Option<Address></code></p>
+<h4>Example</h4>
+<pre><code>client.get_pending_admin();</code></pre>
+</section>
+<section class="fn-section" id="fn-propose_upgrade">
+<h3>propose_upgrade</h3>
+<p>Admin-only. Records `new_wasm_hash` as a pending upgrade, unlocked<br>after the ledger delay configured at `init`. Only one proposal may be<br>pending at a time — cancel the existing one first to replace it.</p>
+<pre><code>pub fn propose_upgrade(admin: Address, new_wasm_hash: BytesN<32>) -&gt; ()</code></pre>
+<h4>Parameters</h4><table><thead><tr><th>Name</th><th>Type</th></tr></thead><tbody><tr><td><code>admin</code></td><td><code>Address</code></td></tr>
+<tr><td><code>new_wasm_hash</code></td><td><code>BytesN<32></code></td></tr></tbody></table>
+
+<h4>Example</h4>
+<pre><code>client.propose_upgrade(&amp;admin, &amp;new_wasm_hash);</code></pre>
+</section>
+<section class="fn-section" id="fn-cancel_upgrade">
+<h3>cancel_upgrade</h3>
+<p>Admin-only. Aborts a pending upgrade proposal without waiting out the<br>timelock.</p>
+<pre><code>pub fn cancel_upgrade(admin: Address) -&gt; ()</code></pre>
+<h4>Parameters</h4><table><thead><tr><th>Name</th><th>Type</th></tr></thead><tbody><tr><td><code>admin</code></td><td><code>Address</code></td></tr></tbody></table>
+
+<h4>Example</h4>
+<pre><code>client.cancel_upgrade(&amp;admin);</code></pre>
+</section>
+<section class="fn-section" id="fn-execute_upgrade">
+<h3>execute_upgrade</h3>
+<p>Swaps this contract's WASM to the proposed hash once its timelock has<br>elapsed. Permissionless by design — the admin already authorized the<br>upgrade at `propose_upgrade`, and its unlock ledger is public<br>on-chain state, so no caller identity check adds meaningful security<br>here. Storage is preserved by the host across the swap; call the new<br>WASM's `migrate()` afterwards to apply any storage-layout changes.</p>
+<pre><code>pub fn execute_upgrade() -&gt; ()</code></pre>
+
+
+<h4>Example</h4>
+<pre><code>client.execute_upgrade();</code></pre>
+</section>
+<section class="fn-section" id="fn-migrate">
+<h3>migrate</h3>
+<p>Admin-only, idempotent. Advances `DataKey::DataVersion` towards this<br>build's `DATA_VERSION`, applying any storage transformation the new<br>WASM requires. A no-op (no panic, no event) if the stored version<br>already meets or exceeds `DATA_VERSION` — safe to call more than once,<br>including before the first upgrade or after a repeated invocation.</p>
+<pre><code>pub fn migrate(admin: Address) -&gt; ()</code></pre>
+<h4>Parameters</h4><table><thead><tr><th>Name</th><th>Type</th></tr></thead><tbody><tr><td><code>admin</code></td><td><code>Address</code></td></tr></tbody></table>
+
+<h4>Example</h4>
+<pre><code>client.migrate(&amp;admin);</code></pre>
+</section>
+<section class="fn-section" id="fn-get_data_version">
+<h3>get_data_version</h3>
+<p>Current storage schema version.</p>
+<pre><code>pub fn get_data_version() -&gt; u32</code></pre>
+
+<p><strong>Returns</strong> — <code>u32</code></p>
+<h4>Example</h4>
+<pre><code>client.get_data_version();</code></pre>
+</section>
+<section class="fn-section" id="fn-set_guardian">
+<h3>set_guardian</h3>
+<p>Appoints (or replaces) the guardian. Admin only.</p>
+<pre><code>pub fn set_guardian(admin: Address, guardian: Address) -&gt; ()</code></pre>
+<h4>Parameters</h4><table><thead><tr><th>Name</th><th>Type</th></tr></thead><tbody><tr><td><code>admin</code></td><td><code>Address</code></td></tr>
+<tr><td><code>guardian</code></td><td><code>Address</code></td></tr></tbody></table>
+
+<h4>Example</h4>
+<pre><code>client.set_guardian(&amp;admin, &amp;guardian);</code></pre>
+</section>
+<section class="fn-section" id="fn-set_guardian_pause_duration">
+<h3>set_guardian_pause_duration</h3>
+<p>Configures how many ledgers a guardian-initiated pause lasts before<br>auto-expiring. Admin only.</p>
+<pre><code>pub fn set_guardian_pause_duration(admin: Address, ledgers: u32) -&gt; ()</code></pre>
+<h4>Parameters</h4><table><thead><tr><th>Name</th><th>Type</th></tr></thead><tbody><tr><td><code>admin</code></td><td><code>Address</code></td></tr>
+<tr><td><code>ledgers</code></td><td><code>u32</code></td></tr></tbody></table>
+
+<h4>Example</h4>
+<pre><code>client.set_guardian_pause_duration(&amp;admin, &amp;ledgers);</code></pre>
+</section>
+<section class="fn-section" id="fn-pause_tips">
+<h3>pause_tips</h3>
+<p>Pauses `tip`. Callable by admin (persists until explicitly unpaused)<br>or guardian (auto-expires; call again as admin to confirm/persist it).</p>
+<pre><code>pub fn pause_tips(caller: Address) -&gt; ()</code></pre>
+<h4>Parameters</h4><table><thead><tr><th>Name</th><th>Type</th></tr></thead><tbody><tr><td><code>caller</code></td><td><code>Address</code></td></tr></tbody></table>
+
+<h4>Example</h4>
+<pre><code>client.pause_tips(&amp;caller);</code></pre>
+</section>
+<section class="fn-section" id="fn-pause_withdrawals">
+<h3>pause_withdrawals</h3>
+<p>Pauses `withdraw` and the withdrawal-mechanics entrypoints. See `pause_tips`.</p>
+<pre><code>pub fn pause_withdrawals(caller: Address) -&gt; ()</code></pre>
+<h4>Parameters</h4><table><thead><tr><th>Name</th><th>Type</th></tr></thead><tbody><tr><td><code>caller</code></td><td><code>Address</code></td></tr></tbody></table>
+
+<h4>Example</h4>
+<pre><code>client.pause_withdrawals(&amp;caller);</code></pre>
+</section>
+<section class="fn-section" id="fn-pause_all">
+<h3>pause_all</h3>
+<p>Pauses both tips and withdrawals in one call. See `pause_tips`.</p>
+<pre><code>pub fn pause_all(caller: Address) -&gt; ()</code></pre>
+<h4>Parameters</h4><table><thead><tr><th>Name</th><th>Type</th></tr></thead><tbody><tr><td><code>caller</code></td><td><code>Address</code></td></tr></tbody></table>
+
+<h4>Example</h4>
+<pre><code>client.pause_all(&amp;caller);</code></pre>
+</section>
+<section class="fn-section" id="fn-unpause_tips">
+<h3>unpause_tips</h3>
+<p>Unpauses `tip`. Admin only — guardians can pause but never unpause.</p>
+<pre><code>pub fn unpause_tips(caller: Address) -&gt; ()</code></pre>
+<h4>Parameters</h4><table><thead><tr><th>Name</th><th>Type</th></tr></thead><tbody><tr><td><code>caller</code></td><td><code>Address</code></td></tr></tbody></table>
+
+<h4>Example</h4>
+<pre><code>client.unpause_tips(&amp;caller);</code></pre>
+</section>
+<section class="fn-section" id="fn-unpause_withdrawals">
+<h3>unpause_withdrawals</h3>
+<p>Unpauses `withdraw` and the withdrawal-mechanics entrypoints. Admin only.</p>
+<pre><code>pub fn unpause_withdrawals(caller: Address) -&gt; ()</code></pre>
+<h4>Parameters</h4><table><thead><tr><th>Name</th><th>Type</th></tr></thead><tbody><tr><td><code>caller</code></td><td><code>Address</code></td></tr></tbody></table>
+
+<h4>Example</h4>
+<pre><code>client.unpause_withdrawals(&amp;caller);</code></pre>
+</section>
+<section class="fn-section" id="fn-unpause_all">
+<h3>unpause_all</h3>
+<p>Unpauses both tips and withdrawals in one call. Admin only.</p>
+<pre><code>pub fn unpause_all(caller: Address) -&gt; ()</code></pre>
+<h4>Parameters</h4><table><thead><tr><th>Name</th><th>Type</th></tr></thead><tbody><tr><td><code>caller</code></td><td><code>Address</code></td></tr></tbody></table>
+
+<h4>Example</h4>
+<pre><code>client.unpause_all(&amp;caller);</code></pre>
+</section>
+<section class="fn-section" id="fn-is_feature_paused">
+<h3>is_feature_paused</h3>
+<p>True if every bit in `flag` is currently paused (accounting for<br>guardian auto-expiry).</p>
+<pre><code>pub fn is_feature_paused(flag: u32) -&gt; bool</code></pre>
+<h4>Parameters</h4><table><thead><tr><th>Name</th><th>Type</th></tr></thead><tbody><tr><td><code>flag</code></td><td><code>u32</code></td></tr></tbody></table>
+<p><strong>Returns</strong> — <code>bool</code></p>
+<h4>Example</h4>
+<pre><code>client.is_feature_paused(&amp;flag);</code></pre>
+</section>
+<section class="fn-section" id="fn-pause_flags">
+<h3>pause_flags</h3>
+<p>The currently effective pause bitmask (accounting for guardian auto-expiry).</p>
+<pre><code>pub fn pause_flags() -&gt; u32</code></pre>
+
+<p><strong>Returns</strong> — <code>u32</code></p>
+<h4>Example</h4>
+<pre><code>client.pause_flags();</code></pre>
+</section>
+<section class="fn-section" id="fn-guardian_pause_expiry_ledger">
+<h3>guardian_pause_expiry_ledger</h3>
+<p>Ledger sequence at which the current guardian-originated pause bits<br>expire. 0 if no guardian pause is active.</p>
+<pre><code>pub fn guardian_pause_expiry_ledger() -&gt; u32</code></pre>
+
+<p><strong>Returns</strong> — <code>u32</code></p>
+<h4>Example</h4>
+<pre><code>client.guardian_pause_expiry_ledger();</code></pre>
+</section>
+<section class="fn-section" id="fn-get_guardian">
+<h3>get_guardian</h3>
+
+<pre><code>pub fn get_guardian() -&gt; Option<Address></code></pre>
+
+<p><strong>Returns</strong> — <code>Option<Address></code></p>
+<h4>Example</h4>
+<pre><code>client.get_guardian();</code></pre>
+</section>
 <section class="fn-section" id="fn-set_fee">
 <h3>set_fee</h3>
 <p>Sets the protocol fee rate and its collector. Admin-only; `bps` is<br>hard-capped at `MAX_FEE_BPS`. Setting `bps` to 0 disables fees.</p>
-<pre><code>pub fn set_fee(caller: Address, bps: u32, collector: Address) -&gt; ()</code></pre>
-<h4>Parameters</h4><table><thead><tr><th>Name</th><th>Type</th></tr></thead><tbody><tr><td><code>caller</code></td><td><code>Address</code></td></tr>
+<pre><code>pub fn set_fee(admin: Address, bps: u32, collector: Address) -&gt; ()</code></pre>
+<h4>Parameters</h4><table><thead><tr><th>Name</th><th>Type</th></tr></thead><tbody><tr><td><code>admin</code></td><td><code>Address</code></td></tr>
 <tr><td><code>bps</code></td><td><code>u32</code></td></tr>
 <tr><td><code>collector</code></td><td><code>Address</code></td></tr></tbody></table>
 
 <h4>Example</h4>
-<pre><code>client.set_fee(&amp;caller, &amp;bps, &amp;collector);</code></pre>
+<pre><code>client.set_fee(&amp;admin, &amp;bps, &amp;collector);</code></pre>
 </section>
 <section class="fn-section" id="fn-withdraw_fees">
 <h3>withdraw_fees</h3>
@@ -166,52 +392,6 @@
 
 <h4>Example</h4>
 <pre><code>client.withdraw_fees(&amp;caller, &amp;amount);</code></pre>
-</section>
-<section class="fn-section" id="fn-propose_admin">
-<h3>propose_admin</h3>
-<p>Proposes `new_admin` as the next admin. Takes effect only once<br>`new_admin` calls `accept_admin`, so a typoed address can't brick<br>governance. Admin-only.</p>
-<pre><code>pub fn propose_admin(caller: Address, new_admin: Address) -&gt; ()</code></pre>
-<h4>Parameters</h4><table><thead><tr><th>Name</th><th>Type</th></tr></thead><tbody><tr><td><code>caller</code></td><td><code>Address</code></td></tr>
-<tr><td><code>new_admin</code></td><td><code>Address</code></td></tr></tbody></table>
-
-<h4>Example</h4>
-<pre><code>client.propose_admin(&amp;caller, &amp;new_admin);</code></pre>
-</section>
-<section class="fn-section" id="fn-accept_admin">
-<h3>accept_admin</h3>
-<p>Completes a two-step admin transfer. Callable only by the address<br>currently proposed as the pending admin.</p>
-<pre><code>pub fn accept_admin(caller: Address) -&gt; ()</code></pre>
-<h4>Parameters</h4><table><thead><tr><th>Name</th><th>Type</th></tr></thead><tbody><tr><td><code>caller</code></td><td><code>Address</code></td></tr></tbody></table>
-
-<h4>Example</h4>
-<pre><code>client.accept_admin(&amp;caller);</code></pre>
-</section>
-<section class="fn-section" id="fn-cancel_admin_transfer">
-<h3>cancel_admin_transfer</h3>
-<p>Abandons a pending admin transfer, leaving the current admin in<br>place. Admin-only.</p>
-<pre><code>pub fn cancel_admin_transfer(caller: Address) -&gt; ()</code></pre>
-<h4>Parameters</h4><table><thead><tr><th>Name</th><th>Type</th></tr></thead><tbody><tr><td><code>caller</code></td><td><code>Address</code></td></tr></tbody></table>
-
-<h4>Example</h4>
-<pre><code>client.cancel_admin_transfer(&amp;caller);</code></pre>
-</section>
-<section class="fn-section" id="fn-get_admin">
-<h3>get_admin</h3>
-
-<pre><code>pub fn get_admin() -&gt; Address</code></pre>
-
-<p><strong>Returns</strong> — <code>Address</code></p>
-<h4>Example</h4>
-<pre><code>client.get_admin();</code></pre>
-</section>
-<section class="fn-section" id="fn-get_pending_admin">
-<h3>get_pending_admin</h3>
-
-<pre><code>pub fn get_pending_admin() -&gt; Option<Address></code></pre>
-
-<p><strong>Returns</strong> — <code>Option<Address></code></p>
-<h4>Example</h4>
-<pre><code>client.get_pending_admin();</code></pre>
 </section>
 <section class="fn-section" id="fn-get_fee_bps">
 <h3>get_fee_bps</h3>

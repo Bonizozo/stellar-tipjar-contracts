@@ -27,6 +27,12 @@ jobs:
       - name: Run clippy
         run: cargo clippy --all-targets -- -D warnings
 
+      - name: Build v2 upgrade test fixture (WASM)
+        # contracts/tipjar/src/test_upgrade.rs embeds this via
+        # soroban_sdk::contractimport! at compile time, so it must exist on
+        # disk before `cargo test -p tipjar` runs.
+        run: cargo build -p tipjar-v2-fixture --target wasm32v1-none --release
+
       - name: Run tests
         run: cargo test -p tipjar
 

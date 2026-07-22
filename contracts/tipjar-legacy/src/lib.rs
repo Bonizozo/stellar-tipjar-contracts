@@ -1,5 +1,15 @@
 #![no_std]
 #![deny(unsafe_code)]
+// This crate is a frozen reference contract kept only so `simulator` and
+// `tools/gas-estimator` retain something to exercise their broader
+// (fees/conditions/subscriptions/...) feature surface against; it is not
+// deployed anywhere and is not the production TipJar contract — that's
+// `contracts/tipjar`. Its `upgrade`/`get_version`/`migrate_state` functions
+// below are this crate's own self-contained, non-timelocked upgrade path;
+// they are retired in favor of `contracts/tipjar`'s
+// propose_upgrade/execute_upgrade/cancel_upgrade/migrate flow (see
+// docs/UPGRADE_RUNBOOK.md) and must not be treated as a second, competing
+// upgrade mechanism for any real deployment.
 // `missing_docs` allowed (was `warn`): many public items across the merged
 // feature set are undocumented. Under CI's `clippy -D warnings` this lint would
 // otherwise fail the build; documenting the full surface is tracked separately.
@@ -4317,6 +4327,10 @@ impl TipJarContract {
     ///
     /// Increments the on-chain version and emits `("upgraded",)` with the new
     /// version number.  All storage is preserved by the Soroban host.
+    ///
+    /// Retired: this crate is a frozen reference contract, not deployed
+    /// anywhere. The canonical, timelocked upgrade path lives on
+    /// `contracts/tipjar` — see docs/UPGRADE_RUNBOOK.md.
     pub fn upgrade(env: Env, new_wasm_hash: BytesN<32>) {
         upgrade::upgrade(&env, new_wasm_hash);
     }

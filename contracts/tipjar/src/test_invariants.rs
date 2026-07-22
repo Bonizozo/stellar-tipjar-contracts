@@ -104,7 +104,7 @@ impl Harness {
         let admin = Address::generate(&env);
         let contract_id = env.register(TipJar, ());
         let client = TipJarClient::new(&env, &contract_id);
-        client.init(&token, &admin);
+        client.init(&token, &admin, &1000);
 
         let senders = (0..NUM_SENDERS)
             .map(|_| {

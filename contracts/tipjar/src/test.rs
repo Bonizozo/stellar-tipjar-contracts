@@ -13,6 +13,10 @@ use soroban_sdk::{
     token, vec, Address, Env, IntoVal, Symbol,
 };
 
+/// Timelock used by unit tests that don't specifically exercise the upgrade
+/// flow's timing; small enough to jump past with a couple of ledger bumps.
+const TEST_UPGRADE_TIMELOCK: u32 = 1000;
+
 struct Ctx {
     env: Env,
     contract_id: Address,
@@ -29,11 +33,10 @@ impl Ctx {
         let token = env
             .register_stellar_asset_contract_v2(token_admin)
             .address();
-
         let admin = Address::generate(&env);
         let contract_id = env.register(TipJar, ());
         let client = TipJarClient::new(&env, &contract_id);
-        client.init(&token, &admin);
+        client.init(&token, &admin, &TEST_UPGRADE_TIMELOCK);
 
         Ctx {
             env,
@@ -159,12 +162,56 @@ fn tip_rejects_zero_and_negative_amounts() {
 fn double_init_is_rejected() {
     let ctx = Ctx::new();
 
+    let other_admin = Address::generate(&ctx.env);
     let err = ctx
         .client()
-        .try_init(&ctx.token, &ctx.admin)
+        .try_init(&ctx.token, &other_admin, &TEST_UPGRADE_TIMELOCK)
         .unwrap_err()
         .unwrap();
     assert_eq!(err, Error::AlreadyInitialized.into());
+}
+
+#[test]
+fn init_rejects_zero_timelock() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let token_admin = Address::generate(&env);
+    let token = env
+        .register_stellar_asset_contract_v2(token_admin)
+        .address();
+    let admin = Address::generate(&env);
+
+    let contract_id = env.register(TipJar, ());
+    let client = TipJarClient::new(&env, &contract_id);
+
+    let err = client.try_init(&token, &admin, &0).unwrap_err().unwrap();
+    assert_eq!(err, Error::InvalidTimelock.into());
+}
+
+#[test]
+fn init_requires_admin_auth() {
+    // No `env.mock_all_auths()` here: this deliberately leaves every address
+    // unauthorized, so `init` must fail closed on `admin.require_auth()`
+    // rather than letting an unauthenticated caller seed the admin. Without
+    // that check, anyone could front-run the real deployer's `init` call on
+    // a live network and permanently lock in themselves as admin.
+    let env = Env::default();
+
+    let token_admin = Address::generate(&env);
+    let token = env
+        .register_stellar_asset_contract_v2(token_admin)
+        .address();
+    let admin = Address::generate(&env);
+
+    let contract_id = env.register(TipJar, ());
+    let client = TipJarClient::new(&env, &contract_id);
+
+    let result = client.try_init(&token, &admin, &TEST_UPGRADE_TIMELOCK);
+    assert!(
+        result.is_err(),
+        "init must not succeed without the admin's authorization"
+    );
 }
 
 #[test]
@@ -375,7 +422,7 @@ fn set_fee_by_non_admin_panics_with_typed_error() {
         .try_set_fee(&stranger, &250, &collector)
         .unwrap_err()
         .unwrap();
-    assert_eq!(err, Error::NotAdmin.into());
+    assert_eq!(err, Error::Unauthorized.into());
 }
 
 #[test]
@@ -470,7 +517,7 @@ fn two_step_admin_transfer_completes_and_moves_governance() {
         .try_set_fee(&ctx.admin, &100, &collector)
         .unwrap_err()
         .unwrap();
-    assert_eq!(err, Error::NotAdmin.into());
+    assert_eq!(err, Error::Unauthorized.into());
 
     // ...and the new admin now holds it.
     ctx.client().set_fee(&new_admin, &100, &collector);
@@ -493,7 +540,7 @@ fn two_step_admin_transfer_can_be_abandoned() {
         .try_accept_admin(&proposed)
         .unwrap_err()
         .unwrap();
-    assert_eq!(err, Error::NoPendingAdminProposal.into());
+    assert_eq!(err, Error::NoPendingAdmin.into());
 }
 
 #[test]
@@ -507,7 +554,7 @@ fn propose_admin_by_non_admin_panics_with_typed_error() {
         .try_propose_admin(&stranger, &target)
         .unwrap_err()
         .unwrap();
-    assert_eq!(err, Error::NotAdmin.into());
+    assert_eq!(err, Error::Unauthorized.into());
 }
 
 #[test]
@@ -523,7 +570,7 @@ fn accept_admin_by_address_other_than_pending_panics_with_typed_error() {
         .try_accept_admin(&impostor)
         .unwrap_err()
         .unwrap();
-    assert_eq!(err, Error::NotPendingAdmin.into());
+    assert_eq!(err, Error::NoPendingAdmin.into());
 }
 
 #[test]
@@ -532,7 +579,7 @@ fn accept_admin_with_no_pending_proposal_errors() {
     let anyone = Address::generate(&ctx.env);
 
     let err = ctx.client().try_accept_admin(&anyone).unwrap_err().unwrap();
-    assert_eq!(err, Error::NoPendingAdminProposal.into());
+    assert_eq!(err, Error::NoPendingAdmin.into());
 }
 
 #[test]
@@ -544,7 +591,7 @@ fn cancel_admin_transfer_with_nothing_pending_errors() {
         .try_cancel_admin_transfer(&ctx.admin)
         .unwrap_err()
         .unwrap();
-    assert_eq!(err, Error::NoPendingAdminProposal.into());
+    assert_eq!(err, Error::NoPendingAdmin.into());
 }
 
 #[cfg(test)]
@@ -566,11 +613,8 @@ mod fixtures {
         let token = env
             .register_stellar_asset_contract_v2(token_admin.clone())
             .address();
-        // Reuses `token_admin` as the contract admin rather than generating a
-        // fresh address, so the creator/sender address sequence below (and
-        // thus the golden fixtures, which embed those addresses) is
-        // unaffected by this contract's new admin parameter.
-        client.init(&token, &token_admin);
+        let admin = Address::generate(&env);
+        client.init(&token, &admin, &TEST_UPGRADE_TIMELOCK);
 
         let creator = Address::generate(&env);
         let sender = Address::generate(&env);

@@ -1,134 +1,125 @@
 # TipJar Contract Upgrade Guide
 
-This guide covers the end-to-end procedure for upgrading a deployed TipJar contract, including version tracking, migration patterns, rollback, and access control requirements.
+This guide documents `contracts/tipjar`'s on-chain upgrade mechanism: a
+timelocked, admin-gated WASM swap plus a version-gated `migrate()` entrypoint
+for storage-layout changes. For the step-by-step operational procedure
+(propose → monitor → execute → verify), see
+[`docs/UPGRADE_RUNBOOK.md`](./UPGRADE_RUNBOOK.md).
+
+> `contracts/tipjar-legacy` is a frozen reference contract kept only so
+> `simulator` and `tools/gas-estimator` have a richer feature surface to
+> exercise; it is not deployed anywhere. Its own `upgrade()` function is
+> retired — this document and the runbook describe the only supported
+> upgrade path in this workspace.
 
 ---
 
-## Prerequisites
+## Storage
 
-- [`stellar` CLI](https://developers.stellar.org/docs/tools/developer-tools/cli/stellar-cli) installed and configured.
-- Admin key available locally (`stellar keys ls`).
-- The new contract WASM compiled: `cargo build --target wasm32v1-none --release`.
+Set once at `init(token, admin, upgrade_timelock_ledgers)`:
 
----
+| Key | Type | Purpose |
+|---|---|---|
+| `DataKey::Admin` | `Address` | May call `propose_upgrade`, `cancel_upgrade`, `migrate`, `propose_admin`. |
+| `DataKey::UpgradeTimelockLedgers` | `u32` | Ledger delay `execute_upgrade` must wait out after a `propose_upgrade`. Fixed at init; there is no entrypoint to change it later. |
+| `DataKey::DataVersion` | `u32` | Storage schema version, initialized to `DATA_VERSION` (currently `1`). Advanced by `migrate()`. |
 
-## Upgrade Procedure
+Set only while a proposal or transfer is pending:
 
-### Step 1 — Build the new WASM
+| Key | Type | Purpose |
+|---|---|---|
+| `DataKey::PendingUpgrade` | `(BytesN<32>, u32)` | `(new_wasm_hash, unlock_ledger)`. Present only between `propose_upgrade` and `execute_upgrade`/`cancel_upgrade`. |
+| `DataKey::PendingAdmin` | `Address` | Present only between `propose_admin` and `accept_admin`. |
 
-```bash
-cargo build --target wasm32v1-none --release \
-  --manifest-path contracts/tipjar/Cargo.toml
-```
+## Functions
 
-The artifact is at `target/wasm32v1-none/release/tipjar.wasm`.
+### `propose_upgrade(admin: Address, new_wasm_hash: BytesN<32>)`
 
-### Step 2 — Upload the WASM to the network
+Admin-only (`admin.require_auth()` + must match `DataKey::Admin`). Records
+`new_wasm_hash` and `unlock_ledger = current_ledger + UpgradeTimelockLedgers`.
+Fails with `UpgradeAlreadyPending` if a proposal is already pending — cancel
+it first to replace it. Emits `UpgradeProposed { hash, unlock_ledger }`.
 
-```bash
-stellar contract upload \
-  --wasm target/wasm32v1-none/release/tipjar.wasm \
-  --source <admin-key> \
-  --network testnet
-# Output: <new_wasm_hash>  ← save this value
-```
+### `execute_upgrade()`
 
-### Step 3 — Run the upgrade script
+**Permissionless** — no caller argument, no auth check. The admin already
+authorized the upgrade at `propose_upgrade`, and `unlock_ledger` is public
+on-chain state, so restricting *who* triggers the mechanical swap once the
+timelock has elapsed adds no real security; it does remove a liveness
+dependency on any single key. Fails with `NoPendingUpgrade` if nothing is
+pending, or `TimelockNotElapsed` if `env.ledger().sequence() < unlock_ledger`
+(so calling at `unlock_ledger - 1` panics; calling at exactly `unlock_ledger`
+succeeds). On success, clears the pending proposal, calls
+`env.deployer().update_current_contract_wasm(hash)`, and emits
+`UpgradeExecuted { hash }`. All instance and persistent storage survives the
+swap untouched — the host guarantees this.
 
-```bash
-./scripts/upgrade_contract.sh <CONTRACT_ID> testnet <new_wasm_hash>
-```
+### `cancel_upgrade(admin: Address)`
 
-The script will:
-1. Print the current version before upgrading (save it for rollback reference).
-2. Invoke `upgrade` on-chain, signed by the admin key.
-3. Print the new version on success, or exit non-zero on failure.
+Admin-only. Aborts a pending proposal at any time before execution, timelock
+elapsed or not. Fails with `NoPendingUpgrade` if nothing is pending. Emits
+`UpgradeCancelled { hash }`.
 
-### Step 4 — Verify
+### `migrate(admin: Address)`
 
-```bash
-stellar contract invoke \
-  --id <CONTRACT_ID> \
-  --network testnet \
-  -- version
-# Expected: previous_version + 1
-```
+Admin-only, **idempotent and version-gated**. Every contract build defines
+its own `DATA_VERSION` constant. `migrate()` compares it against the stored
+`DataKey::DataVersion`: if the stored value already meets or exceeds
+`DATA_VERSION`, it returns immediately — no panic, no event, safe to call any
+number of times (including before the first upgrade, or repeatedly after
+one). Otherwise it applies whatever storage transformation that version step
+requires and advances `DataKey::DataVersion`, emitting
+`Migrated { from_version, to_version }`.
 
----
+Call it once, by hand, after `execute_upgrade` swaps in a WASM whose
+`DATA_VERSION` is higher than the currently stored value. New WASM releases
+that don't change storage layout can (and should) still expose a `migrate()`
+that simply reads as a no-op under this rule — that's what keeps the
+double-invocation guarantee meaningful across every release, not just the
+ones with an actual transformation to run.
 
-## Version Tracking
+### Two-step admin transfer
 
-The contract stores a `u32` version in instance storage under `DataKey::ContractVersion`.
-
-- Default value before any upgrade: `1`.
-- Incremented by `1` on every successful `upgrade` call.
-- Readable at any time via the `version()` contract function.
-
----
-
-## Migration Patterns
-
-Soroban preserves all storage across a WASM swap. For additive changes (new keys, new functions) no migration is needed.
-
-For breaking storage changes, include a one-shot `migrate` function in the new WASM:
-
-```rust
-pub fn migrate(env: Env, admin: Address) {
-    admin.require_auth();
-    let stored_admin: Address = env.storage().instance().get(&DataKey::Admin).unwrap();
-    if admin != stored_admin { panic_with_error!(&env, TipJarError::UpgradeUnauthorized); }
-
-    // Transform old storage layout → new layout
-    if let Some(val) = env.storage().persistent().get::<_, OldType>(&DataKey::OldKey) {
-        env.storage().persistent().set(&DataKey::NewKey, &transform(val));
-        env.storage().persistent().remove(&DataKey::OldKey);
-    }
-}
-```
-
-Call `migrate` once after `upgrade`, then remove it in the next upgrade.
-
-Migration functions should be **idempotent** — safe to call multiple times without corrupting state.
-
----
-
-## Rollback Considerations
-
-Soroban does not provide a native rollback mechanism. To revert to a previous version:
-
-1. Re-upload the old WASM (if not already on-chain):
-   ```bash
-   stellar contract upload --wasm path/to/old/tipjar.wasm \
-     --source <admin-key> --network testnet
-   # Output: <old_wasm_hash>
-   ```
-2. Run the upgrade script with the old hash:
-   ```bash
-   ./scripts/upgrade_contract.sh <CONTRACT_ID> testnet <old_wasm_hash>
-   ```
-
-The upgrade script prints the current version before invoking, making it easy to record the previous WASM hash for rollback.
-
-> Note: If a migration function was run and storage was transformed, rolling back the WASM alone may leave storage in an incompatible state. Always test migrations on testnet before mainnet.
-
----
-
-## Access Control Requirements
-
-- Only the address stored as `DataKey::Admin` during `init` may call `upgrade`.
-- The `upgrade` function enforces `admin.require_auth()` — the transaction must be signed by the admin key.
-- Unauthorized calls fail with `TipJarError::UpgradeUnauthorized` (error code 23).
-- To transfer admin rights before an upgrade, use the role management functions.
-
----
+`propose_admin(admin: Address, new_admin: Address)` (admin-only) records
+`new_admin` as `DataKey::PendingAdmin` and emits `AdminTransferProposed`. The
+current admin keeps full authority until `new_admin` itself calls
+`accept_admin(new_admin: Address)`, which fails with `NoPendingAdmin` unless
+it exactly matches the pending proposal, and otherwise sets `DataKey::Admin`,
+clears the pending entry, and emits `AdminTransferAccepted`. A typo'd or
+unreachable proposed address can never permanently lock out administration —
+the old admin retains authority (including the ability to `propose_admin`
+again) until the new address actively claims it.
 
 ## Backward Compatibility Rules
 
-| Change type | Safe? |
-|---|---|
-| Add new `DataKey` variant | Yes |
-| Add new contract function | Yes |
-| Remove existing `DataKey` variant | No — orphans stored data |
-| Rename existing `DataKey` variant | No — requires migration |
-| Change value type of existing key | No — requires migration |
-| Reorder `TipJarError` discriminants | No — breaks client error handling |
+Soroban's `contracttype` derive encodes enum variants by name, not by
+declaration order or position — so these rules follow directly from that:
+
+| Change | Safe? | Notes |
+|---|---|---|
+| Add new `DataKey` variant | ✅ | Existing keys are unaffected regardless of where the new variant is declared. |
+| Add new contract function | ✅ | No selector collision. |
+| Remove a `DataKey` variant | ❌ | Orphans stored data — nothing will ever read it again, but it isn't reclaimed either. |
+| Rename a `DataKey` variant | ❌ | Same bytes on-chain, new name — old entries become unreadable under the new name. Requires a `migrate()` step that reads the old (still-declared) variant and re-writes under the new one. |
+| Change the value type stored under an existing key | ❌ | Requires a `migrate()` step to decode the old shape and re-encode the new one. |
+| Reorder `Error` discriminants | ❌ | Discriminants are explicit `= N` values precisely so this is safe *unless* someone removes the explicit value — never do that. |
+
+## Testing
+
+`contracts/tipjar/src/test_upgrade.rs` exercises the full lifecycle against a
+second, genuinely distinct compiled WASM (`contracts/tipjar-v2-fixture`,
+registered via `soroban_sdk::contractimport!`) rather than only unit-testing
+the storage writes in isolation — see that file's module docs for why a real
+second binary is necessary. It covers: balance/total preservation across the
+swap, the timelock boundary (`unlock_ledger - 1` panics, `unlock_ledger`
+succeeds), cancellation, non-admin rejection of `propose_upgrade` and
+`cancel_upgrade`, a second pending proposal being rejected, `migrate()`
+idempotency across repeated calls, and the two-step admin transfer.
+
+```bash
+cargo build -p tipjar-v2-fixture --target wasm32v1-none --release
+cargo test -p tipjar
+```
+
+The fixture must be built first — `contractimport!` embeds the compiled
+WASM at compile time, so it has to already exist on disk.
