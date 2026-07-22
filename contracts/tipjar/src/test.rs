@@ -189,6 +189,31 @@ fn init_rejects_zero_timelock() {
 }
 
 #[test]
+fn init_requires_admin_auth() {
+    // No `env.mock_all_auths()` here: this deliberately leaves every address
+    // unauthorized, so `init` must fail closed on `admin.require_auth()`
+    // rather than letting an unauthenticated caller seed the admin. Without
+    // that check, anyone could front-run the real deployer's `init` call on
+    // a live network and permanently lock in themselves as admin.
+    let env = Env::default();
+
+    let token_admin = Address::generate(&env);
+    let token = env
+        .register_stellar_asset_contract_v2(token_admin)
+        .address();
+    let admin = Address::generate(&env);
+
+    let contract_id = env.register(TipJar, ());
+    let client = TipJarClient::new(&env, &contract_id);
+
+    let result = client.try_init(&token, &admin, &TEST_UPGRADE_TIMELOCK);
+    assert!(
+        result.is_err(),
+        "init must not succeed without the admin's authorization"
+    );
+}
+
+#[test]
 fn withdraw_with_nothing_to_withdraw_errors() {
     let ctx = Ctx::new();
     let creator = Address::generate(&ctx.env);

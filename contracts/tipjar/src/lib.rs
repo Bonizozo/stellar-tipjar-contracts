@@ -186,6 +186,7 @@ impl TipJar {
         if upgrade_timelock_ledgers == 0 {
             panic_with_error!(&env, Error::InvalidTimelock);
         }
+        admin.require_auth();
         env.storage().instance().set(&DataKey::Token, &token);
         env.storage().instance().set(&DataKey::Admin, &admin);
         env.storage()
