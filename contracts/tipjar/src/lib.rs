@@ -10,9 +10,9 @@ mod test;
 #[cfg(test)]
 mod test_exhaustive;
 #[cfg(test)]
-mod test_upgrade;
-#[cfg(test)]
 mod test_invariants;
+#[cfg(test)]
+mod test_upgrade;
 
 /// Ledger TTL bump applied to instance and persistent storage on every write.
 const LEDGER_THRESHOLD: u32 = 100_000;
