@@ -33,7 +33,6 @@ impl Ctx {
             .register_stellar_asset_contract_v2(token_admin)
             .address();
         let admin = Address::generate(&env);
-
         let contract_id = env.register(TipJar, ());
         let client = TipJarClient::new(&env, &contract_id);
         client.init(&token, &admin, &TEST_UPGRADE_TIMELOCK);
