@@ -34,7 +34,7 @@ jobs:
         run: cargo test -p tipjar -- --test-threads=4
 
       - name: Run quickcheck property tests
-        run: cargo test -p tipjar --test quickcheck_properties
+        run: cargo test -p tipjar test_invariants -- --nocapture
 
       - name: Run integration test suite
         run: cargo test -p tipjar-integration-tests
