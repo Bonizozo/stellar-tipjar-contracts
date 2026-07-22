@@ -1,0 +1,19 @@
+[package]
+name = "tipjar-v2-fixture"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+publish = false
+
+# Test-only fixture: a stand-in "v2" WASM used to exercise contracts/tipjar's
+# propose_upgrade/execute_upgrade/migrate flow end-to-end via a real
+# soroban_sdk::contractimport! + upload_contract_wasm swap. Not deployed
+# anywhere; not a second production contract. See
+# contracts/tipjar/src/test_upgrade.rs and docs/UPGRADE_RUNBOOK.md.
+
+[lib]
+crate-type = ["cdylib"]
+doctest = false
+
+[dependencies]
+soroban-sdk = "26.1.0"
