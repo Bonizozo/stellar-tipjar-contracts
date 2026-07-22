@@ -13,10 +13,25 @@ All data payloads are serialized in Soroban as arrays (using `data_format = "vec
 
 ### 2. `Withdraw`
 - **Topics**: `["withdraw", creator: Address]`
-- **Data (Vec)**: `[amount: i128]`
-- **Semantics**: Emitted when a creator withdraws their tips. `amount` is the total withdrawn balance.
+- **Data (Vec)**: `[amount: i128, to: Address]`
+- **Semantics**: Emitted when a creator (or an authorized operator) withdraws. `amount` is the amount paid out this call; `to` is the payout address funds were sent to.
 
 *(Note: The `Withdraw` event's data payload was recently normalized to use `data_format = "vec"` for trailing-field evolution. Legacy events did not use this format.)*
+
+### 3. `PayoutChangeProposed` / `PayoutChangeApplied` / `PayoutChangeCancelled`
+- **Topics**: `["payout_change_proposed" | "payout_change_applied" | "payout_change_cancelled", creator: Address]`
+- **Data (Vec)**: proposed — `[new_payout: Address, effective_ledger: u32]`; applied — `[new_payout: Address]`; cancelled — `[]`
+- **Semantics**: Track a creator's timelocked payout-address change (see `docs/CONTRACT_SPEC.md`).
+
+### 4. `OperatorAuthorized` / `OperatorRevoked`
+- **Topics**: `["operator_authorized" | "operator_revoked", creator: Address, operator: Address]`
+- **Data (Vec)**: authorized — `[allowance: i128, expiry_ledger: u32]`; revoked — `[]`
+- **Semantics**: Track delegated withdrawal authority a creator grants to an operator address.
+
+### 5. Upgrade lifecycle: `AdminTransferProposed` / `AdminTransferAccepted` / `UpgradeProposed` / `UpgradeExecuted` / `UpgradeCancelled` / `Migrated`
+- **Topics**: `["admin_transfer_proposed"]` / `["admin_transfer_accepted"]` / `["upgrade_proposed", hash: BytesN<32>]` / `["upgrade_executed", hash: BytesN<32>]` / `["upgrade_cancelled", hash: BytesN<32>]` / `["migrated"]`
+- **Data (Vec)**: `[current_admin: Address, new_admin: Address]` / `[new_admin: Address]` / `[unlock_ledger: u32]` / `[]` / `[]` / `[from_version: u32, to_version: u32]`
+- **Semantics**: The full timelocked upgrade lifecycle (`propose_upgrade` → `execute_upgrade`/`cancel_upgrade` → `migrate`) and two-step admin transfer (`propose_admin` → `accept_admin`). Watchers should alert on `UpgradeProposed` and treat the timelock window as a review period — see `docs/UPGRADE_RUNBOOK.md`.
 
 ## Legacy Events (TipJarLegacy)
 

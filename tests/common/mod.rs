@@ -60,7 +60,7 @@ impl TestContext {
         let admin = Address::generate(&env);
         let contract_id = env.register(TipJar, ());
         let client = TipJarClient::new(&env, &contract_id);
-        client.init(&token, &admin);
+        client.init(&token, &admin, &1000);
 
         let guardian = Address::generate(&env);
         client.set_guardian(&admin, &guardian);

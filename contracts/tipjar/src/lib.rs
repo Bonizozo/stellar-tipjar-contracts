@@ -2,7 +2,7 @@
 
 use soroban_sdk::{
     contract, contracterror, contractevent, contractimpl, contracttype, panic_with_error, token,
-    Address, Env, MuxedAddress,
+    Address, BytesN, Env, MuxedAddress,
 };
 
 #[cfg(test)]
@@ -11,12 +11,19 @@ mod test;
 mod test_exhaustive;
 #[cfg(test)]
 mod test_invariants;
+#[cfg(test)]
+mod test_upgrade;
 
 /// Ledger TTL bump applied to instance and persistent storage on every write.
 const LEDGER_THRESHOLD: u32 = 100_000;
 const LEDGER_BUMP: u32 = 120_960; // ~7 days at 5s/ledger
 
 const PAYOUT_DELAY_LEDGERS: u32 = 17280; // ~1 day at 5s/ledger
+
+/// Storage schema version this build of the contract expects. `migrate()`
+/// advances `DataKey::DataVersion` towards this value; a build whose
+/// `DATA_VERSION` is already met treats `migrate()` as a no-op.
+const DATA_VERSION: u32 = 1;
 
 /// Default lifetime of a guardian-initiated pause before it auto-expires,
 /// unless the admin confirms it into a persistent pause first. Overridable
@@ -47,8 +54,17 @@ pub enum DataKey {
     PendingPayoutChange(Address),
     /// Operator delegation: (creator, operator) -> (allowance, expiry_ledger)
     Operator(Address, Address),
-    /// Sole admin address: can unpause and can pause persistently.
+    /// Address authorized to propose/cancel upgrades and admin transfers, and
+    /// to manage the circuit breaker (pause/guardian).
     Admin,
+    /// Two-step admin transfer: address that may call `accept_admin`.
+    PendingAdmin,
+    /// Ledger delay enforced between `propose_upgrade` and `execute_upgrade`, set at `init`.
+    UpgradeTimelockLedgers,
+    /// Pending upgrade proposal: (new_wasm_hash, unlock_ledger)
+    PendingUpgrade,
+    /// Storage schema version, advanced by `migrate()` after an upgrade.
+    DataVersion,
     /// Sole guardian address, settable by admin: can pause instantly but
     /// never unpause. Absent until `set_guardian` is called.
     Guardian,
@@ -136,6 +152,48 @@ pub struct OperatorRevoked {
     operator: Address,
 }
 
+/// Topics `("admin_transfer_proposed",)`, data `(current_admin, new_admin)`.
+#[contractevent(data_format = "vec")]
+pub struct AdminTransferProposed {
+    current_admin: Address,
+    new_admin: Address,
+}
+
+/// Topics `("admin_transfer_accepted",)`, data `(new_admin,)`.
+#[contractevent(data_format = "vec")]
+pub struct AdminTransferAccepted {
+    new_admin: Address,
+}
+
+/// Topics `("upgrade_proposed", hash)`, data `(unlock_ledger,)`.
+#[contractevent(data_format = "vec")]
+pub struct UpgradeProposed {
+    #[topic]
+    hash: BytesN<32>,
+    unlock_ledger: u32,
+}
+
+/// Topics `("upgrade_executed", hash)`, data `()`.
+#[contractevent(data_format = "vec")]
+pub struct UpgradeExecuted {
+    #[topic]
+    hash: BytesN<32>,
+}
+
+/// Topics `("upgrade_cancelled", hash)`, data `()`.
+#[contractevent(data_format = "vec")]
+pub struct UpgradeCancelled {
+    #[topic]
+    hash: BytesN<32>,
+}
+
+/// Topics `("migrated",)`, data `(from_version, to_version)`.
+#[contractevent(data_format = "vec")]
+pub struct Migrated {
+    from_version: u32,
+    to_version: u32,
+}
+
 /// Topics `("paused", by)`, data `[flags]`.
 #[contractevent(data_format = "vec")]
 pub struct Paused {
@@ -174,9 +232,14 @@ pub enum Error {
     NoPendingPayoutChange = 9,
     InvalidTarget = 10,
     Unauthorized = 11,
-    TipsPaused = 12,
-    WithdrawalsPaused = 13,
-    InvalidDuration = 14,
+    NoPendingAdmin = 12,
+    InvalidTimelock = 13,
+    UpgradeAlreadyPending = 14,
+    NoPendingUpgrade = 15,
+    TimelockNotElapsed = 16,
+    TipsPaused = 17,
+    WithdrawalsPaused = 18,
+    InvalidDuration = 19,
 }
 
 #[contract]
@@ -184,15 +247,25 @@ pub struct TipJar;
 
 #[contractimpl]
 impl TipJar {
-    /// One-time configuration of the token this jar accepts and its admin.
-    /// Errors if called twice.
-    pub fn init(env: Env, token: Address, admin: Address) {
+    /// One-time configuration of the token this jar accepts, the upgrade
+    /// admin, and the ledger delay `execute_upgrade` must wait out after a
+    /// `propose_upgrade`. Errors if called twice.
+    pub fn init(env: Env, token: Address, admin: Address, upgrade_timelock_ledgers: u32) {
         if env.storage().instance().has(&DataKey::Token) {
             panic_with_error!(&env, Error::AlreadyInitialized);
+        }
+        if upgrade_timelock_ledgers == 0 {
+            panic_with_error!(&env, Error::InvalidTimelock);
         }
         admin.require_auth();
         env.storage().instance().set(&DataKey::Token, &token);
         env.storage().instance().set(&DataKey::Admin, &admin);
+        env.storage()
+            .instance()
+            .set(&DataKey::UpgradeTimelockLedgers, &upgrade_timelock_ledgers);
+        env.storage()
+            .instance()
+            .set(&DataKey::DataVersion, &DATA_VERSION);
         env.storage()
             .instance()
             .extend_ttl(LEDGER_THRESHOLD, LEDGER_BUMP);
@@ -446,6 +519,167 @@ impl TipJar {
         OperatorRevoked { creator, operator }.publish(&env);
     }
 
+    /// Proposes `new_admin` as the next admin. Takes effect only once
+    /// `new_admin` calls `accept_admin` — a single-step transfer to a typo'd
+    /// or unreachable address can never permanently lock out administration.
+    pub fn propose_admin(env: Env, admin: Address, new_admin: Address) {
+        admin.require_auth();
+        Self::require_admin(&env, &admin);
+
+        env.storage()
+            .instance()
+            .set(&DataKey::PendingAdmin, &new_admin);
+        env.storage()
+            .instance()
+            .extend_ttl(LEDGER_THRESHOLD, LEDGER_BUMP);
+
+        AdminTransferProposed {
+            current_admin: admin,
+            new_admin,
+        }
+        .publish(&env);
+    }
+
+    /// Completes a two-step admin transfer. Must be called by the address
+    /// named in the pending proposal.
+    pub fn accept_admin(env: Env, new_admin: Address) {
+        new_admin.require_auth();
+
+        let pending: Address = env
+            .storage()
+            .instance()
+            .get(&DataKey::PendingAdmin)
+            .unwrap_or_else(|| panic_with_error!(&env, Error::NoPendingAdmin));
+        if pending != new_admin {
+            panic_with_error!(&env, Error::NoPendingAdmin);
+        }
+
+        env.storage().instance().set(&DataKey::Admin, &new_admin);
+        env.storage().instance().remove(&DataKey::PendingAdmin);
+
+        AdminTransferAccepted { new_admin }.publish(&env);
+    }
+
+    /// Current admin address.
+    pub fn get_admin(env: Env) -> Address {
+        Self::admin_address(&env)
+    }
+
+    /// Admin-only. Records `new_wasm_hash` as a pending upgrade, unlocked
+    /// after the ledger delay configured at `init`. Only one proposal may be
+    /// pending at a time — cancel the existing one first to replace it.
+    pub fn propose_upgrade(env: Env, admin: Address, new_wasm_hash: BytesN<32>) {
+        admin.require_auth();
+        Self::require_admin(&env, &admin);
+
+        if env.storage().instance().has(&DataKey::PendingUpgrade) {
+            panic_with_error!(&env, Error::UpgradeAlreadyPending);
+        }
+
+        let timelock: u32 = env
+            .storage()
+            .instance()
+            .get(&DataKey::UpgradeTimelockLedgers)
+            .unwrap_or_else(|| panic_with_error!(&env, Error::NotInitialized));
+        let unlock_ledger = env.ledger().sequence() + timelock;
+
+        env.storage().instance().set(
+            &DataKey::PendingUpgrade,
+            &(new_wasm_hash.clone(), unlock_ledger),
+        );
+        env.storage()
+            .instance()
+            .extend_ttl(LEDGER_THRESHOLD, LEDGER_BUMP);
+
+        UpgradeProposed {
+            hash: new_wasm_hash,
+            unlock_ledger,
+        }
+        .publish(&env);
+    }
+
+    /// Admin-only. Aborts a pending upgrade proposal without waiting out the
+    /// timelock.
+    pub fn cancel_upgrade(env: Env, admin: Address) {
+        admin.require_auth();
+        Self::require_admin(&env, &admin);
+
+        let (hash, _): (BytesN<32>, u32) = env
+            .storage()
+            .instance()
+            .get(&DataKey::PendingUpgrade)
+            .unwrap_or_else(|| panic_with_error!(&env, Error::NoPendingUpgrade));
+        env.storage().instance().remove(&DataKey::PendingUpgrade);
+
+        UpgradeCancelled { hash }.publish(&env);
+    }
+
+    /// Swaps this contract's WASM to the proposed hash once its timelock has
+    /// elapsed. Permissionless by design — the admin already authorized the
+    /// upgrade at `propose_upgrade`, and its unlock ledger is public
+    /// on-chain state, so no caller identity check adds meaningful security
+    /// here. Storage is preserved by the host across the swap; call the new
+    /// WASM's `migrate()` afterwards to apply any storage-layout changes.
+    pub fn execute_upgrade(env: Env) {
+        let (hash, unlock_ledger): (BytesN<32>, u32) = env
+            .storage()
+            .instance()
+            .get(&DataKey::PendingUpgrade)
+            .unwrap_or_else(|| panic_with_error!(&env, Error::NoPendingUpgrade));
+
+        if env.ledger().sequence() < unlock_ledger {
+            panic_with_error!(&env, Error::TimelockNotElapsed);
+        }
+
+        // Clear the proposal before the swap so a re-invocation of this same
+        // function (impossible post-swap unless the new WASM redefines it,
+        // but defensively) always fails closed with NoPendingUpgrade.
+        env.storage().instance().remove(&DataKey::PendingUpgrade);
+
+        env.deployer().update_current_contract_wasm(hash.clone());
+
+        UpgradeExecuted { hash }.publish(&env);
+    }
+
+    /// Admin-only, idempotent. Advances `DataKey::DataVersion` towards this
+    /// build's `DATA_VERSION`, applying any storage transformation the new
+    /// WASM requires. A no-op (no panic, no event) if the stored version
+    /// already meets or exceeds `DATA_VERSION` — safe to call more than once,
+    /// including before the first upgrade or after a repeated invocation.
+    pub fn migrate(env: Env, admin: Address) {
+        admin.require_auth();
+        Self::require_admin(&env, &admin);
+
+        let current: u32 = env
+            .storage()
+            .instance()
+            .get(&DataKey::DataVersion)
+            .unwrap_or(1);
+        if current >= DATA_VERSION {
+            return;
+        }
+
+        // Storage-layout transformations for this version step would run
+        // here, ahead of recording the new version below.
+        env.storage()
+            .instance()
+            .set(&DataKey::DataVersion, &DATA_VERSION);
+
+        Migrated {
+            from_version: current,
+            to_version: DATA_VERSION,
+        }
+        .publish(&env);
+    }
+
+    /// Current storage schema version.
+    pub fn get_data_version(env: Env) -> u32 {
+        env.storage()
+            .instance()
+            .get(&DataKey::DataVersion)
+            .unwrap_or(1)
+    }
+
     // ── circuit breaker ─────────────────────────────────────────────────
 
     /// Appoints (or replaces) the guardian. Admin only.
@@ -526,10 +760,6 @@ impl TipJar {
         Self::pause_state(&env).guardian_expiry
     }
 
-    pub fn get_admin(env: Env) -> Address {
-        Self::admin_address(&env)
-    }
-
     pub fn get_guardian(env: Env) -> Option<Address> {
         Self::guardian_address(&env)
     }
@@ -566,10 +796,7 @@ impl TipJar {
 
     fn unpause_internal(env: Env, caller: Address, flag: u32) {
         caller.require_auth();
-        let admin = Self::admin_address(&env);
-        if caller != admin {
-            panic_with_error!(&env, Error::Unauthorized);
-        }
+        Self::require_admin(&env, &caller);
 
         let mut state = Self::pause_state(&env);
         state.admin_flags &= !flag;
@@ -625,10 +852,10 @@ impl TipJar {
     }
 
     fn admin_address(env: &Env) -> Address {
-        match env.storage().instance().get(&DataKey::Admin) {
-            Some(admin) => admin,
-            None => panic_with_error!(env, Error::NotInitialized),
-        }
+        env.storage()
+            .instance()
+            .get(&DataKey::Admin)
+            .unwrap_or_else(|| panic_with_error!(env, Error::NotInitialized))
     }
 
     fn guardian_address(env: &Env) -> Option<Address> {

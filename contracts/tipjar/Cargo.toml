@@ -6,6 +6,11 @@ license = "MIT"
 publish = false
 
 [lib]
+# `rlib` lets tests/integration depend on this crate as a normal Rust
+# library; `cdylib` remains the actual on-chain WASM artifact. Unlike
+# contracts/tipjar-v2-fixture, tests/integration builds a native test binary
+# rather than a second cdylib, so it isn't subject to the WASM
+# symbol-export collision that rules out an rlib dependency there.
 crate-type = ["cdylib", "rlib"]
 doctest = false
 

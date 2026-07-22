@@ -3,11 +3,19 @@
   "functions": [
     {
       "name": "init",
-      "doc": "One-time configuration of the token this jar accepts. Errors if called twice.",
+      "doc": "One-time configuration of the token this jar accepts, the upgrade\nadmin, and the ledger delay `execute_upgrade` must wait out after a\n`propose_upgrade`. Errors if called twice.",
       "params": [
         {
           "name": "token",
           "ty": "Address"
+        },
+        {
+          "name": "admin",
+          "ty": "Address"
+        },
+        {
+          "name": "upgrade_timelock_ledgers",
+          "ty": "u32"
         }
       ],
       "returns": "()"
@@ -128,6 +136,212 @@
         }
       ],
       "returns": "()"
+    },
+    {
+      "name": "propose_admin",
+      "doc": "Proposes `new_admin` as the next admin. Takes effect only once\n`new_admin` calls `accept_admin` — a single-step transfer to a typo'd\nor unreachable address can never permanently lock out administration.",
+      "params": [
+        {
+          "name": "admin",
+          "ty": "Address"
+        },
+        {
+          "name": "new_admin",
+          "ty": "Address"
+        }
+      ],
+      "returns": "()"
+    },
+    {
+      "name": "accept_admin",
+      "doc": "Completes a two-step admin transfer. Must be called by the address\nnamed in the pending proposal.",
+      "params": [
+        {
+          "name": "new_admin",
+          "ty": "Address"
+        }
+      ],
+      "returns": "()"
+    },
+    {
+      "name": "get_admin",
+      "doc": "Current admin address.",
+      "params": [],
+      "returns": "Address"
+    },
+    {
+      "name": "propose_upgrade",
+      "doc": "Admin-only. Records `new_wasm_hash` as a pending upgrade, unlocked\nafter the ledger delay configured at `init`. Only one proposal may be\npending at a time — cancel the existing one first to replace it.",
+      "params": [
+        {
+          "name": "admin",
+          "ty": "Address"
+        },
+        {
+          "name": "new_wasm_hash",
+          "ty": "BytesN<32>"
+        }
+      ],
+      "returns": "()"
+    },
+    {
+      "name": "cancel_upgrade",
+      "doc": "Admin-only. Aborts a pending upgrade proposal without waiting out the\ntimelock.",
+      "params": [
+        {
+          "name": "admin",
+          "ty": "Address"
+        }
+      ],
+      "returns": "()"
+    },
+    {
+      "name": "execute_upgrade",
+      "doc": "Swaps this contract's WASM to the proposed hash once its timelock has\nelapsed. Permissionless by design — the admin already authorized the\nupgrade at `propose_upgrade`, and its unlock ledger is public\non-chain state, so no caller identity check adds meaningful security\nhere. Storage is preserved by the host across the swap; call the new\nWASM's `migrate()` afterwards to apply any storage-layout changes.",
+      "params": [],
+      "returns": "()"
+    },
+    {
+      "name": "migrate",
+      "doc": "Admin-only, idempotent. Advances `DataKey::DataVersion` towards this\nbuild's `DATA_VERSION`, applying any storage transformation the new\nWASM requires. A no-op (no panic, no event) if the stored version\nalready meets or exceeds `DATA_VERSION` — safe to call more than once,\nincluding before the first upgrade or after a repeated invocation.",
+      "params": [
+        {
+          "name": "admin",
+          "ty": "Address"
+        }
+      ],
+      "returns": "()"
+    },
+    {
+      "name": "get_data_version",
+      "doc": "Current storage schema version.",
+      "params": [],
+      "returns": "u32"
+    },
+    {
+      "name": "set_guardian",
+      "doc": "Appoints (or replaces) the guardian. Admin only.",
+      "params": [
+        {
+          "name": "admin",
+          "ty": "Address"
+        },
+        {
+          "name": "guardian",
+          "ty": "Address"
+        }
+      ],
+      "returns": "()"
+    },
+    {
+      "name": "set_guardian_pause_duration",
+      "doc": "Configures how many ledgers a guardian-initiated pause lasts before\nauto-expiring. Admin only.",
+      "params": [
+        {
+          "name": "admin",
+          "ty": "Address"
+        },
+        {
+          "name": "ledgers",
+          "ty": "u32"
+        }
+      ],
+      "returns": "()"
+    },
+    {
+      "name": "pause_tips",
+      "doc": "Pauses `tip`. Callable by admin (persists until explicitly unpaused)\nor guardian (auto-expires; call again as admin to confirm/persist it).",
+      "params": [
+        {
+          "name": "caller",
+          "ty": "Address"
+        }
+      ],
+      "returns": "()"
+    },
+    {
+      "name": "pause_withdrawals",
+      "doc": "Pauses `withdraw` and the withdrawal-mechanics entrypoints. See `pause_tips`.",
+      "params": [
+        {
+          "name": "caller",
+          "ty": "Address"
+        }
+      ],
+      "returns": "()"
+    },
+    {
+      "name": "pause_all",
+      "doc": "Pauses both tips and withdrawals in one call. See `pause_tips`.",
+      "params": [
+        {
+          "name": "caller",
+          "ty": "Address"
+        }
+      ],
+      "returns": "()"
+    },
+    {
+      "name": "unpause_tips",
+      "doc": "Unpauses `tip`. Admin only — guardians can pause but never unpause.",
+      "params": [
+        {
+          "name": "caller",
+          "ty": "Address"
+        }
+      ],
+      "returns": "()"
+    },
+    {
+      "name": "unpause_withdrawals",
+      "doc": "Unpauses `withdraw` and the withdrawal-mechanics entrypoints. Admin only.",
+      "params": [
+        {
+          "name": "caller",
+          "ty": "Address"
+        }
+      ],
+      "returns": "()"
+    },
+    {
+      "name": "unpause_all",
+      "doc": "Unpauses both tips and withdrawals in one call. Admin only.",
+      "params": [
+        {
+          "name": "caller",
+          "ty": "Address"
+        }
+      ],
+      "returns": "()"
+    },
+    {
+      "name": "is_feature_paused",
+      "doc": "True if every bit in `flag` is currently paused (accounting for\nguardian auto-expiry).",
+      "params": [
+        {
+          "name": "flag",
+          "ty": "u32"
+        }
+      ],
+      "returns": "bool"
+    },
+    {
+      "name": "pause_flags",
+      "doc": "The currently effective pause bitmask (accounting for guardian auto-expiry).",
+      "params": [],
+      "returns": "u32"
+    },
+    {
+      "name": "guardian_pause_expiry_ledger",
+      "doc": "Ledger sequence at which the current guardian-originated pause bits\nexpire. 0 if no guardian pause is active.",
+      "params": [],
+      "returns": "u32"
+    },
+    {
+      "name": "get_guardian",
+      "doc": "",
+      "params": [],
+      "returns": "Option<Address>"
     }
   ],
   "errors": [
@@ -170,6 +384,42 @@
     {
       "name": "InvalidTarget",
       "code": 10
+    },
+    {
+      "name": "Unauthorized",
+      "code": 11
+    },
+    {
+      "name": "NoPendingAdmin",
+      "code": 12
+    },
+    {
+      "name": "InvalidTimelock",
+      "code": 13
+    },
+    {
+      "name": "UpgradeAlreadyPending",
+      "code": 14
+    },
+    {
+      "name": "NoPendingUpgrade",
+      "code": 15
+    },
+    {
+      "name": "TimelockNotElapsed",
+      "code": 16
+    },
+    {
+      "name": "TipsPaused",
+      "code": 17
+    },
+    {
+      "name": "WithdrawalsPaused",
+      "code": 18
+    },
+    {
+      "name": "InvalidDuration",
+      "code": 19
     }
   ]
 }

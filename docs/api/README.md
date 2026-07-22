@@ -16,15 +16,26 @@
 | `8` | `PendingPayoutChangeActive` |
 | `9` | `NoPendingPayoutChange` |
 | `10` | `InvalidTarget` |
+| `11` | `Unauthorized` |
+| `12` | `NoPendingAdmin` |
+| `13` | `InvalidTimelock` |
+| `14` | `UpgradeAlreadyPending` |
+| `15` | `NoPendingUpgrade` |
+| `16` | `TimelockNotElapsed` |
+| `17` | `TipsPaused` |
+| `18` | `WithdrawalsPaused` |
+| `19` | `InvalidDuration` |
 
 ## Functions
 
 ### `init`
 
-One-time configuration of the token this jar accepts. Errors if called twice.
+One-time configuration of the token this jar accepts, the upgrade
+admin, and the ledger delay `execute_upgrade` must wait out after a
+`propose_upgrade`. Errors if called twice.
 
 ```rust
-pub fn init(token: Address) -> ()
+pub fn init(token: Address, admin: Address, upgrade_timelock_ledgers: u32) -> ()
 ```
 
 **Parameters**
@@ -32,11 +43,13 @@ pub fn init(token: Address) -> ()
 | Name | Type |
 |------|------|
 | `token` | `Address` |
+| `admin` | `Address` |
+| `upgrade_timelock_ledgers` | `u32` |
 
 **Example**
 
 ```rust
-client.init(&token);
+client.init(&token, &admin, &upgrade_timelock_ledgers);
 ```
 
 ---
@@ -197,6 +210,443 @@ pub fn revoke_operator(creator: Address, operator: Address) -> ()
 
 ```rust
 client.revoke_operator(&creator, &operator);
+```
+
+---
+
+### `propose_admin`
+
+Proposes `new_admin` as the next admin. Takes effect only once
+`new_admin` calls `accept_admin` — a single-step transfer to a typo'd
+or unreachable address can never permanently lock out administration.
+
+```rust
+pub fn propose_admin(admin: Address, new_admin: Address) -> ()
+```
+
+**Parameters**
+
+| Name | Type |
+|------|------|
+| `admin` | `Address` |
+| `new_admin` | `Address` |
+
+**Example**
+
+```rust
+client.propose_admin(&admin, &new_admin);
+```
+
+---
+
+### `accept_admin`
+
+Completes a two-step admin transfer. Must be called by the address
+named in the pending proposal.
+
+```rust
+pub fn accept_admin(new_admin: Address) -> ()
+```
+
+**Parameters**
+
+| Name | Type |
+|------|------|
+| `new_admin` | `Address` |
+
+**Example**
+
+```rust
+client.accept_admin(&new_admin);
+```
+
+---
+
+### `get_admin`
+
+Current admin address.
+
+```rust
+pub fn get_admin() -> Address
+```
+
+**Returns** — `Address`
+
+**Example**
+
+```rust
+client.get_admin();
+```
+
+---
+
+### `propose_upgrade`
+
+Admin-only. Records `new_wasm_hash` as a pending upgrade, unlocked
+after the ledger delay configured at `init`. Only one proposal may be
+pending at a time — cancel the existing one first to replace it.
+
+```rust
+pub fn propose_upgrade(admin: Address, new_wasm_hash: BytesN<32>) -> ()
+```
+
+**Parameters**
+
+| Name | Type |
+|------|------|
+| `admin` | `Address` |
+| `new_wasm_hash` | `BytesN<32>` |
+
+**Example**
+
+```rust
+client.propose_upgrade(&admin, &new_wasm_hash);
+```
+
+---
+
+### `cancel_upgrade`
+
+Admin-only. Aborts a pending upgrade proposal without waiting out the
+timelock.
+
+```rust
+pub fn cancel_upgrade(admin: Address) -> ()
+```
+
+**Parameters**
+
+| Name | Type |
+|------|------|
+| `admin` | `Address` |
+
+**Example**
+
+```rust
+client.cancel_upgrade(&admin);
+```
+
+---
+
+### `execute_upgrade`
+
+Swaps this contract's WASM to the proposed hash once its timelock has
+elapsed. Permissionless by design — the admin already authorized the
+upgrade at `propose_upgrade`, and its unlock ledger is public
+on-chain state, so no caller identity check adds meaningful security
+here. Storage is preserved by the host across the swap; call the new
+WASM's `migrate()` afterwards to apply any storage-layout changes.
+
+```rust
+pub fn execute_upgrade() -> ()
+```
+
+**Example**
+
+```rust
+client.execute_upgrade();
+```
+
+---
+
+### `migrate`
+
+Admin-only, idempotent. Advances `DataKey::DataVersion` towards this
+build's `DATA_VERSION`, applying any storage transformation the new
+WASM requires. A no-op (no panic, no event) if the stored version
+already meets or exceeds `DATA_VERSION` — safe to call more than once,
+including before the first upgrade or after a repeated invocation.
+
+```rust
+pub fn migrate(admin: Address) -> ()
+```
+
+**Parameters**
+
+| Name | Type |
+|------|------|
+| `admin` | `Address` |
+
+**Example**
+
+```rust
+client.migrate(&admin);
+```
+
+---
+
+### `get_data_version`
+
+Current storage schema version.
+
+```rust
+pub fn get_data_version() -> u32
+```
+
+**Returns** — `u32`
+
+**Example**
+
+```rust
+client.get_data_version();
+```
+
+---
+
+### `set_guardian`
+
+Appoints (or replaces) the guardian. Admin only.
+
+```rust
+pub fn set_guardian(admin: Address, guardian: Address) -> ()
+```
+
+**Parameters**
+
+| Name | Type |
+|------|------|
+| `admin` | `Address` |
+| `guardian` | `Address` |
+
+**Example**
+
+```rust
+client.set_guardian(&admin, &guardian);
+```
+
+---
+
+### `set_guardian_pause_duration`
+
+Configures how many ledgers a guardian-initiated pause lasts before
+auto-expiring. Admin only.
+
+```rust
+pub fn set_guardian_pause_duration(admin: Address, ledgers: u32) -> ()
+```
+
+**Parameters**
+
+| Name | Type |
+|------|------|
+| `admin` | `Address` |
+| `ledgers` | `u32` |
+
+**Example**
+
+```rust
+client.set_guardian_pause_duration(&admin, &ledgers);
+```
+
+---
+
+### `pause_tips`
+
+Pauses `tip`. Callable by admin (persists until explicitly unpaused)
+or guardian (auto-expires; call again as admin to confirm/persist it).
+
+```rust
+pub fn pause_tips(caller: Address) -> ()
+```
+
+**Parameters**
+
+| Name | Type |
+|------|------|
+| `caller` | `Address` |
+
+**Example**
+
+```rust
+client.pause_tips(&caller);
+```
+
+---
+
+### `pause_withdrawals`
+
+Pauses `withdraw` and the withdrawal-mechanics entrypoints. See `pause_tips`.
+
+```rust
+pub fn pause_withdrawals(caller: Address) -> ()
+```
+
+**Parameters**
+
+| Name | Type |
+|------|------|
+| `caller` | `Address` |
+
+**Example**
+
+```rust
+client.pause_withdrawals(&caller);
+```
+
+---
+
+### `pause_all`
+
+Pauses both tips and withdrawals in one call. See `pause_tips`.
+
+```rust
+pub fn pause_all(caller: Address) -> ()
+```
+
+**Parameters**
+
+| Name | Type |
+|------|------|
+| `caller` | `Address` |
+
+**Example**
+
+```rust
+client.pause_all(&caller);
+```
+
+---
+
+### `unpause_tips`
+
+Unpauses `tip`. Admin only — guardians can pause but never unpause.
+
+```rust
+pub fn unpause_tips(caller: Address) -> ()
+```
+
+**Parameters**
+
+| Name | Type |
+|------|------|
+| `caller` | `Address` |
+
+**Example**
+
+```rust
+client.unpause_tips(&caller);
+```
+
+---
+
+### `unpause_withdrawals`
+
+Unpauses `withdraw` and the withdrawal-mechanics entrypoints. Admin only.
+
+```rust
+pub fn unpause_withdrawals(caller: Address) -> ()
+```
+
+**Parameters**
+
+| Name | Type |
+|------|------|
+| `caller` | `Address` |
+
+**Example**
+
+```rust
+client.unpause_withdrawals(&caller);
+```
+
+---
+
+### `unpause_all`
+
+Unpauses both tips and withdrawals in one call. Admin only.
+
+```rust
+pub fn unpause_all(caller: Address) -> ()
+```
+
+**Parameters**
+
+| Name | Type |
+|------|------|
+| `caller` | `Address` |
+
+**Example**
+
+```rust
+client.unpause_all(&caller);
+```
+
+---
+
+### `is_feature_paused`
+
+True if every bit in `flag` is currently paused (accounting for
+guardian auto-expiry).
+
+```rust
+pub fn is_feature_paused(flag: u32) -> bool
+```
+
+**Parameters**
+
+| Name | Type |
+|------|------|
+| `flag` | `u32` |
+
+**Returns** — `bool`
+
+**Example**
+
+```rust
+client.is_feature_paused(&flag);
+```
+
+---
+
+### `pause_flags`
+
+The currently effective pause bitmask (accounting for guardian auto-expiry).
+
+```rust
+pub fn pause_flags() -> u32
+```
+
+**Returns** — `u32`
+
+**Example**
+
+```rust
+client.pause_flags();
+```
+
+---
+
+### `guardian_pause_expiry_ledger`
+
+Ledger sequence at which the current guardian-originated pause bits
+expire. 0 if no guardian pause is active.
+
+```rust
+pub fn guardian_pause_expiry_ledger() -> u32
+```
+
+**Returns** — `u32`
+
+**Example**
+
+```rust
+client.guardian_pause_expiry_ledger();
+```
+
+---
+
+### `get_guardian`
+
+```rust
+pub fn get_guardian() -> Option<Address>
+```
+
+**Returns** — `Option<Address>`
+
+**Example**
+
+```rust
+client.get_guardian();
 ```
 
 ---
