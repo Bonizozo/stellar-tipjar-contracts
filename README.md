@@ -54,18 +54,26 @@ CONTRIBUTING.md
 
 ## Contract Capabilities
 
-- `init(env, token: Address)` — one-time configuration of the SEP-41 token this jar accepts; errors if called twice.
-- `tip(env, sender: Address, creator: Address, amount: i128)` — escrows `amount` of the configured token from `sender` for `creator`.
-- `get_total_tips(env, creator: Address) -> i128` — returns a creator's historical total tips (0 if never tipped).
-- `withdraw(env, creator: Address)` — pays out a creator's full withdrawable balance and resets it to zero; the historical total is left untouched.
+- `init(env, token: Address, admin: Address)` — one-time configuration of the SEP-41 token this jar accepts and its admin; errors if called twice.
+- `tip(env, sender: Address, creator: Address, amount: i128)` — escrows `amount` of the configured token from `sender` for `creator`, less the protocol fee (if any is configured); the creator's balance is credited with `amount - fee`.
+- `get_total_tips(env, creator: Address) -> i128` — returns a creator's historical gross total tips (0 if never tipped).
+- `withdraw(env, caller: Address, creator: Address, to: Address, amount: Option<i128>)` — pays out a creator's full or partial withdrawable balance to their payout address.
+- `set_fee(env, caller: Address, bps: u32, collector: Address)` — admin-only; sets the protocol fee rate (hard-capped on-chain at 1,000 bps / 10%) and its collector. `bps = 0` disables fees.
+- `withdraw_fees(env, caller: Address, amount: Option<i128>)` — pays out the fee collector's full or partial share of accrued protocol fees.
+- `propose_admin` / `accept_admin` / `cancel_admin_transfer` — two-step admin handover: a proposal only takes effect once the proposed address itself accepts, so a typoed address can't brick governance.
+
+See `contracts/tipjar/src/lib.rs` for the full function list, including operator delegation and payout-address rotation.
 
 ## Storage Model
 
 `DataKey` (instance/persistent storage):
 
 - `Token` — the configured SEP-41 token contract address (instance storage).
-- `CreatorBalance(Address)` — a creator's current withdrawable balance (persistent storage).
-- `CreatorTotal(Address)` — a creator's historical total ever tipped, never decreases (persistent storage).
+- `Admin` / `PendingAdmin` — the contract admin and any address proposed as its replacement (instance storage).
+- `FeeBps` / `FeeCollector` — the configured protocol fee rate and its collector (instance storage). Absent `FeeBps` means no fee.
+- `FeeBalance` — the fee collector's withdrawable accrued balance (persistent storage).
+- `CreatorBalance(Address)` — a creator's current withdrawable balance, net of fees (persistent storage).
+- `CreatorTotal(Address)` — a creator's historical gross total ever tipped, never decreases (persistent storage).
 
 Every write bumps the relevant ledger TTL (instance TTL on every call;
 persistent TTL on the specific keys touched) so escrowed balances and totals
@@ -73,8 +81,11 @@ don't expire while still in use.
 
 ## Events
 
+See [`docs/EVENTS.md`](docs/EVENTS.md) for the full event schema reference, including `FeeCharged`, `FeeConfigured`, `FeeWithdraw`, and the admin-transfer events.
+
 - topics `("tip", creator: Address)`, data `(sender: Address, amount: i128)` — emitted by `tip`.
-- topics `("withdraw", creator: Address)`, data `amount: i128` — emitted by `withdraw`.
+- topics `("withdraw", creator: Address)`, data `(amount: i128, to: Address)` — emitted by `withdraw`.
+- topics `("fee_charged", creator: Address)`, data `(gross: i128, fee: i128, net: i128)` — emitted by `tip` alongside `Tip`, only when a nonzero fee rate is configured.
 
 ## Prerequisites
 

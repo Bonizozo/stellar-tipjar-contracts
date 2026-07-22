@@ -20,6 +20,11 @@ const LEDGER_BUMP: u32 = 120_960; // ~7 days at 5s/ledger
 
 const PAYOUT_DELAY_LEDGERS: u32 = 17280; // ~1 day at 5s/ledger
 
+/// Basis-point denominator for fee math (1 bps = 1/10_000).
+const BPS_DENOMINATOR: i128 = 10_000;
+/// Hard on-chain ceiling for the protocol fee: 1_000 bps = 10%.
+const MAX_FEE_BPS: u32 = 1_000;
+
 /// Storage schema version this build of the contract expects. `migrate()`
 /// advances `DataKey::DataVersion` towards this value; a build whose
 /// `DATA_VERSION` is already met treats `migrate()` as a no-op.
@@ -46,7 +51,8 @@ pub enum DataKey {
     Token,
     /// Withdrawable balance escrowed for a creator.
     CreatorBalance(Address),
-    /// Historical total ever tipped to a creator (never decreases).
+    /// Historical total ever tipped to a creator (never decreases). Tracks
+    /// the gross amount tipped, before any protocol fee is deducted.
     CreatorTotal(Address),
     /// Payout address designated for a creator.
     PayoutAddress(Address),
@@ -54,8 +60,9 @@ pub enum DataKey {
     PendingPayoutChange(Address),
     /// Operator delegation: (creator, operator) -> (allowance, expiry_ledger)
     Operator(Address, Address),
-    /// Address authorized to propose/cancel upgrades and admin transfers, and
-    /// to manage the circuit breaker (pause/guardian).
+    /// Address authorized to propose/cancel upgrades and admin transfers, to
+    /// manage the circuit breaker (pause/guardian), and to configure the
+    /// protocol fee.
     Admin,
     /// Two-step admin transfer: address that may call `accept_admin`.
     PendingAdmin,
@@ -72,6 +79,12 @@ pub enum DataKey {
     Pause,
     /// Configurable ledger duration for guardian-initiated pauses.
     GuardianPauseDuration,
+    /// Protocol fee rate in basis points. Absent or 0 means no fee.
+    FeeBps,
+    /// Address authorized to withdraw accrued protocol fees.
+    FeeCollector,
+    /// Withdrawable protocol fee balance, accrued from tips.
+    FeeBalance,
 }
 
 /// Circuit-breaker state, stored as a single instance-storage entry.
@@ -165,6 +178,13 @@ pub struct AdminTransferAccepted {
     new_admin: Address,
 }
 
+/// Topics `("admin_transfer_cancelled", admin)`, data `[]`.
+#[contractevent(data_format = "vec")]
+pub struct AdminTransferCancelled {
+    #[topic]
+    admin: Address,
+}
+
 /// Topics `("upgrade_proposed", hash)`, data `(unlock_ledger,)`.
 #[contractevent(data_format = "vec")]
 pub struct UpgradeProposed {
@@ -217,6 +237,36 @@ pub struct GuardianUpdated {
     guardian: Address,
 }
 
+/// Topics `("fee_charged", creator)`, data `[gross, fee, net]`.
+/// Emitted alongside `Tip` whenever a nonzero fee rate is configured, so the
+/// indexer can reconstruct accounting without re-deriving the fee schedule
+/// that was active at the time of the tip.
+#[contractevent(data_format = "vec")]
+pub struct FeeCharged {
+    #[topic]
+    creator: Address,
+    gross: i128,
+    fee: i128,
+    net: i128,
+}
+
+/// Topics `("fee_configured", admin)`, data `[bps, collector]`.
+#[contractevent(data_format = "vec")]
+pub struct FeeConfigured {
+    #[topic]
+    admin: Address,
+    bps: u32,
+    collector: Address,
+}
+
+/// Topics `("fee_withdraw", collector)`, data `[amount]`.
+#[contractevent(data_format = "vec")]
+pub struct FeeWithdraw {
+    #[topic]
+    collector: Address,
+    amount: i128,
+}
+
 #[contracterror]
 #[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
 #[repr(u32)]
@@ -240,6 +290,9 @@ pub enum Error {
     TipsPaused = 17,
     WithdrawalsPaused = 18,
     InvalidDuration = 19,
+    InvalidFee = 20,
+    FeeOverflow = 21,
+    NotFeeCollector = 22,
 }
 
 #[contract]
@@ -271,7 +324,11 @@ impl TipJar {
             .extend_ttl(LEDGER_THRESHOLD, LEDGER_BUMP);
     }
 
-    /// Escrows `amount` of the configured token from `sender` for `creator`.
+    /// Escrows `amount` of the configured token from `sender` for `creator`,
+    /// less the protocol fee (if one is configured). The creator's balance is
+    /// credited with `amount - fee`; the fee itself accrues to `FeeBalance`
+    /// for later withdrawal by the fee collector. `fee + net == amount` holds
+    /// for every input.
     pub fn tip(env: Env, sender: Address, creator: Address, amount: i128) {
         sender.require_auth();
         Self::check_not_paused(&env, PAUSE_FLAG_TIPS);
@@ -279,6 +336,10 @@ impl TipJar {
         if amount <= 0 {
             panic_with_error!(&env, Error::InvalidAmount);
         }
+
+        let fee_bps: u32 = env.storage().instance().get(&DataKey::FeeBps).unwrap_or(0);
+        let fee = Self::fee_for(&env, amount, fee_bps);
+        let net_amount = amount - fee;
 
         let token = Self::token_address(&env);
         let contract_address = env.current_contract_address();
@@ -296,7 +357,7 @@ impl TipJar {
         let total: i128 = env.storage().persistent().get(&total_key).unwrap_or(0);
 
         let new_balance = balance
-            .checked_add(amount)
+            .checked_add(net_amount)
             .unwrap_or_else(|| panic_with_error!(&env, Error::InvalidAmount));
         let new_total = total
             .checked_add(amount)
@@ -310,6 +371,34 @@ impl TipJar {
         env.storage()
             .persistent()
             .extend_ttl(&total_key, LEDGER_THRESHOLD, LEDGER_BUMP);
+
+        // fee_bps == 0 is a true no-op: no fee storage entry, no fee event.
+        if fee_bps > 0 {
+            let fee_balance_key = DataKey::FeeBalance;
+            let fee_balance: i128 = env
+                .storage()
+                .persistent()
+                .get(&fee_balance_key)
+                .unwrap_or(0);
+            let new_fee_balance = fee_balance
+                .checked_add(fee)
+                .unwrap_or_else(|| panic_with_error!(&env, Error::FeeOverflow));
+            env.storage()
+                .persistent()
+                .set(&fee_balance_key, &new_fee_balance);
+            env.storage()
+                .persistent()
+                .extend_ttl(&fee_balance_key, LEDGER_THRESHOLD, LEDGER_BUMP);
+
+            FeeCharged {
+                creator: creator.clone(),
+                gross: amount,
+                fee,
+                net: net_amount,
+            }
+            .publish(&env);
+        }
+
         env.storage()
             .instance()
             .extend_ttl(LEDGER_THRESHOLD, LEDGER_BUMP);
@@ -560,9 +649,27 @@ impl TipJar {
         AdminTransferAccepted { new_admin }.publish(&env);
     }
 
+    /// Abandons a pending admin transfer, leaving the current admin in
+    /// place. Admin-only.
+    pub fn cancel_admin_transfer(env: Env, admin: Address) {
+        admin.require_auth();
+        Self::require_admin(&env, &admin);
+        if !env.storage().instance().has(&DataKey::PendingAdmin) {
+            panic_with_error!(&env, Error::NoPendingAdmin);
+        }
+
+        env.storage().instance().remove(&DataKey::PendingAdmin);
+        AdminTransferCancelled { admin }.publish(&env);
+    }
+
     /// Current admin address.
     pub fn get_admin(env: Env) -> Address {
         Self::admin_address(&env)
+    }
+
+    /// Address currently proposed as the next admin, if any.
+    pub fn get_pending_admin(env: Env) -> Option<Address> {
+        env.storage().instance().get(&DataKey::PendingAdmin)
     }
 
     /// Admin-only. Records `new_wasm_hash` as a pending upgrade, unlocked
@@ -849,6 +956,120 @@ impl TipJar {
             .instance()
             .get(&DataKey::GuardianPauseDuration)
             .unwrap_or(DEFAULT_GUARDIAN_PAUSE_DURATION_LEDGERS)
+    }
+
+    // ── protocol fee ─────────────────────────────────────────────────────
+
+    /// Sets the protocol fee rate and its collector. Admin-only; `bps` is
+    /// hard-capped at `MAX_FEE_BPS`. Setting `bps` to 0 disables fees.
+    pub fn set_fee(env: Env, admin: Address, bps: u32, collector: Address) {
+        admin.require_auth();
+        Self::require_admin(&env, &admin);
+        if bps > MAX_FEE_BPS {
+            panic_with_error!(&env, Error::InvalidFee);
+        }
+
+        env.storage().instance().set(&DataKey::FeeBps, &bps);
+        env.storage()
+            .instance()
+            .set(&DataKey::FeeCollector, &collector);
+        env.storage()
+            .instance()
+            .extend_ttl(LEDGER_THRESHOLD, LEDGER_BUMP);
+
+        FeeConfigured {
+            admin,
+            bps,
+            collector,
+        }
+        .publish(&env);
+    }
+
+    /// Pays out the fee collector's full or partial share of `FeeBalance`.
+    /// Mirrors `withdraw`'s pattern, including TTL extension.
+    pub fn withdraw_fees(env: Env, caller: Address, amount: Option<i128>) {
+        caller.require_auth();
+
+        let collector: Address = env
+            .storage()
+            .instance()
+            .get(&DataKey::FeeCollector)
+            .unwrap_or_else(|| panic_with_error!(&env, Error::NothingToWithdraw));
+        if caller != collector {
+            panic_with_error!(&env, Error::NotFeeCollector);
+        }
+
+        let balance_key = DataKey::FeeBalance;
+        let balance: i128 = env.storage().persistent().get(&balance_key).unwrap_or(0);
+        if balance == 0 {
+            panic_with_error!(&env, Error::NothingToWithdraw);
+        }
+
+        let amount_to_withdraw = amount.unwrap_or(balance);
+        if amount_to_withdraw <= 0 || amount_to_withdraw > balance {
+            panic_with_error!(&env, Error::InvalidAmount);
+        }
+
+        let token = Self::token_address(&env);
+        let contract_address = env.current_contract_address();
+
+        token::TokenClient::new(&env, &token).transfer(
+            &contract_address,
+            MuxedAddress::from(collector.clone()),
+            &amount_to_withdraw,
+        );
+
+        let new_balance = balance - amount_to_withdraw;
+        env.storage().persistent().set(&balance_key, &new_balance);
+        env.storage()
+            .persistent()
+            .extend_ttl(&balance_key, LEDGER_THRESHOLD, LEDGER_BUMP);
+        env.storage()
+            .instance()
+            .extend_ttl(LEDGER_THRESHOLD, LEDGER_BUMP);
+
+        FeeWithdraw {
+            collector,
+            amount: amount_to_withdraw,
+        }
+        .publish(&env);
+    }
+
+    pub fn get_fee_bps(env: Env) -> u32 {
+        env.storage().instance().get(&DataKey::FeeBps).unwrap_or(0)
+    }
+
+    pub fn get_fee_collector(env: Env) -> Option<Address> {
+        env.storage().instance().get(&DataKey::FeeCollector)
+    }
+
+    pub fn get_fee_balance(env: Env) -> i128 {
+        env.storage()
+            .persistent()
+            .get(&DataKey::FeeBalance)
+            .unwrap_or(0)
+    }
+
+    /// Computes `(fee, net)` for `amount` at `bps` without touching storage.
+    /// Exposed read-only so off-chain callers (SDKs, indexers, tests) can
+    /// preview the exact split the contract will apply.
+    pub fn preview_fee(env: Env, amount: i128, bps: u32) -> (i128, i128) {
+        let fee = Self::fee_for(&env, amount, bps);
+        (fee, amount - fee)
+    }
+
+    /// `floor(amount * bps / BPS_DENOMINATOR)`, checked against i128 overflow.
+    /// Since callers only ever pass a stored `bps <= MAX_FEE_BPS`, the result
+    /// is always `<= amount`, so `amount - fee` never underflows.
+    fn fee_for(env: &Env, amount: i128, bps: u32) -> i128 {
+        if bps == 0 {
+            return 0;
+        }
+        amount
+            .checked_mul(bps as i128)
+            .unwrap_or_else(|| panic_with_error!(env, Error::FeeOverflow))
+            .checked_div(BPS_DENOMINATOR)
+            .unwrap_or_else(|| panic_with_error!(env, Error::FeeOverflow))
     }
 
     fn admin_address(env: &Env) -> Address {

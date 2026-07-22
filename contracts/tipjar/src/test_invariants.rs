@@ -264,3 +264,27 @@ proptest! {
         }
     }
 }
+
+proptest! {
+    #![proptest_config(ProptestConfig::with_cases(1024))]
+
+    /// The conservation invariant `fee + net == gross` must hold for every
+    /// `(amount, bps)` pair the contract can ever be configured to accept —
+    /// `bps` is bounded by `MAX_FEE_BPS` (the on-chain cap enforced in
+    /// `set_fee`), and `amount` is bounded so `amount * MAX_FEE_BPS` cannot
+    /// overflow i128, matching the domain `fee_for`'s `checked_mul` accepts
+    /// without panicking.
+    #[test]
+    fn fee_conservation_holds_for_every_amount_and_bps(
+        amount in 1i128..=(i128::MAX / crate::MAX_FEE_BPS as i128),
+        bps in 0u32..=crate::MAX_FEE_BPS,
+    ) {
+        let env = Env::default();
+        let (fee, net) = crate::TipJar::preview_fee(env, amount, bps);
+
+        prop_assert_eq!(fee + net, amount, "fee + net must equal gross amount");
+        prop_assert!(fee >= 0, "fee must never be negative");
+        prop_assert!(net >= 0, "net must never be negative");
+        prop_assert!(fee <= amount, "fee must never exceed the gross amount");
+    }
+}

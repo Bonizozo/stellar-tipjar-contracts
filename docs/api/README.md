@@ -25,6 +25,9 @@
 | `17` | `TipsPaused` |
 | `18` | `WithdrawalsPaused` |
 | `19` | `InvalidDuration` |
+| `20` | `InvalidFee` |
+| `21` | `FeeOverflow` |
+| `22` | `NotFeeCollector` |
 
 ## Functions
 
@@ -56,7 +59,11 @@ client.init(&token, &admin, &upgrade_timelock_ledgers);
 
 ### `tip`
 
-Escrows `amount` of the configured token from `sender` for `creator`.
+Escrows `amount` of the configured token from `sender` for `creator`,
+less the protocol fee (if one is configured). The creator's balance is
+credited with `amount - fee`; the fee itself accrues to `FeeBalance`
+for later withdrawal by the fee collector. `fee + net == amount` holds
+for every input.
 
 ```rust
 pub fn tip(sender: Address, creator: Address, amount: i128) -> ()
@@ -262,6 +269,29 @@ client.accept_admin(&new_admin);
 
 ---
 
+### `cancel_admin_transfer`
+
+Abandons a pending admin transfer, leaving the current admin in
+place. Admin-only.
+
+```rust
+pub fn cancel_admin_transfer(admin: Address) -> ()
+```
+
+**Parameters**
+
+| Name | Type |
+|------|------|
+| `admin` | `Address` |
+
+**Example**
+
+```rust
+client.cancel_admin_transfer(&admin);
+```
+
+---
+
 ### `get_admin`
 
 Current admin address.
@@ -276,6 +306,24 @@ pub fn get_admin() -> Address
 
 ```rust
 client.get_admin();
+```
+
+---
+
+### `get_pending_admin`
+
+Address currently proposed as the next admin, if any.
+
+```rust
+pub fn get_pending_admin() -> Option<Address>
+```
+
+**Returns** — `Option<Address>`
+
+**Example**
+
+```rust
+client.get_pending_admin();
 ```
 
 ---
@@ -647,6 +695,130 @@ pub fn get_guardian() -> Option<Address>
 
 ```rust
 client.get_guardian();
+```
+
+---
+
+### `set_fee`
+
+Sets the protocol fee rate and its collector. Admin-only; `bps` is
+hard-capped at `MAX_FEE_BPS`. Setting `bps` to 0 disables fees.
+
+```rust
+pub fn set_fee(admin: Address, bps: u32, collector: Address) -> ()
+```
+
+**Parameters**
+
+| Name | Type |
+|------|------|
+| `admin` | `Address` |
+| `bps` | `u32` |
+| `collector` | `Address` |
+
+**Example**
+
+```rust
+client.set_fee(&admin, &bps, &collector);
+```
+
+---
+
+### `withdraw_fees`
+
+Pays out the fee collector's full or partial share of `FeeBalance`.
+Mirrors `withdraw`'s pattern, including TTL extension.
+
+```rust
+pub fn withdraw_fees(caller: Address, amount: Option<i128>) -> ()
+```
+
+**Parameters**
+
+| Name | Type |
+|------|------|
+| `caller` | `Address` |
+| `amount` | `Option<i128>` |
+
+**Example**
+
+```rust
+client.withdraw_fees(&caller, &amount);
+```
+
+---
+
+### `get_fee_bps`
+
+```rust
+pub fn get_fee_bps() -> u32
+```
+
+**Returns** — `u32`
+
+**Example**
+
+```rust
+client.get_fee_bps();
+```
+
+---
+
+### `get_fee_collector`
+
+```rust
+pub fn get_fee_collector() -> Option<Address>
+```
+
+**Returns** — `Option<Address>`
+
+**Example**
+
+```rust
+client.get_fee_collector();
+```
+
+---
+
+### `get_fee_balance`
+
+```rust
+pub fn get_fee_balance() -> i128
+```
+
+**Returns** — `i128`
+
+**Example**
+
+```rust
+client.get_fee_balance();
+```
+
+---
+
+### `preview_fee`
+
+Computes `(fee, net)` for `amount` at `bps` without touching storage.
+Exposed read-only so off-chain callers (SDKs, indexers, tests) can
+preview the exact split the contract will apply.
+
+```rust
+pub fn preview_fee(amount: i128, bps: u32) -> (i128, i128)
+```
+
+**Parameters**
+
+| Name | Type |
+|------|------|
+| `amount` | `i128` |
+| `bps` | `u32` |
+
+**Returns** — `(i128, i128)`
+
+**Example**
+
+```rust
+client.preview_fee(&amount, &bps);
 ```
 
 ---

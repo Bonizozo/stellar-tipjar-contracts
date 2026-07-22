@@ -36,7 +36,9 @@
 <li><a href="#fn-revoke_operator">revoke_operator</a></li>
 <li><a href="#fn-propose_admin">propose_admin</a></li>
 <li><a href="#fn-accept_admin">accept_admin</a></li>
+<li><a href="#fn-cancel_admin_transfer">cancel_admin_transfer</a></li>
 <li><a href="#fn-get_admin">get_admin</a></li>
+<li><a href="#fn-get_pending_admin">get_pending_admin</a></li>
 <li><a href="#fn-propose_upgrade">propose_upgrade</a></li>
 <li><a href="#fn-cancel_upgrade">cancel_upgrade</a></li>
 <li><a href="#fn-execute_upgrade">execute_upgrade</a></li>
@@ -54,6 +56,12 @@
 <li><a href="#fn-pause_flags">pause_flags</a></li>
 <li><a href="#fn-guardian_pause_expiry_ledger">guardian_pause_expiry_ledger</a></li>
 <li><a href="#fn-get_guardian">get_guardian</a></li>
+<li><a href="#fn-set_fee">set_fee</a></li>
+<li><a href="#fn-withdraw_fees">withdraw_fees</a></li>
+<li><a href="#fn-get_fee_bps">get_fee_bps</a></li>
+<li><a href="#fn-get_fee_collector">get_fee_collector</a></li>
+<li><a href="#fn-get_fee_balance">get_fee_balance</a></li>
+<li><a href="#fn-preview_fee">preview_fee</a></li>
 </ul></nav>
 <section id="errors"><h2>Error Codes</h2><table><thead><tr><th>Code</th><th>Name</th></tr></thead><tbody><tr><td><code>1</code></td><td><code>AlreadyInitialized</code></td></tr>
 <tr><td><code>2</code></td><td><code>NotInitialized</code></td></tr>
@@ -73,7 +81,10 @@
 <tr><td><code>16</code></td><td><code>TimelockNotElapsed</code></td></tr>
 <tr><td><code>17</code></td><td><code>TipsPaused</code></td></tr>
 <tr><td><code>18</code></td><td><code>WithdrawalsPaused</code></td></tr>
-<tr><td><code>19</code></td><td><code>InvalidDuration</code></td></tr></tbody></table></section>
+<tr><td><code>19</code></td><td><code>InvalidDuration</code></td></tr>
+<tr><td><code>20</code></td><td><code>InvalidFee</code></td></tr>
+<tr><td><code>21</code></td><td><code>FeeOverflow</code></td></tr>
+<tr><td><code>22</code></td><td><code>NotFeeCollector</code></td></tr></tbody></table></section>
 <h2>Functions</h2>
 <section class="fn-section" id="fn-init">
 <h3>init</h3>
@@ -88,7 +99,7 @@
 </section>
 <section class="fn-section" id="fn-tip">
 <h3>tip</h3>
-<p>Escrows `amount` of the configured token from `sender` for `creator`.</p>
+<p>Escrows `amount` of the configured token from `sender` for `creator`,<br>less the protocol fee (if one is configured). The creator's balance is<br>credited with `amount - fee`; the fee itself accrues to `FeeBalance`<br>for later withdrawal by the fee collector. `fee + net == amount` holds<br>for every input.</p>
 <pre><code>pub fn tip(sender: Address, creator: Address, amount: i128) -&gt; ()</code></pre>
 <h4>Parameters</h4><table><thead><tr><th>Name</th><th>Type</th></tr></thead><tbody><tr><td><code>sender</code></td><td><code>Address</code></td></tr>
 <tr><td><code>creator</code></td><td><code>Address</code></td></tr>
@@ -178,6 +189,15 @@
 <h4>Example</h4>
 <pre><code>client.accept_admin(&amp;new_admin);</code></pre>
 </section>
+<section class="fn-section" id="fn-cancel_admin_transfer">
+<h3>cancel_admin_transfer</h3>
+<p>Abandons a pending admin transfer, leaving the current admin in<br>place. Admin-only.</p>
+<pre><code>pub fn cancel_admin_transfer(admin: Address) -&gt; ()</code></pre>
+<h4>Parameters</h4><table><thead><tr><th>Name</th><th>Type</th></tr></thead><tbody><tr><td><code>admin</code></td><td><code>Address</code></td></tr></tbody></table>
+
+<h4>Example</h4>
+<pre><code>client.cancel_admin_transfer(&amp;admin);</code></pre>
+</section>
 <section class="fn-section" id="fn-get_admin">
 <h3>get_admin</h3>
 <p>Current admin address.</p>
@@ -186,6 +206,15 @@
 <p><strong>Returns</strong> — <code>Address</code></p>
 <h4>Example</h4>
 <pre><code>client.get_admin();</code></pre>
+</section>
+<section class="fn-section" id="fn-get_pending_admin">
+<h3>get_pending_admin</h3>
+<p>Address currently proposed as the next admin, if any.</p>
+<pre><code>pub fn get_pending_admin() -&gt; Option<Address></code></pre>
+
+<p><strong>Returns</strong> — <code>Option<Address></code></p>
+<h4>Example</h4>
+<pre><code>client.get_pending_admin();</code></pre>
 </section>
 <section class="fn-section" id="fn-propose_upgrade">
 <h3>propose_upgrade</h3>
@@ -342,6 +371,64 @@
 <p><strong>Returns</strong> — <code>Option<Address></code></p>
 <h4>Example</h4>
 <pre><code>client.get_guardian();</code></pre>
+</section>
+<section class="fn-section" id="fn-set_fee">
+<h3>set_fee</h3>
+<p>Sets the protocol fee rate and its collector. Admin-only; `bps` is<br>hard-capped at `MAX_FEE_BPS`. Setting `bps` to 0 disables fees.</p>
+<pre><code>pub fn set_fee(admin: Address, bps: u32, collector: Address) -&gt; ()</code></pre>
+<h4>Parameters</h4><table><thead><tr><th>Name</th><th>Type</th></tr></thead><tbody><tr><td><code>admin</code></td><td><code>Address</code></td></tr>
+<tr><td><code>bps</code></td><td><code>u32</code></td></tr>
+<tr><td><code>collector</code></td><td><code>Address</code></td></tr></tbody></table>
+
+<h4>Example</h4>
+<pre><code>client.set_fee(&amp;admin, &amp;bps, &amp;collector);</code></pre>
+</section>
+<section class="fn-section" id="fn-withdraw_fees">
+<h3>withdraw_fees</h3>
+<p>Pays out the fee collector's full or partial share of `FeeBalance`.<br>Mirrors `withdraw`'s pattern, including TTL extension.</p>
+<pre><code>pub fn withdraw_fees(caller: Address, amount: Option<i128>) -&gt; ()</code></pre>
+<h4>Parameters</h4><table><thead><tr><th>Name</th><th>Type</th></tr></thead><tbody><tr><td><code>caller</code></td><td><code>Address</code></td></tr>
+<tr><td><code>amount</code></td><td><code>Option<i128></code></td></tr></tbody></table>
+
+<h4>Example</h4>
+<pre><code>client.withdraw_fees(&amp;caller, &amp;amount);</code></pre>
+</section>
+<section class="fn-section" id="fn-get_fee_bps">
+<h3>get_fee_bps</h3>
+
+<pre><code>pub fn get_fee_bps() -&gt; u32</code></pre>
+
+<p><strong>Returns</strong> — <code>u32</code></p>
+<h4>Example</h4>
+<pre><code>client.get_fee_bps();</code></pre>
+</section>
+<section class="fn-section" id="fn-get_fee_collector">
+<h3>get_fee_collector</h3>
+
+<pre><code>pub fn get_fee_collector() -&gt; Option<Address></code></pre>
+
+<p><strong>Returns</strong> — <code>Option<Address></code></p>
+<h4>Example</h4>
+<pre><code>client.get_fee_collector();</code></pre>
+</section>
+<section class="fn-section" id="fn-get_fee_balance">
+<h3>get_fee_balance</h3>
+
+<pre><code>pub fn get_fee_balance() -&gt; i128</code></pre>
+
+<p><strong>Returns</strong> — <code>i128</code></p>
+<h4>Example</h4>
+<pre><code>client.get_fee_balance();</code></pre>
+</section>
+<section class="fn-section" id="fn-preview_fee">
+<h3>preview_fee</h3>
+<p>Computes `(fee, net)` for `amount` at `bps` without touching storage.<br>Exposed read-only so off-chain callers (SDKs, indexers, tests) can<br>preview the exact split the contract will apply.</p>
+<pre><code>pub fn preview_fee(amount: i128, bps: u32) -&gt; (i128, i128)</code></pre>
+<h4>Parameters</h4><table><thead><tr><th>Name</th><th>Type</th></tr></thead><tbody><tr><td><code>amount</code></td><td><code>i128</code></td></tr>
+<tr><td><code>bps</code></td><td><code>u32</code></td></tr></tbody></table>
+<p><strong>Returns</strong> — <code>(i128, i128)</code></p>
+<h4>Example</h4>
+<pre><code>client.preview_fee(&amp;amount, &amp;bps);</code></pre>
 </section>
 
 <script>
