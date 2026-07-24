@@ -1,202 +1,248 @@
+//! Full (flag, entrypoint) test matrix for the granular circuit breaker,
+//! plus the acceptance-criteria tests for independent pause scopes:
+//! withdrawals stay live while tips are paused, and vice versa.
+
 mod common;
-use common::*;
-use tipjar::{PauseScope, TipJarError};
 
-// ── is_feature_paused defaults ────────────────────────────────────────────────
+use common::{expect_error, TestContext};
+use tipjar::{Error, PAUSE_FLAG_TIPS, PAUSE_FLAG_WITHDRAWALS};
 
-#[test]
-fn test_feature_pause_false_by_default() {
-    let ctx = TestContext::new();
-    assert!(!ctx.tipjar_client.is_feature_paused(&PauseScope::Tipping));
-    assert!(!ctx.tipjar_client.is_feature_paused(&PauseScope::Withdrawals));
-    assert!(!ctx.tipjar_client.is_feature_paused(&PauseScope::Subscriptions));
+#[derive(Clone, Copy, Debug)]
+enum Entrypoint {
+    Tip,
+    Withdraw,
+    SetPayoutAddress,
+    CancelPayoutAddress,
+    AuthorizeOperator,
+    RevokeOperator,
 }
 
-// ── admin controls ────────────────────────────────────────────────────────────
+impl Entrypoint {
+    const ALL: [Entrypoint; 6] = [
+        Entrypoint::Tip,
+        Entrypoint::Withdraw,
+        Entrypoint::SetPayoutAddress,
+        Entrypoint::CancelPayoutAddress,
+        Entrypoint::AuthorizeOperator,
+        Entrypoint::RevokeOperator,
+    ];
 
-#[test]
-fn test_pause_feature_requires_admin() {
-    let ctx = TestContext::new();
-    let non_admin = ctx.create_user();
-    let reason = soroban_sdk::String::from_str(&ctx.env, "test");
-    let result = ctx
-        .tipjar_client
-        .try_pause_feature(&non_admin, &PauseScope::Tipping, &reason);
-    assert_error_contains(result, TipJarError::Unauthorized);
+    fn name(self) -> &'static str {
+        match self {
+            Entrypoint::Tip => "tip",
+            Entrypoint::Withdraw => "withdraw",
+            Entrypoint::SetPayoutAddress => "set_payout_address",
+            Entrypoint::CancelPayoutAddress => "cancel_payout_address",
+            Entrypoint::AuthorizeOperator => "authorize_operator",
+            Entrypoint::RevokeOperator => "revoke_operator",
+        }
+    }
+
+    /// The flag this entrypoint is gated on.
+    fn gate(self) -> u32 {
+        match self {
+            Entrypoint::Tip => PAUSE_FLAG_TIPS,
+            _ => PAUSE_FLAG_WITHDRAWALS,
+        }
+    }
 }
 
-#[test]
-fn test_unpause_feature_requires_admin() {
+/// Runs a single (entrypoint, pause_flag) case against a fresh contract and
+/// returns the typed error the entrypoint raised, if any.
+///
+/// All preconditions (funding, an existing tip, an existing pending payout
+/// change, an existing operator grant) are set up *before* the pause is
+/// applied, since several of those setup calls are themselves gated by
+/// `PAUSE_FLAG_WITHDRAWALS`.
+fn run_case(entry: Entrypoint, pause_flag: Option<u32>) -> Option<soroban_sdk::Error> {
     let ctx = TestContext::new();
-    let reason = soroban_sdk::String::from_str(&ctx.env, "test");
-    ctx.tipjar_client
-        .pause_feature(&ctx.admin, &PauseScope::Tipping, &reason);
-    let non_admin = ctx.create_user();
-    let result = ctx
-        .tipjar_client
-        .try_unpause_feature(&non_admin, &PauseScope::Tipping);
-    assert_error_contains(result, TipJarError::Unauthorized);
-}
-
-#[test]
-fn test_pause_and_unpause_feature_roundtrip() {
-    let ctx = TestContext::new();
-    let reason = soroban_sdk::String::from_str(&ctx.env, "security review");
-    ctx.tipjar_client
-        .pause_feature(&ctx.admin, &PauseScope::Tipping, &reason);
-    assert!(ctx.tipjar_client.is_feature_paused(&PauseScope::Tipping));
-    ctx.tipjar_client
-        .unpause_feature(&ctx.admin, &PauseScope::Tipping);
-    assert!(!ctx.tipjar_client.is_feature_paused(&PauseScope::Tipping));
-}
-
-// ── scopes are independent ────────────────────────────────────────────────────
-
-#[test]
-fn test_scopes_are_independent() {
-    let ctx = TestContext::new();
-    let reason = soroban_sdk::String::from_str(&ctx.env, "test");
-    ctx.tipjar_client
-        .pause_feature(&ctx.admin, &PauseScope::Withdrawals, &reason);
-
-    // Only Withdrawals is paused
-    assert!(!ctx.tipjar_client.is_feature_paused(&PauseScope::Tipping));
-    assert!(ctx
-        .tipjar_client
-        .is_feature_paused(&PauseScope::Withdrawals));
-    assert!(!ctx
-        .tipjar_client
-        .is_feature_paused(&PauseScope::Subscriptions));
-}
-
-// ── Tipping scope ─────────────────────────────────────────────────────────────
-
-#[test]
-fn test_tip_blocked_when_tipping_scope_paused() {
-    let ctx = TestContext::new();
-    let sender = ctx.create_user();
+    let actor = ctx.create_user();
     let creator = ctx.create_creator();
-    ctx.mint_tokens(&sender, &ctx.token_1, 1_000);
-    let reason = soroban_sdk::String::from_str(&ctx.env, "exploit");
-    ctx.tipjar_client
-        .pause_feature(&ctx.admin, &PauseScope::Tipping, &reason);
+    ctx.mint_tokens(&actor, 1_000);
 
-    let result = ctx.tipjar_client.try_tip(&sender, &creator, &ctx.token_1, &100);
-    assert_error_contains(result, TipJarError::FeaturePaused);
+    match entry {
+        Entrypoint::Tip | Entrypoint::SetPayoutAddress | Entrypoint::AuthorizeOperator => {}
+        Entrypoint::Withdraw => {
+            ctx.client().tip(&actor, &creator, &200);
+        }
+        Entrypoint::CancelPayoutAddress => {
+            ctx.client().set_payout_address(&creator, &actor);
+        }
+        Entrypoint::RevokeOperator => {
+            let expiry = ctx.ledger_sequence() + 1_000;
+            ctx.client()
+                .authorize_operator(&creator, &actor, &10, &expiry);
+        }
+    }
+
+    if let Some(flag) = pause_flag {
+        if flag == PAUSE_FLAG_TIPS {
+            ctx.client().pause_tips(&ctx.admin);
+        } else {
+            ctx.client().pause_withdrawals(&ctx.admin);
+        }
+    }
+
+    let result = match entry {
+        Entrypoint::Tip => ctx.client().try_tip(&actor, &creator, &50),
+        Entrypoint::Withdraw => ctx
+            .client()
+            .try_withdraw(&creator, &creator, &creator, &None),
+        Entrypoint::SetPayoutAddress => ctx.client().try_set_payout_address(&creator, &actor),
+        Entrypoint::CancelPayoutAddress => ctx.client().try_cancel_payout_address(&creator),
+        Entrypoint::AuthorizeOperator => {
+            let expiry = ctx.ledger_sequence() + 1_000;
+            ctx.client()
+                .try_authorize_operator(&creator, &actor, &10, &expiry)
+        }
+        Entrypoint::RevokeOperator => ctx.client().try_revoke_operator(&creator, &actor),
+    };
+
+    match result {
+        Ok(_) => None,
+        Err(Ok(e)) => Some(e),
+        Err(Err(host_err)) => panic!("unexpected host-level error: {:?}", host_err),
+    }
 }
 
+/// Exhaustive (flag, entrypoint) matrix: every entrypoint x {unpaused, tips
+/// paused, withdrawals paused}. An entrypoint must be blocked by its own
+/// gate flag and unaffected by the other one.
 #[test]
-fn test_tip_split_blocked_when_tipping_scope_paused() {
-    let ctx = TestContext::new();
-    let sender = ctx.create_user();
-    let c1 = ctx.create_creator();
-    let c2 = ctx.create_creator();
-    ctx.mint_tokens(&sender, &ctx.token_1, 1_000);
-    let reason = soroban_sdk::String::from_str(&ctx.env, "exploit");
-    ctx.tipjar_client
-        .pause_feature(&ctx.admin, &PauseScope::Tipping, &reason);
+fn flag_entrypoint_matrix() {
+    let scenarios: [(&str, Option<u32>); 3] = [
+        ("none", None),
+        ("tips", Some(PAUSE_FLAG_TIPS)),
+        ("withdrawals", Some(PAUSE_FLAG_WITHDRAWALS)),
+    ];
 
-    let mut recipients = soroban_sdk::Vec::new(&ctx.env);
-    recipients.push_back(tipjar::TipRecipient {
-        creator: c1,
-        percentage: 5_000,
-    });
-    recipients.push_back(tipjar::TipRecipient {
-        creator: c2,
-        percentage: 5_000,
-    });
-    let result = ctx
-        .tipjar_client
-        .try_tip_split(&sender, &ctx.token_1, &recipients, &100);
-    assert_error_contains(result, TipJarError::FeaturePaused);
-}
-
-#[test]
-fn test_tip_works_after_tipping_scope_unpaused() {
-    let ctx = TestContext::new();
-    let sender = ctx.create_user();
-    let creator = ctx.create_creator();
-    ctx.mint_tokens(&sender, &ctx.token_1, 1_000);
-    let reason = soroban_sdk::String::from_str(&ctx.env, "test");
-    ctx.tipjar_client
-        .pause_feature(&ctx.admin, &PauseScope::Tipping, &reason);
-    ctx.tipjar_client
-        .unpause_feature(&ctx.admin, &PauseScope::Tipping);
-    ctx.tipjar_client
-        .tip(&sender, &creator, &ctx.token_1, &100);
-    assert_withdrawable_balance_equals(&ctx, &creator, &ctx.token_1, 100);
-}
-
-// ── Withdrawals scope ─────────────────────────────────────────────────────────
-
-#[test]
-fn test_withdraw_blocked_when_withdrawals_scope_paused() {
-    let ctx = TestContext::new();
-    let sender = ctx.create_user();
-    let creator = ctx.create_creator();
-    ctx.mint_tokens(&sender, &ctx.token_1, 1_000);
-    ctx.tipjar_client.tip(&sender, &creator, &ctx.token_1, &100);
-
-    let reason = soroban_sdk::String::from_str(&ctx.env, "audit");
-    ctx.tipjar_client
-        .pause_feature(&ctx.admin, &PauseScope::Withdrawals, &reason);
-
-    let result = ctx.tipjar_client.try_withdraw(&creator, &ctx.token_1, &None);
-    assert_error_contains(result, TipJarError::FeaturePaused);
-}
-
-#[test]
-fn test_tip_still_works_when_only_withdrawals_paused() {
-    let ctx = TestContext::new();
-    let sender = ctx.create_user();
-    let creator = ctx.create_creator();
-    ctx.mint_tokens(&sender, &ctx.token_1, 1_000);
-
-    let reason = soroban_sdk::String::from_str(&ctx.env, "audit");
-    ctx.tipjar_client
-        .pause_feature(&ctx.admin, &PauseScope::Withdrawals, &reason);
-
-    // Tips must still go through
-    ctx.tipjar_client
-        .tip(&sender, &creator, &ctx.token_1, &200);
-    assert_withdrawable_balance_equals(&ctx, &creator, &ctx.token_1, 200);
-}
-
-// ── Subscriptions scope ───────────────────────────────────────────────────────
-
-#[test]
-fn test_create_subscription_blocked_when_subscriptions_scope_paused() {
-    let ctx = TestContext::new();
-    let subscriber = ctx.create_user();
-    let creator = ctx.create_creator();
-    let reason = soroban_sdk::String::from_str(&ctx.env, "maintenance");
-    ctx.tipjar_client
-        .pause_feature(&ctx.admin, &PauseScope::Subscriptions, &reason);
-
-    let result = ctx.tipjar_client.try_create_subscription(
-        &subscriber,
-        &creator,
-        &ctx.token_1,
-        &100,
-        &86_400,
+    println!();
+    println!(
+        "{:<24}{:<16}{:<10}result",
+        "entrypoint", "flag paused", "blocked"
     );
-    assert_error_contains(result, TipJarError::FeaturePaused);
+    println!("{}", "-".repeat(70));
+
+    let mut failures = std::vec::Vec::new();
+
+    for entry in Entrypoint::ALL {
+        for (scenario_name, pause_flag) in scenarios {
+            let result = run_case(entry, pause_flag);
+            let expected_blocked = pause_flag == Some(entry.gate());
+            let expected_error: Option<soroban_sdk::Error> = if expected_blocked {
+                Some(
+                    if entry.gate() == PAUSE_FLAG_TIPS {
+                        Error::TipsPaused
+                    } else {
+                        Error::WithdrawalsPaused
+                    }
+                    .into(),
+                )
+            } else {
+                None
+            };
+
+            let ok = result == expected_error;
+            println!(
+                "{:<24}{:<16}{:<10}{}",
+                entry.name(),
+                scenario_name,
+                expected_blocked,
+                if ok {
+                    std::format!("{:?}", result)
+                } else {
+                    std::format!("FAIL (got {:?}, want {:?})", result, expected_error)
+                }
+            );
+            if !ok {
+                failures.push((entry.name(), scenario_name, result, expected_error));
+            }
+        }
+    }
+
+    assert!(
+        failures.is_empty(),
+        "flag/entrypoint matrix mismatches: {:?}",
+        failures
+    );
 }
 
-// ── global pause still blocks everything ─────────────────────────────────────
+// ── independent flags: acceptance criteria ──────────────────────────────
 
 #[test]
-fn test_global_pause_blocks_even_when_no_feature_paused() {
+fn withdrawals_remain_live_while_tips_paused() {
     let ctx = TestContext::new();
     let sender = ctx.create_user();
     let creator = ctx.create_creator();
-    ctx.mint_tokens(&sender, &ctx.token_1, 1_000);
+    ctx.mint_tokens(&sender, 1_000);
+    ctx.client().tip(&sender, &creator, &300);
 
-    let reason = soroban_sdk::String::from_str(&ctx.env, "emergency");
-    ctx.tipjar_client.pause(&ctx.admin, &reason);
+    ctx.client().pause_tips(&ctx.admin);
 
-    // Feature flags are clear, but global pause should still block
-    assert!(!ctx.tipjar_client.is_feature_paused(&PauseScope::Tipping));
-    let result = ctx.tipjar_client.try_tip(&sender, &creator, &ctx.token_1, &100);
-    assert_error_contains(result, TipJarError::ContractPaused);
+    // Withdrawals must be entirely unaffected.
+    ctx.client().withdraw(&creator, &creator, &creator, &None);
+    assert_eq!(ctx.token_client().balance(&creator), 300);
+
+    // Tips remain blocked.
+    let err = expect_error(ctx.client().try_tip(&sender, &creator, &10));
+    assert_eq!(err, Error::TipsPaused.into());
+}
+
+#[test]
+fn tips_remain_live_while_withdrawals_paused() {
+    let ctx = TestContext::new();
+    let sender = ctx.create_user();
+    let creator = ctx.create_creator();
+    ctx.mint_tokens(&sender, 1_000);
+
+    ctx.client().pause_withdrawals(&ctx.admin);
+
+    // Tips must be entirely unaffected.
+    ctx.client().tip(&sender, &creator, &300);
+    assert_eq!(ctx.client().get_total_tips(&creator), 300);
+
+    // Withdrawals remain blocked.
+    let err = expect_error(
+        ctx.client()
+            .try_withdraw(&creator, &creator, &creator, &None),
+    );
+    assert_eq!(err, Error::WithdrawalsPaused.into());
+}
+
+#[test]
+fn pause_all_blocks_both_scopes() {
+    let ctx = TestContext::new();
+    let sender = ctx.create_user();
+    let creator = ctx.create_creator();
+    ctx.mint_tokens(&sender, 1_000);
+    ctx.client().tip(&sender, &creator, &300);
+
+    ctx.client().pause_all(&ctx.admin);
+
+    assert_eq!(
+        expect_error(ctx.client().try_tip(&sender, &creator, &10)),
+        Error::TipsPaused.into()
+    );
+    assert_eq!(
+        expect_error(
+            ctx.client()
+                .try_withdraw(&creator, &creator, &creator, &None)
+        ),
+        Error::WithdrawalsPaused.into()
+    );
+}
+
+#[test]
+fn view_functions_are_unaffected_by_pause() {
+    let ctx = TestContext::new();
+    let sender = ctx.create_user();
+    let creator = ctx.create_creator();
+    ctx.mint_tokens(&sender, 1_000);
+    ctx.client().tip(&sender, &creator, &300);
+
+    ctx.client().pause_all(&ctx.admin);
+
+    assert_eq!(ctx.client().get_total_tips(&creator), 300);
+    assert!(ctx.client().is_feature_paused(&PAUSE_FLAG_TIPS));
+    assert!(ctx.client().is_feature_paused(&PAUSE_FLAG_WITHDRAWALS));
 }

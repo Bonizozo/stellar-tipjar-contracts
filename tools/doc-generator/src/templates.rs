@@ -75,10 +75,7 @@ fn render_example(f: &FunctionDoc) -> String {
         .map(|p| format!("&{}", p.name))
         .collect::<Vec<_>>()
         .join(", ");
-    format!(
-        "**Example**\n\n```rust\nclient.{}({});\n```",
-        f.name, args
-    )
+    format!("**Example**\n\n```rust\nclient.{}({});\n```", f.name, args)
 }
 
 /// Render to a self-contained HTML page with basic search.
@@ -100,7 +97,12 @@ pub fn render_html(doc: &ContractDoc) -> String {
         let rows = doc
             .errors
             .iter()
-            .map(|e| format!("<tr><td><code>{}</code></td><td><code>{}</code></td></tr>", e.code, e.name))
+            .map(|e| {
+                format!(
+                    "<tr><td><code>{}</code></td><td><code>{}</code></td></tr>",
+                    e.code, e.name
+                )
+            })
             .collect::<Vec<_>>()
             .join("\n");
         format!(
@@ -180,7 +182,12 @@ fn render_function_html(f: &FunctionDoc) -> String {
         let rows = f
             .params
             .iter()
-            .map(|p| format!("<tr><td><code>{}</code></td><td><code>{}</code></td></tr>", p.name, p.ty))
+            .map(|p| {
+                format!(
+                    "<tr><td><code>{}</code></td><td><code>{}</code></td></tr>",
+                    p.name, p.ty
+                )
+            })
             .collect::<Vec<_>>()
             .join("\n");
         format!(
@@ -192,7 +199,10 @@ fn render_function_html(f: &FunctionDoc) -> String {
     let returns_html = if f.returns == "()" {
         String::new()
     } else {
-        format!("<p><strong>Returns</strong> — <code>{}</code></p>", f.returns)
+        format!(
+            "<p><strong>Returns</strong> — <code>{}</code></p>",
+            f.returns
+        )
     };
 
     let example_args = f

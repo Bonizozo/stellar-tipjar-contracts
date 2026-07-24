@@ -1,0 +1,91 @@
+{
+  "version": "1.0.0",
+  "generated_at": "2026-07-18T00:00:00Z",
+  "schema": {
+    "description": "Per-entrypoint resource budgets for tipjar contract. All dimensions have a tolerance of +5% for regressions.",
+    "dimensions": {
+      "cpu_instructions": "CPU instruction count measured via env.budget()",
+      "memory_bytes": "Peak memory allocation during execution",
+      "ledger_reads": "Number of ledger entries read",
+      "ledger_writes": "Number of ledger entries written",
+      "ledger_read_bytes": "Total bytes read from ledger",
+      "ledger_write_bytes": "Total bytes written to ledger",
+      "events_emitted": "Number of events emitted",
+      "event_bytes": "Total bytes in all emitted events"
+    }
+  },
+  "entrypoints": {
+    "init": {
+      "description": "One-time contract initialization. Writes instance storage (token address).",
+      "cpu_instructions": 185_000,
+      "memory_bytes": 24_576,
+      "ledger_reads": 0,
+      "ledger_writes": 1,
+      "ledger_read_bytes": 0,
+      "ledger_write_bytes": 128,
+      "events_emitted": 0,
+      "event_bytes": 0,
+      "notes": "Write-heavy: sets Token in instance storage + TTL bump. No reads (first-call). Instance storage is cheapest ledger tier."
+    },
+    "tip_first_time": {
+      "description": "First tip for a creator (cold storage, new keys). Two persistent reads (returns 0), two writes (new balance/total), token transfer.",
+      "cpu_instructions": 1_250_000,
+      "memory_bytes": 98_304,
+      "ledger_reads": 2,
+      "ledger_writes": 3,
+      "ledger_read_bytes": 0,
+      "ledger_write_bytes": 384,
+      "events_emitted": 1,
+      "event_bytes": 96,
+      "notes": "Cold storage allocation is expensive. Three writes: CreatorBalance, CreatorTotal, instance TTL. Token transfer dominates cost."
+    },
+    "tip_repeat": {
+      "description": "Subsequent tips for a creator (warm storage, existing keys).",
+      "cpu_instructions": 890_000,
+      "memory_bytes": 67_584,
+      "ledger_reads": 2,
+      "ledger_writes": 3,
+      "ledger_read_bytes": 128,
+      "ledger_write_bytes": 256,
+      "events_emitted": 1,
+      "event_bytes": 96,
+      "notes": "Warm storage is cheaper than cold. Reads existing balance/total, updates in place, bumps TTL on both + instance."
+    },
+    "get_total_tips": {
+      "description": "Read-only query for creator's historical total tips.",
+      "cpu_instructions": 125_000,
+      "memory_bytes": 12_288,
+      "ledger_reads": 1,
+      "ledger_writes": 0,
+      "ledger_read_bytes": 128,
+      "ledger_write_bytes": 0,
+      "events_emitted": 0,
+      "event_bytes": 0,
+      "notes": "Pure read, no storage writes. No TTL bump (read-only). Returns 0 if key missing."
+    },
+    "withdraw": {
+      "description": "Creator withdrawal: reads balance, zeroes it, transfers tokens.",
+      "cpu_instructions": 950_000,
+      "memory_bytes": 75_840,
+      "ledger_reads": 1,
+      "ledger_writes": 2,
+      "ledger_read_bytes": 128,
+      "ledger_write_bytes": 192,
+      "events_emitted": 1,
+      "event_bytes": 88,
+      "notes": "Reads balance, sets to 0, bumps both balance key and instance TTL. Token transfer dominates. Historical total untouched."
+    }
+  },
+  "wasm_size": {
+    "optimized_bytes": 98_304,
+    "description": "Release WASM with opt-level=z, LTO enabled, target wasm32v1-none. Measured post-optimization via stellar contract optimize.",
+    "notes": "Budget: <150KB. Current: 98KB with headroom for feature additions."
+  },
+  "network_limits": {
+    "max_cpu_instructions_per_tx": 15_000_000,
+    "max_memory_bytes": 536_870_912,
+    "max_ledger_reads_per_tx": 100,
+    "max_ledger_writes_per_tx": 100,
+    "description": "Soroban network limits as of ledger protocol ~21. Documented for context; per-operation budgets must stay well under these."
+  }
+}

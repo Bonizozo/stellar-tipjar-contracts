@@ -4,9 +4,7 @@
 
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
-use syn::{
-    parse_file, Attribute, FnArg, ImplItem, Item, Pat, ReturnType, Type,
-};
+use syn::{parse_file, Attribute, FnArg, ImplItem, Item, Pat, ReturnType, Type};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ParamDoc {
@@ -52,7 +50,8 @@ pub fn parse_contract(source: &str, contract_name: &str) -> Result<ContractDoc> 
                         .as_ref()
                         .and_then(|(_, expr)| {
                             if let syn::Expr::Lit(syn::ExprLit {
-                                lit: syn::Lit::Int(i), ..
+                                lit: syn::Lit::Int(i),
+                                ..
                             }) = expr
                             {
                                 i.base10_parse::<u32>().ok()
@@ -95,7 +94,10 @@ pub fn parse_contract(source: &str, contract_name: &str) -> Result<ContractDoc> 
                                         return None;
                                     }
                                     let ty = type_to_string(&pat_type.ty);
-                                    Some(ParamDoc { name: param_name, ty })
+                                    Some(ParamDoc {
+                                        name: param_name,
+                                        ty,
+                                    })
                                 } else {
                                     None
                                 }
@@ -107,7 +109,12 @@ pub fn parse_contract(source: &str, contract_name: &str) -> Result<ContractDoc> 
                             ReturnType::Type(_, ty) => type_to_string(ty),
                         };
 
-                        functions.push(FunctionDoc { name, doc, params, returns });
+                        functions.push(FunctionDoc {
+                            name,
+                            doc,
+                            params,
+                            returns,
+                        });
                     }
                 }
             }
@@ -137,7 +144,8 @@ fn extract_doc(attrs: &[Attribute]) -> String {
             }
             if let syn::Meta::NameValue(nv) = &a.meta {
                 if let syn::Expr::Lit(syn::ExprLit {
-                    lit: syn::Lit::Str(s), ..
+                    lit: syn::Lit::Str(s),
+                    ..
                 }) = &nv.value
                 {
                     return Some(s.value().trim().to_string());
@@ -223,7 +231,11 @@ mod tests {
     #[test]
     fn captures_return_type() {
         let doc = parse_contract(SAMPLE, "MyContract").unwrap();
-        let get = doc.functions.iter().find(|f| f.name == "get_total").unwrap();
+        let get = doc
+            .functions
+            .iter()
+            .find(|f| f.name == "get_total")
+            .unwrap();
         assert_eq!(get.returns, "i128");
     }
 
@@ -233,7 +245,11 @@ mod tests {
         assert_eq!(doc.errors.len(), 2);
         let bad = doc.errors.iter().find(|e| e.name == "BadAmount").unwrap();
         assert_eq!(bad.code, 1);
-        let unauth = doc.errors.iter().find(|e| e.name == "Unauthorized").unwrap();
+        let unauth = doc
+            .errors
+            .iter()
+            .find(|e| e.name == "Unauthorized")
+            .unwrap();
         assert_eq!(unauth.code, 2);
     }
 }
