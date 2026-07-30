@@ -187,15 +187,15 @@ fn guardian_pause_auto_expiry_unblocks_tip_entrypoint() {
     ctx.client().pause_tips(&ctx.guardian);
     let expiry = ctx.client().guardian_pause_expiry_ledger();
 
-    let err = expect_error(ctx.client().try_tip(&sender, &creator, &100));
+    let err = expect_error(ctx.client().try_tip(&sender, &creator, &ctx.token, &100));
     assert_eq!(err, Error::TipsPaused.into());
 
     let delta = expiry - ctx.ledger_sequence();
     ctx.advance_ledger(delta);
 
     // Now at the expiry ledger: tip must succeed, no admin action taken.
-    ctx.client().tip(&sender, &creator, &100);
-    assert_eq!(ctx.client().get_total_tips(&creator), 100);
+    ctx.client().tip(&sender, &creator, &ctx.token, &100);
+    assert_eq!(ctx.client().get_total_tips(&creator, &ctx.token), 100);
 }
 
 #[test]
@@ -248,7 +248,7 @@ fn paused_tip_never_reaches_a_malicious_token_transfer() {
 
     ctx.client().pause_tips(&ctx.admin);
 
-    let err = expect_error(ctx.client().try_tip(&sender, &creator, &100));
+    let err = expect_error(ctx.client().try_tip(&sender, &creator, &ctx.token, &100));
     assert_eq!(err, Error::TipsPaused.into());
 
     let malicious_client = MaliciousTokenClient::new(&ctx.env, &malicious_token);
@@ -271,7 +271,7 @@ fn paused_withdraw_never_reaches_a_malicious_token_transfer() {
 
     let err = expect_error(
         ctx.client()
-            .try_withdraw(&creator, &creator, &creator, &None),
+            .try_withdraw(&creator, &creator, &ctx.token, &creator, &None),
     );
     assert_eq!(err, Error::WithdrawalsPaused.into());
 

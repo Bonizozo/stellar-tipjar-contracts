@@ -145,7 +145,9 @@ impl Harness {
             } => {
                 let sender_addr = self.senders[sender].clone();
                 let creator_addr = self.creators[creator].clone();
-                let result = self.client().try_tip(&sender_addr, &creator_addr, &amount);
+                let result =
+                    self.client()
+                        .try_tip(&sender_addr, &creator_addr, &self.token, &amount);
 
                 if amount > 0 {
                     result.unwrap().unwrap();
@@ -165,6 +167,7 @@ impl Harness {
                 let result = self.client().try_withdraw(
                     &creator_addr,
                     &creator_addr,
+                    &self.token,
                     &creator_addr,
                     &amount,
                 );
@@ -218,7 +221,7 @@ impl Harness {
         );
 
         for (idx, creator_addr) in self.creators.iter().enumerate() {
-            let real_total = self.client().get_total_tips(creator_addr);
+            let real_total = self.client().get_total_tips(creator_addr, &self.token);
             let shadow_total = *self.shadow_total.get(&idx).unwrap_or(&0);
 
             // 2. Monotonicity: shadow_total is constructed to only ever grow

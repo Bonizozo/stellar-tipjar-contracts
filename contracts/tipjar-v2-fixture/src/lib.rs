@@ -36,13 +36,15 @@ use soroban_sdk::{
     Address, Env, MuxedAddress,
 };
 
-/// Storage-compatible subset of `tipjar::DataKey` — see module docs.
+/// Storage-compatible subset of `tipjar::DataKey` — see module docs. Matches
+/// v1's current (creator, token)-keyed multi-token storage shape, since v1
+/// is the multi-token contract this fixture upgrades from.
 #[contracttype]
 #[derive(Clone)]
 pub enum DataKey {
     Token,
-    CreatorBalance(Address),
-    CreatorTotal(Address),
+    Balance(Address, Address),
+    Total(Address, Address),
     Admin,
     DataVersion,
 }
@@ -83,14 +85,13 @@ pub struct TipJarV2Fixture;
 impl TipJarV2Fixture {
     /// Unchanged from v1 — proves tips placed before the upgrade keep
     /// accumulating correctly under the new WASM.
-    pub fn tip(env: Env, sender: Address, creator: Address, amount: i128) {
+    pub fn tip(env: Env, sender: Address, creator: Address, token: Address, amount: i128) {
         sender.require_auth();
 
         if amount <= 0 {
             panic_with_error!(&env, Error::InvalidAmount);
         }
 
-        let token = Self::token_address(&env);
         let contract_address = env.current_contract_address();
 
         token::TokenClient::new(&env, &token).transfer(
@@ -99,8 +100,8 @@ impl TipJarV2Fixture {
             &amount,
         );
 
-        let balance_key = DataKey::CreatorBalance(creator.clone());
-        let total_key = DataKey::CreatorTotal(creator.clone());
+        let balance_key = DataKey::Balance(creator.clone(), token.clone());
+        let total_key = DataKey::Total(creator.clone(), token.clone());
 
         let balance: i128 = env.storage().persistent().get(&balance_key).unwrap_or(0);
         let total: i128 = env.storage().persistent().get(&total_key).unwrap_or(0);
@@ -127,10 +128,10 @@ impl TipJarV2Fixture {
 
     /// Reduced from v1: always pays the creator's own full-or-partial
     /// balance to themselves. See the module doc for why.
-    pub fn withdraw(env: Env, creator: Address, amount: Option<i128>) {
+    pub fn withdraw(env: Env, creator: Address, token: Address, amount: Option<i128>) {
         creator.require_auth();
 
-        let balance_key = DataKey::CreatorBalance(creator.clone());
+        let balance_key = DataKey::Balance(creator.clone(), token.clone());
         let balance: i128 = env.storage().persistent().get(&balance_key).unwrap_or(0);
 
         if balance == 0 {
@@ -142,7 +143,6 @@ impl TipJarV2Fixture {
             panic_with_error!(&env, Error::InvalidAmount);
         }
 
-        let token = Self::token_address(&env);
         let contract_address = env.current_contract_address();
 
         token::TokenClient::new(&env, &token).transfer(
@@ -161,10 +161,10 @@ impl TipJarV2Fixture {
             .extend_ttl(LEDGER_THRESHOLD, LEDGER_BUMP);
     }
 
-    pub fn get_total_tips(env: Env, creator: Address) -> i128 {
+    pub fn get_total_tips(env: Env, creator: Address, token: Address) -> i128 {
         env.storage()
             .persistent()
-            .get(&DataKey::CreatorTotal(creator))
+            .get(&DataKey::Total(creator, token))
             .unwrap_or(0)
     }
 
@@ -208,12 +208,5 @@ impl TipJarV2Fixture {
             to_version: DATA_VERSION,
         }
         .publish(&env);
-    }
-
-    fn token_address(env: &Env) -> Address {
-        match env.storage().instance().get(&DataKey::Token) {
-            Some(token) => token,
-            None => panic_with_error!(env, Error::NotInitialized),
-        }
     }
 }

@@ -63,7 +63,7 @@ fn run_case(entry: Entrypoint, pause_flag: Option<u32>) -> Option<soroban_sdk::E
     match entry {
         Entrypoint::Tip | Entrypoint::SetPayoutAddress | Entrypoint::AuthorizeOperator => {}
         Entrypoint::Withdraw => {
-            ctx.client().tip(&actor, &creator, &200);
+            ctx.client().tip(&actor, &creator, &ctx.token, &200);
         }
         Entrypoint::CancelPayoutAddress => {
             ctx.client().set_payout_address(&creator, &actor);
@@ -84,10 +84,10 @@ fn run_case(entry: Entrypoint, pause_flag: Option<u32>) -> Option<soroban_sdk::E
     }
 
     let result = match entry {
-        Entrypoint::Tip => ctx.client().try_tip(&actor, &creator, &50),
+        Entrypoint::Tip => ctx.client().try_tip(&actor, &creator, &ctx.token, &50),
         Entrypoint::Withdraw => ctx
             .client()
-            .try_withdraw(&creator, &creator, &creator, &None),
+            .try_withdraw(&creator, &creator, &ctx.token, &creator, &None),
         Entrypoint::SetPayoutAddress => ctx.client().try_set_payout_address(&creator, &actor),
         Entrypoint::CancelPayoutAddress => ctx.client().try_cancel_payout_address(&creator),
         Entrypoint::AuthorizeOperator => {
@@ -175,16 +175,17 @@ fn withdrawals_remain_live_while_tips_paused() {
     let sender = ctx.create_user();
     let creator = ctx.create_creator();
     ctx.mint_tokens(&sender, 1_000);
-    ctx.client().tip(&sender, &creator, &300);
+    ctx.client().tip(&sender, &creator, &ctx.token, &300);
 
     ctx.client().pause_tips(&ctx.admin);
 
     // Withdrawals must be entirely unaffected.
-    ctx.client().withdraw(&creator, &creator, &creator, &None);
+    ctx.client()
+        .withdraw(&creator, &creator, &ctx.token, &creator, &None);
     assert_eq!(ctx.token_client().balance(&creator), 300);
 
     // Tips remain blocked.
-    let err = expect_error(ctx.client().try_tip(&sender, &creator, &10));
+    let err = expect_error(ctx.client().try_tip(&sender, &creator, &ctx.token, &10));
     assert_eq!(err, Error::TipsPaused.into());
 }
 
@@ -198,13 +199,13 @@ fn tips_remain_live_while_withdrawals_paused() {
     ctx.client().pause_withdrawals(&ctx.admin);
 
     // Tips must be entirely unaffected.
-    ctx.client().tip(&sender, &creator, &300);
-    assert_eq!(ctx.client().get_total_tips(&creator), 300);
+    ctx.client().tip(&sender, &creator, &ctx.token, &300);
+    assert_eq!(ctx.client().get_total_tips(&creator, &ctx.token), 300);
 
     // Withdrawals remain blocked.
     let err = expect_error(
         ctx.client()
-            .try_withdraw(&creator, &creator, &creator, &None),
+            .try_withdraw(&creator, &creator, &ctx.token, &creator, &None),
     );
     assert_eq!(err, Error::WithdrawalsPaused.into());
 }
@@ -215,18 +216,18 @@ fn pause_all_blocks_both_scopes() {
     let sender = ctx.create_user();
     let creator = ctx.create_creator();
     ctx.mint_tokens(&sender, 1_000);
-    ctx.client().tip(&sender, &creator, &300);
+    ctx.client().tip(&sender, &creator, &ctx.token, &300);
 
     ctx.client().pause_all(&ctx.admin);
 
     assert_eq!(
-        expect_error(ctx.client().try_tip(&sender, &creator, &10)),
+        expect_error(ctx.client().try_tip(&sender, &creator, &ctx.token, &10)),
         Error::TipsPaused.into()
     );
     assert_eq!(
         expect_error(
             ctx.client()
-                .try_withdraw(&creator, &creator, &creator, &None)
+                .try_withdraw(&creator, &creator, &ctx.token, &creator, &None)
         ),
         Error::WithdrawalsPaused.into()
     );
@@ -238,11 +239,11 @@ fn view_functions_are_unaffected_by_pause() {
     let sender = ctx.create_user();
     let creator = ctx.create_creator();
     ctx.mint_tokens(&sender, 1_000);
-    ctx.client().tip(&sender, &creator, &300);
+    ctx.client().tip(&sender, &creator, &ctx.token, &300);
 
     ctx.client().pause_all(&ctx.admin);
 
-    assert_eq!(ctx.client().get_total_tips(&creator), 300);
+    assert_eq!(ctx.client().get_total_tips(&creator, &ctx.token), 300);
     assert!(ctx.client().is_feature_paused(&PAUSE_FLAG_TIPS));
     assert!(ctx.client().is_feature_paused(&PAUSE_FLAG_WITHDRAWALS));
 }

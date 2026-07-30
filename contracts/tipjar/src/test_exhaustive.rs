@@ -54,7 +54,7 @@ fn test_exhaustive_auth_matrix() {
 
     // Tip creator
     let sender = ctx.fund(1000);
-    client.tip(&sender, &creator, &1000);
+    client.tip(&sender, &creator, &ctx.token, &1000);
 
     // Set payout address
     client.set_payout_address(&creator, &payout);
@@ -76,14 +76,14 @@ fn test_exhaustive_auth_matrix() {
     // 1. stranger
     assert_eq!(
         client
-            .try_withdraw(&stranger, &creator, &payout, &Some(10))
+            .try_withdraw(&stranger, &creator, &ctx.token, &payout, &Some(10))
             .unwrap_err()
             .unwrap(),
         Error::InvalidOperator.into()
     );
     assert_eq!(
         client
-            .try_withdraw(&stranger, &creator, &other_address, &Some(10))
+            .try_withdraw(&stranger, &creator, &ctx.token, &other_address, &Some(10))
             .unwrap_err()
             .unwrap(),
         Error::InvalidOperator.into()
@@ -92,14 +92,14 @@ fn test_exhaustive_auth_matrix() {
     // 2. operator-over-allowance
     assert_eq!(
         client
-            .try_withdraw(&operator, &creator, &payout, &Some(600))
+            .try_withdraw(&operator, &creator, &ctx.token, &payout, &Some(600))
             .unwrap_err()
             .unwrap(),
         Error::InsufficientAllowance.into()
     );
     assert_eq!(
         client
-            .try_withdraw(&operator, &creator, &other_address, &Some(600))
+            .try_withdraw(&operator, &creator, &ctx.token, &other_address, &Some(600))
             .unwrap_err()
             .unwrap(),
         Error::InsufficientAllowance.into()
@@ -108,27 +108,27 @@ fn test_exhaustive_auth_matrix() {
     // 3. operator-within-allowance but to other address
     assert_eq!(
         client
-            .try_withdraw(&operator, &creator, &other_address, &Some(100))
+            .try_withdraw(&operator, &creator, &ctx.token, &other_address, &Some(100))
             .unwrap_err()
             .unwrap(),
         Error::InvalidTarget.into()
     );
 
     // 4. operator-within-allowance to payout
-    client.withdraw(&operator, &creator, &payout, &Some(100)); // Success!
+    client.withdraw(&operator, &creator, &ctx.token, &payout, &Some(100)); // Success!
 
     // 5. operator-after-expiry
     ctx.env.ledger().with_mut(|li| li.sequence_number += 101);
     assert_eq!(
         client
-            .try_withdraw(&operator, &creator, &payout, &Some(10))
+            .try_withdraw(&operator, &creator, &ctx.token, &payout, &Some(10))
             .unwrap_err()
             .unwrap(),
         Error::OperatorExpired.into()
     );
     assert_eq!(
         client
-            .try_withdraw(&operator, &creator, &other_address, &Some(10))
+            .try_withdraw(&operator, &creator, &ctx.token, &other_address, &Some(10))
             .unwrap_err()
             .unwrap(),
         Error::OperatorExpired.into()
@@ -139,14 +139,14 @@ fn test_exhaustive_auth_matrix() {
     client.revoke_operator(&creator, &operator);
     assert_eq!(
         client
-            .try_withdraw(&operator, &creator, &payout, &Some(10))
+            .try_withdraw(&operator, &creator, &ctx.token, &payout, &Some(10))
             .unwrap_err()
             .unwrap(),
         Error::InvalidOperator.into()
     );
     assert_eq!(
         client
-            .try_withdraw(&operator, &creator, &other_address, &Some(10))
+            .try_withdraw(&operator, &creator, &ctx.token, &other_address, &Some(10))
             .unwrap_err()
             .unwrap(),
         Error::InvalidOperator.into()
@@ -155,14 +155,14 @@ fn test_exhaustive_auth_matrix() {
     // 7. creator to other address
     assert_eq!(
         client
-            .try_withdraw(&creator, &creator, &other_address, &Some(10))
+            .try_withdraw(&creator, &creator, &ctx.token, &other_address, &Some(10))
             .unwrap_err()
             .unwrap(),
         Error::InvalidTarget.into()
     );
 
     // 8. creator to payout
-    client.withdraw(&creator, &creator, &payout, &Some(10)); // Success!
+    client.withdraw(&creator, &creator, &ctx.token, &payout, &Some(10)); // Success!
 }
 
 #[test]
@@ -173,11 +173,11 @@ fn test_payout_delay_and_cancellation() {
     let payout = Address::generate(&ctx.env);
     let sender = ctx.fund(1000);
 
-    client.tip(&sender, &creator, &1000);
+    client.tip(&sender, &creator, &ctx.token, &1000);
     client.set_payout_address(&creator, &payout);
 
     // Before delay, old address (creator) is used
-    client.withdraw(&creator, &creator, &creator, &Some(100));
+    client.withdraw(&creator, &creator, &ctx.token, &creator, &Some(100));
     assert_eq!(
         token::TokenClient::new(&ctx.env, &ctx.token).balance(&creator),
         100
@@ -190,7 +190,7 @@ fn test_payout_delay_and_cancellation() {
     ctx.env.ledger().with_mut(|li| li.sequence_number += 17280);
 
     // It should still go to creator, since change was cancelled
-    client.withdraw(&creator, &creator, &creator, &Some(100));
+    client.withdraw(&creator, &creator, &ctx.token, &creator, &Some(100));
     assert_eq!(
         token::TokenClient::new(&ctx.env, &ctx.token).balance(&creator),
         200
@@ -201,7 +201,7 @@ fn test_payout_delay_and_cancellation() {
     client.set_payout_address(&creator, &new_payout);
     ctx.env.ledger().with_mut(|li| li.sequence_number += 17280);
 
-    client.withdraw(&creator, &creator, &new_payout, &Some(100));
+    client.withdraw(&creator, &creator, &ctx.token, &new_payout, &Some(100));
     assert_eq!(
         token::TokenClient::new(&ctx.env, &ctx.token).balance(&new_payout),
         100
@@ -215,32 +215,32 @@ fn test_partial_withdraw_edges() {
     let creator = Address::generate(&ctx.env);
     let sender = ctx.fund(100);
 
-    client.tip(&sender, &creator, &100);
+    client.tip(&sender, &creator, &ctx.token, &100);
 
     // 1 stroop
-    client.withdraw(&creator, &creator, &creator, &Some(1));
+    client.withdraw(&creator, &creator, &ctx.token, &creator, &Some(1));
     // amount == balance + 1
     assert_eq!(
         client
-            .try_withdraw(&creator, &creator, &creator, &Some(100))
+            .try_withdraw(&creator, &creator, &ctx.token, &creator, &Some(100))
             .unwrap_err()
             .unwrap(),
         Error::InvalidAmount.into()
     );
     // amount == balance
-    client.withdraw(&creator, &creator, &creator, &Some(99));
+    client.withdraw(&creator, &creator, &ctx.token, &creator, &Some(99));
 
     // Test repeated partials
     let creator2 = Address::generate(&ctx.env);
     let sender2 = ctx.fund(100);
-    client.tip(&sender2, &creator2, &100);
-    client.withdraw(&creator2, &creator2, &creator2, &Some(20));
-    client.withdraw(&creator2, &creator2, &creator2, &Some(30));
-    client.withdraw(&creator2, &creator2, &creator2, &Some(50));
+    client.tip(&sender2, &creator2, &ctx.token, &100);
+    client.withdraw(&creator2, &creator2, &ctx.token, &creator2, &Some(20));
+    client.withdraw(&creator2, &creator2, &ctx.token, &creator2, &Some(30));
+    client.withdraw(&creator2, &creator2, &ctx.token, &creator2, &Some(50));
 
     assert_eq!(
         client
-            .try_withdraw(&creator2, &creator2, &creator2, &Some(1))
+            .try_withdraw(&creator2, &creator2, &ctx.token, &creator2, &Some(1))
             .unwrap_err()
             .unwrap(),
         Error::NothingToWithdraw.into()
@@ -260,10 +260,10 @@ fn test_ttl_resurrection_prevention() {
 
     // Key should be gone, meaning any try_withdraw as operator should fail with InvalidOperator
     let sender = ctx.fund(1000);
-    client.tip(&sender, &creator, &1000);
+    client.tip(&sender, &creator, &ctx.token, &1000);
     assert_eq!(
         client
-            .try_withdraw(&operator, &creator, &creator, &Some(10))
+            .try_withdraw(&operator, &creator, &ctx.token, &creator, &Some(10))
             .unwrap_err()
             .unwrap(),
         Error::InvalidOperator.into()

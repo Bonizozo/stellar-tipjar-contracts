@@ -59,7 +59,7 @@ impl Ctx {
         token::StellarAssetClient::new(&self.env, &self.token).mint(&holder, &amount);
         holder
     }
-    
+
     // Helper method to get the default token for backward compatibility
     fn get_token(&self) -> Address {
         self.token.clone()
@@ -84,7 +84,8 @@ fn tip_escrows_tokens_and_updates_balance_and_total() {
     // Withdrawable balance rose by the same amount: with a single creator and
     // a single tip, the full escrowed amount must be exactly what withdraw()
     // pays out.
-    ctx.client().withdraw(&creator, &creator, &ctx.get_token(), &creator, &None);
+    ctx.client()
+        .withdraw(&creator, &creator, &ctx.get_token(), &creator, &None);
     assert_eq!(ctx.token_client().balance(&creator), 400);
 }
 
@@ -101,7 +102,8 @@ fn multiple_tips_accumulate_for_the_same_creator() {
     assert_eq!(ctx.client().get_total_tips(&creator, &ctx.get_token()), 600);
     assert_eq!(ctx.token_client().balance(&ctx.contract_id), 600);
 
-    ctx.client().withdraw(&creator, &creator, &ctx.get_token(), &creator, &None);
+    ctx.client()
+        .withdraw(&creator, &creator, &ctx.get_token(), &creator, &None);
     assert_eq!(ctx.token_client().balance(&creator), 600);
     // Historical total survives the withdrawal.
     assert_eq!(ctx.client().get_total_tips(&creator, &ctx.get_token()), 600);
@@ -128,7 +130,8 @@ fn withdraw_pays_out_full_balance_resets_it_and_keeps_total() {
     let creator = Address::generate(&ctx.env);
 
     ctx.client().tip(&sender, &creator, &ctx.get_token(), &700);
-    ctx.client().withdraw(&creator, &creator, &ctx.get_token(), &creator, &None);
+    ctx.client()
+        .withdraw(&creator, &creator, &ctx.get_token(), &creator, &None);
 
     assert_eq!(ctx.token_client().balance(&creator), 700);
     assert_eq!(ctx.token_client().balance(&ctx.contract_id), 0);
@@ -261,30 +264,36 @@ fn withdraw_emits_withdraw_event_with_creator_topic_and_amount_data() {
     let creator = Address::generate(&ctx.env);
 
     ctx.client().tip(&sender, &creator, &ctx.get_token(), &250);
-    ctx.client().withdraw(&creator, &creator, &ctx.get_token(), &creator, &None);
 
-    let events = ctx.env.events().all().filter_by_contract(&ctx.contract_id);
-    let tip_event = &events[0];
-    let withdraw_event = &events[1];
-    
-    // Check tip event
+    // Checked immediately after tip(): each top-level call gets its own event
+    // buffer, so withdraw()'s event isn't visible yet.
+    let tip_events = ctx.env.events().all().filter_by_contract(&ctx.contract_id);
     assert_eq!(
-        tip_event.topics,
-        (symbol_short!("tip"), creator.clone()).into_val(&ctx.env)
+        tip_events,
+        vec![
+            &ctx.env,
+            (
+                ctx.contract_id.clone(),
+                (symbol_short!("tip"), creator.clone()).into_val(&ctx.env),
+                (ctx.get_token(), sender.clone(), 250i128).into_val(&ctx.env),
+            ),
+        ]
     );
+
+    ctx.client()
+        .withdraw(&creator, &creator, &ctx.get_token(), &creator, &None);
+
+    let withdraw_events = ctx.env.events().all().filter_by_contract(&ctx.contract_id);
     assert_eq!(
-        tip_event.data,
-        (ctx.get_token(), sender.clone(), 250i128).into_val(&ctx.env)
-    );
-    
-    // Check withdraw event  
-    assert_eq!(
-        withdraw_event.topics,
-        (symbol_short!("withdraw"), creator.clone()).into_val(&ctx.env)
-    );
-    assert_eq!(
-        withdraw_event.data,
-        (ctx.get_token(), 250i128, creator.clone()).into_val(&ctx.env)
+        withdraw_events,
+        vec![
+            &ctx.env,
+            (
+                ctx.contract_id.clone(),
+                (symbol_short!("withdraw"), creator.clone()).into_val(&ctx.env),
+                (ctx.get_token(), 250i128, creator.clone()).into_val(&ctx.env),
+            ),
+        ]
     );
 }
 
@@ -295,7 +304,7 @@ fn zero_fee_is_a_true_noop() {
     let creator = Address::generate(&ctx.env);
 
     // No set_fee call at all: fee_bps defaults to 0.
-    ctx.client().tip(&sender, &creator, &400);
+    ctx.client().tip(&sender, &creator, &ctx.get_token(), &400);
 
     // Checked immediately after tip(), before any other invocation: each
     // top-level call gets its own event buffer.
@@ -307,15 +316,16 @@ fn zero_fee_is_a_true_noop() {
             (
                 ctx.contract_id.clone(),
                 (symbol_short!("tip"), creator.clone()).into_val(&ctx.env),
-                (sender.clone(), 400i128).into_val(&ctx.env),
+                (ctx.get_token(), sender.clone(), 400i128).into_val(&ctx.env),
             ),
         ]
     );
 
-    assert_eq!(ctx.client().get_total_tips(&creator), 400);
+    assert_eq!(ctx.client().get_total_tips(&creator, &ctx.get_token()), 400);
     assert_eq!(ctx.client().get_fee_balance(), 0);
 
-    ctx.client().withdraw(&creator, &creator, &creator, &None);
+    ctx.client()
+        .withdraw(&creator, &creator, &ctx.get_token(), &creator, &None);
     assert_eq!(ctx.token_client().balance(&creator), 400);
 }
 
@@ -327,7 +337,7 @@ fn explicit_zero_fee_config_is_also_a_true_noop() {
     let collector = Address::generate(&ctx.env);
 
     ctx.client().set_fee(&ctx.admin, &0, &collector);
-    ctx.client().tip(&sender, &creator, &400);
+    ctx.client().tip(&sender, &creator, &ctx.get_token(), &400);
 
     // Checked immediately after tip(): no FeeCharged event, even though a
     // fee configuration (of 0 bps) is on record.
@@ -339,12 +349,12 @@ fn explicit_zero_fee_config_is_also_a_true_noop() {
             (
                 ctx.contract_id.clone(),
                 (symbol_short!("tip"), creator.clone()).into_val(&ctx.env),
-                (sender.clone(), 400i128).into_val(&ctx.env),
+                (ctx.get_token(), sender.clone(), 400i128).into_val(&ctx.env),
             ),
         ]
     );
 
-    assert_eq!(ctx.client().get_total_tips(&creator), 400);
+    assert_eq!(ctx.client().get_total_tips(&creator, &ctx.get_token()), 400);
     assert_eq!(ctx.client().get_fee_balance(), 0);
 }
 
@@ -356,7 +366,8 @@ fn tip_with_fee_credits_net_to_creator_and_accrues_fee_conserving_gross() {
     let collector = Address::generate(&ctx.env);
 
     ctx.client().set_fee(&ctx.admin, &250, &collector); // 2.5%
-    ctx.client().tip(&sender, &creator, &10_000);
+    ctx.client()
+        .tip(&sender, &creator, &ctx.get_token(), &10_000);
 
     // Checked immediately after tip(): FeeCharged is published before Tip
     // within the same call.
@@ -373,17 +384,21 @@ fn tip_with_fee_credits_net_to_creator_and_accrues_fee_conserving_gross() {
             (
                 ctx.contract_id.clone(),
                 (symbol_short!("tip"), creator.clone()).into_val(&ctx.env),
-                (sender.clone(), 10_000i128).into_val(&ctx.env),
+                (ctx.get_token(), sender.clone(), 10_000i128).into_val(&ctx.env),
             ),
         ]
     );
 
     // fee = floor(10_000 * 250 / 10_000) = 250; net = 9_750.
     assert_eq!(ctx.client().get_fee_balance(), 250);
-    assert_eq!(ctx.client().get_total_tips(&creator), 10_000); // gross, historical
+    assert_eq!(
+        ctx.client().get_total_tips(&creator, &ctx.get_token()),
+        10_000
+    ); // gross, historical
     assert_eq!(ctx.token_client().balance(&ctx.contract_id), 10_000);
 
-    ctx.client().withdraw(&creator, &creator, &creator, &None);
+    ctx.client()
+        .withdraw(&creator, &creator, &ctx.get_token(), &creator, &None);
     assert_eq!(ctx.token_client().balance(&creator), 9_750);
 }
 
@@ -395,11 +410,12 @@ fn one_stroop_tip_at_max_fee_floors_to_zero_fee_but_still_conserves() {
     let collector = Address::generate(&ctx.env);
 
     ctx.client().set_fee(&ctx.admin, &1_000, &collector); // 10%, the cap
-    ctx.client().tip(&sender, &creator, &1);
+    ctx.client().tip(&sender, &creator, &ctx.get_token(), &1);
 
     // floor(1 * 1_000 / 10_000) == 0: the creator gets the whole stroop.
     assert_eq!(ctx.client().get_fee_balance(), 0);
-    ctx.client().withdraw(&creator, &creator, &creator, &None);
+    ctx.client()
+        .withdraw(&creator, &creator, &ctx.get_token(), &creator, &None);
     assert_eq!(ctx.token_client().balance(&creator), 1);
 }
 
@@ -416,7 +432,7 @@ fn tip_fee_overflow_near_i128_max_panics_with_typed_error() {
 
     let err = ctx
         .client()
-        .try_tip(&sender, &creator, &i128::MAX)
+        .try_tip(&sender, &creator, &ctx.get_token(), &i128::MAX)
         .unwrap_err()
         .unwrap();
     assert_eq!(err, Error::FeeOverflow.into());
@@ -424,7 +440,7 @@ fn tip_fee_overflow_near_i128_max_panics_with_typed_error() {
     // The failed fee computation must have reverted the whole call: no
     // tokens moved, no balance recorded.
     assert_eq!(ctx.token_client().balance(&sender), i128::MAX);
-    assert_eq!(ctx.client().get_total_tips(&creator), 0);
+    assert_eq!(ctx.client().get_total_tips(&creator, &ctx.get_token()), 0);
 }
 
 #[test]
@@ -466,7 +482,8 @@ fn withdraw_fees_pays_out_collector_and_resets_balance() {
     let collector = Address::generate(&ctx.env);
 
     ctx.client().set_fee(&ctx.admin, &500, &collector); // 5%
-    ctx.client().tip(&sender, &creator, &2_000); // fee = 100
+    ctx.client()
+        .tip(&sender, &creator, &ctx.get_token(), &2_000); // fee = 100
 
     ctx.client().withdraw_fees(&collector, &None);
 
@@ -490,7 +507,8 @@ fn withdraw_fees_by_non_collector_panics_with_typed_error() {
     let stranger = Address::generate(&ctx.env);
 
     ctx.client().set_fee(&ctx.admin, &500, &collector);
-    ctx.client().tip(&sender, &creator, &2_000);
+    ctx.client()
+        .tip(&sender, &creator, &ctx.get_token(), &2_000);
 
     let err = ctx
         .client()

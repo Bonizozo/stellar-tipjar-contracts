@@ -86,9 +86,9 @@ fn upgrade_lifecycle_preserves_balances_and_totals_byte_exactly() {
     let sender = ctx.fund(1_000);
     let creator = Address::generate(&ctx.env);
 
-    ctx.client().tip(&sender, &creator, &400);
-    ctx.client().tip(&sender, &creator, &100);
-    assert_eq!(ctx.client().get_total_tips(&creator), 500);
+    ctx.client().tip(&sender, &creator, &ctx.token, &400);
+    ctx.client().tip(&sender, &creator, &ctx.token, &100);
+    assert_eq!(ctx.client().get_total_tips(&creator, &ctx.token), 500);
 
     let hash = ctx.upload_v2();
     ctx.client().propose_upgrade(&ctx.admin, &hash);
@@ -101,15 +101,15 @@ fn upgrade_lifecycle_preserves_balances_and_totals_byte_exactly() {
     // Same contract address, new code — balances and totals written under
     // v1 must read back byte-exactly under v2.
     let v2 = ctx.v2_client();
-    assert_eq!(v2.get_total_tips(&creator), 500);
+    assert_eq!(v2.get_total_tips(&creator, &ctx.token), 500);
 
     // The new code keeps working: further tips accumulate correctly...
-    v2.tip(&sender, &creator, &250);
-    assert_eq!(v2.get_total_tips(&creator), 750);
+    v2.tip(&sender, &creator, &ctx.token, &250);
+    assert_eq!(v2.get_total_tips(&creator, &ctx.token), 750);
 
     // ...and the escrowed balance (partly from v1, partly added under v2)
     // is still fully redeemable.
-    v2.withdraw(&creator, &None);
+    v2.withdraw(&creator, &ctx.token, &None);
     assert_eq!(
         token::TokenClient::new(&ctx.env, &ctx.token).balance(&creator),
         750
