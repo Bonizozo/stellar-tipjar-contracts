@@ -64,6 +64,19 @@ CONTRIBUTING.md
 
 See `contracts/tipjar/src/lib.rs` for the full function list, including operator delegation and payout-address rotation.
 
+### Payout-address delay threat model
+
+Payout-address rotation uses an approximately one-day ledger delay before a
+new payout address can receive withdrawals. This protects against an attacker
+who gets a creator/operator key and tries to redirect future withdrawals to a
+new destination. It does **not** lock existing escrow: an authorized creator,
+or an authorized operator within its allowance and expiry, can still withdraw
+immediately to the currently valid payout address while a payout-address change
+is pending. Pausing and unpausing withdrawals does not change the pending
+change's absolute effective ledger; after unpause, `withdraw` still applies the
+change only when the ledger sequence has reached that original checkpoint.
+
+
 ## Storage Model
 
 `DataKey` (instance/persistent storage):
