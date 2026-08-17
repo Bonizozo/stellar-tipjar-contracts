@@ -51,7 +51,7 @@ All data payloads are serialized in Soroban as arrays (using `data_format = "vec
 ### 9. `FeeWithdraw`
 - **Topics**: `["fee_withdraw", collector: Address]`
 - **Data (Vec)**: `[amount: i128]`
-- **Semantics**: Emitted by `withdraw_fees()` when the fee collector withdraws its accrued share of `FeeBalance`.
+- **Semantics**: Emitted by `withdraw_fees()` when the fee collector withdraws its accrued share of `FeeBalanceToken(token)`. The token is the `token` argument of that call.
 
 ## Legacy Events (TipJarLegacy)
 

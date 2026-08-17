@@ -96,8 +96,14 @@ pub enum DataKey {
     FeeBps,
     /// Address authorized to withdraw accrued protocol fees.
     FeeCollector,
-    /// Withdrawable protocol fee balance, accrued from tips.
+    /// Legacy unparameterized protocol fee counter. Kept so existing
+    /// persistent entries remain readable after upgrade; migrated into
+    /// `FeeBalance(token)` for the primary token on first fee access.
     FeeBalance,
+    /// Withdrawable protocol fee balance accrued from tips in `token`.
+    /// Named to match `Balance`/`Total` (keyed by token) without colliding
+    /// with the legacy unit `FeeBalance` variant required for migration.
+    FeeBalanceToken(Address),
 }
 
 /// Circuit-breaker state, stored as a single instance-storage entry.
@@ -352,9 +358,9 @@ impl TipJar {
 
     /// Escrows `amount` of the configured token from `sender` for `creator`,
     /// less the protocol fee (if one is configured). The creator's balance is
-    /// credited with `amount - fee`; the fee itself accrues to `FeeBalance`
-    /// for later withdrawal by the fee collector. `fee + net == amount` holds
-    /// for every input.
+    /// credited with `amount - fee`; the fee itself accrues to
+    /// `FeeBalance(token)` for later withdrawal by the fee collector.
+    /// `fee + net == amount` holds for every input.
     pub fn tip(env: Env, sender: Address, creator: Address, token: Address, amount: i128) {
         sender.require_auth();
         Self::check_not_paused(&env, PAUSE_FLAG_TIPS);
@@ -403,7 +409,8 @@ impl TipJar {
 
         // fee_bps == 0 is a true no-op: no fee storage entry, no fee event.
         if fee_bps > 0 {
-            let fee_balance_key = DataKey::FeeBalance;
+            Self::maybe_migrate_fee_balance(&env, &token);
+            let fee_balance_key = DataKey::FeeBalanceToken(token.clone());
             let fee_balance: i128 = env
                 .storage()
                 .persistent()
@@ -1102,9 +1109,10 @@ impl TipJar {
         .publish(&env);
     }
 
-    /// Pays out the fee collector's full or partial share of `FeeBalance`.
-    /// Mirrors `withdraw`'s pattern, including TTL extension.
-    pub fn withdraw_fees(env: Env, caller: Address, amount: Option<i128>) {
+    /// Pays out the fee collector's full or partial share of
+    /// `FeeBalance(token)`. Only moves units of `token`. Mirrors `withdraw`'s
+    /// pattern, including TTL extension.
+    pub fn withdraw_fees(env: Env, caller: Address, token: Address, amount: Option<i128>) {
         caller.require_auth();
 
         let collector: Address = env
@@ -1116,7 +1124,9 @@ impl TipJar {
             panic_with_error!(&env, Error::NotFeeCollector);
         }
 
-        let balance_key = DataKey::FeeBalance;
+        Self::maybe_migrate_fee_balance(&env, &token);
+
+        let balance_key = DataKey::FeeBalanceToken(token.clone());
         let balance: i128 = env.storage().persistent().get(&balance_key).unwrap_or(0);
         if balance == 0 {
             panic_with_error!(&env, Error::NothingToWithdraw);
@@ -1127,7 +1137,6 @@ impl TipJar {
             panic_with_error!(&env, Error::InvalidAmount);
         }
 
-        let token = Self::token_address(&env);
         let contract_address = env.current_contract_address();
 
         token::TokenClient::new(&env, &token).transfer(
@@ -1160,10 +1169,11 @@ impl TipJar {
         env.storage().instance().get(&DataKey::FeeCollector)
     }
 
-    pub fn get_fee_balance(env: Env) -> i128 {
+    pub fn get_fee_balance(env: Env, token: Address) -> i128 {
+        Self::maybe_migrate_fee_balance(&env, &token);
         env.storage()
             .persistent()
-            .get(&DataKey::FeeBalance)
+            .get(&DataKey::FeeBalanceToken(token))
             .unwrap_or(0)
     }
 
@@ -1203,13 +1213,6 @@ impl TipJar {
     fn require_admin(env: &Env, caller: &Address) {
         if *caller != Self::admin_address(env) {
             panic_with_error!(env, Error::Unauthorized);
-        }
-    }
-
-    fn token_address(env: &Env) -> Address {
-        match env.storage().instance().get(&DataKey::Token) {
-            Some(token) => token,
-            None => panic_with_error!(&env, Error::NotInitialized),
         }
     }
 
@@ -1308,5 +1311,32 @@ impl TipJar {
                 .extend_ttl(&v2_total_key, LEDGER_THRESHOLD, LEDGER_BUMP);
             env.storage().persistent().remove(&v1_total_key);
         }
+    }
+
+    /// Moves the unparameterized `FeeBalance` counter into
+    /// `FeeBalanceToken(primary_token)` the first time that token is touched,
+    /// so in-flight fees are not stranded after upgrade.
+    fn maybe_migrate_fee_balance(env: &Env, token: &Address) {
+        let legacy: Option<i128> = env.storage().persistent().get(&DataKey::FeeBalance);
+        let Some(legacy) = legacy else {
+            return;
+        };
+        let Some(primary): Option<Address> = env.storage().instance().get(&DataKey::Token) else {
+            return;
+        };
+        if token != &primary {
+            return;
+        }
+
+        let keyed = DataKey::FeeBalanceToken(token.clone());
+        let current: i128 = env.storage().persistent().get(&keyed).unwrap_or(0);
+        let combined = current
+            .checked_add(legacy)
+            .unwrap_or_else(|| panic_with_error!(env, Error::FeeOverflow));
+        env.storage().persistent().set(&keyed, &combined);
+        env.storage()
+            .persistent()
+            .extend_ttl(&keyed, LEDGER_THRESHOLD, LEDGER_BUMP);
+        env.storage().persistent().remove(&DataKey::FeeBalance);
     }
 }

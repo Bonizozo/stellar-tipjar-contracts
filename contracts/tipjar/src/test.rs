@@ -6,7 +6,7 @@
 //! unit-test module avoids a second crate compilation unit for such a small
 //! contract.
 
-use crate::{Error, TipJar, TipJarClient};
+use crate::{DataKey, Error, TipJar, TipJarClient};
 use soroban_sdk::{
     symbol_short,
     testutils::{Address as _, Events as _},
@@ -322,7 +322,7 @@ fn zero_fee_is_a_true_noop() {
     );
 
     assert_eq!(ctx.client().get_total_tips(&creator, &ctx.get_token()), 400);
-    assert_eq!(ctx.client().get_fee_balance(), 0);
+    assert_eq!(ctx.client().get_fee_balance(&ctx.get_token()), 0);
 
     ctx.client()
         .withdraw(&creator, &creator, &ctx.get_token(), &creator, &None);
@@ -355,7 +355,7 @@ fn explicit_zero_fee_config_is_also_a_true_noop() {
     );
 
     assert_eq!(ctx.client().get_total_tips(&creator, &ctx.get_token()), 400);
-    assert_eq!(ctx.client().get_fee_balance(), 0);
+    assert_eq!(ctx.client().get_fee_balance(&ctx.get_token()), 0);
 }
 
 #[test]
@@ -390,7 +390,7 @@ fn tip_with_fee_credits_net_to_creator_and_accrues_fee_conserving_gross() {
     );
 
     // fee = floor(10_000 * 250 / 10_000) = 250; net = 9_750.
-    assert_eq!(ctx.client().get_fee_balance(), 250);
+    assert_eq!(ctx.client().get_fee_balance(&ctx.get_token()), 250);
     assert_eq!(
         ctx.client().get_total_tips(&creator, &ctx.get_token()),
         10_000
@@ -413,7 +413,7 @@ fn one_stroop_tip_at_max_fee_floors_to_zero_fee_but_still_conserves() {
     ctx.client().tip(&sender, &creator, &ctx.get_token(), &1);
 
     // floor(1 * 1_000 / 10_000) == 0: the creator gets the whole stroop.
-    assert_eq!(ctx.client().get_fee_balance(), 0);
+    assert_eq!(ctx.client().get_fee_balance(&ctx.get_token()), 0);
     ctx.client()
         .withdraw(&creator, &creator, &ctx.get_token(), &creator, &None);
     assert_eq!(ctx.token_client().balance(&creator), 1);
@@ -485,14 +485,15 @@ fn withdraw_fees_pays_out_collector_and_resets_balance() {
     ctx.client()
         .tip(&sender, &creator, &ctx.get_token(), &2_000); // fee = 100
 
-    ctx.client().withdraw_fees(&collector, &None);
+    ctx.client()
+        .withdraw_fees(&collector, &ctx.get_token(), &None);
 
     assert_eq!(ctx.token_client().balance(&collector), 100);
-    assert_eq!(ctx.client().get_fee_balance(), 0);
+    assert_eq!(ctx.client().get_fee_balance(&ctx.get_token()), 0);
 
     let err = ctx
         .client()
-        .try_withdraw_fees(&collector, &None)
+        .try_withdraw_fees(&collector, &ctx.get_token(), &None)
         .unwrap_err()
         .unwrap();
     assert_eq!(err, Error::NothingToWithdraw.into());
@@ -512,7 +513,7 @@ fn withdraw_fees_by_non_collector_panics_with_typed_error() {
 
     let err = ctx
         .client()
-        .try_withdraw_fees(&stranger, &None)
+        .try_withdraw_fees(&stranger, &ctx.get_token(), &None)
         .unwrap_err()
         .unwrap();
     assert_eq!(err, Error::NotFeeCollector.into());
@@ -525,10 +526,96 @@ fn withdraw_fees_with_nothing_configured_errors() {
 
     let err = ctx
         .client()
-        .try_withdraw_fees(&anyone, &None)
+        .try_withdraw_fees(&anyone, &ctx.get_token(), &None)
         .unwrap_err()
         .unwrap();
     assert_eq!(err, Error::NothingToWithdraw.into());
+}
+
+#[test]
+fn withdraw_fees_is_isolated_per_token() {
+    let ctx = Ctx::new();
+    let token_b_admin = Address::generate(&ctx.env);
+    let token_b = ctx
+        .env
+        .register_stellar_asset_contract_v2(token_b_admin)
+        .address();
+    let token_b_client = token::TokenClient::new(&ctx.env, &token_b);
+
+    ctx.client().add_token(&ctx.admin, &token_b);
+
+    let sender_a = ctx.fund(10_000);
+    let sender_b = Address::generate(&ctx.env);
+    token::StellarAssetClient::new(&ctx.env, &token_b).mint(&sender_b, &10_000);
+    let creator = Address::generate(&ctx.env);
+    let collector = Address::generate(&ctx.env);
+
+    ctx.client().set_fee(&ctx.admin, &1_000, &collector); // 10%
+    ctx.client()
+        .tip(&sender_a, &creator, &ctx.get_token(), &2_000); // fee = 200
+    ctx.client().tip(&sender_b, &creator, &token_b, &5_000); // fee = 500
+
+    assert_eq!(ctx.client().get_fee_balance(&ctx.get_token()), 200);
+    assert_eq!(ctx.client().get_fee_balance(&token_b), 500);
+
+    ctx.client()
+        .withdraw_fees(&collector, &ctx.get_token(), &None);
+    assert_eq!(ctx.token_client().balance(&collector), 200);
+    assert_eq!(token_b_client.balance(&collector), 0);
+    assert_eq!(ctx.client().get_fee_balance(&ctx.get_token()), 0);
+    assert_eq!(ctx.client().get_fee_balance(&token_b), 500);
+
+    ctx.client().withdraw_fees(&collector, &token_b, &None);
+    assert_eq!(token_b_client.balance(&collector), 500);
+    assert_eq!(ctx.token_client().balance(&collector), 200);
+    assert_eq!(ctx.client().get_fee_balance(&token_b), 0);
+
+    let err = ctx
+        .client()
+        .try_withdraw_fees(&collector, &token_b, &None)
+        .unwrap_err()
+        .unwrap();
+    assert_eq!(err, Error::NothingToWithdraw.into());
+
+    // Creator escrow in token A is untouched by the token-B fee withdrawal.
+    assert_eq!(ctx.client().get_balance(&creator, &ctx.get_token()), 1_800);
+    assert_eq!(ctx.client().get_balance(&creator, &token_b), 4_500);
+}
+
+#[test]
+fn legacy_unparameterized_fee_balance_migrates_to_primary_token() {
+    let ctx = Ctx::new();
+    let collector = Address::generate(&ctx.env);
+    ctx.client().set_fee(&ctx.admin, &500, &collector);
+
+    ctx.env.as_contract(&ctx.contract_id, || {
+        ctx.env
+            .storage()
+            .persistent()
+            .set(&DataKey::FeeBalance, &100i128);
+    });
+
+    let donor = ctx.fund(100);
+    ctx.token_client().transfer(&donor, &ctx.contract_id, &100);
+
+    assert_eq!(ctx.client().get_fee_balance(&ctx.get_token()), 100);
+
+    ctx.env.as_contract(&ctx.contract_id, || {
+        let leftover: Option<i128> = ctx.env.storage().persistent().get(&DataKey::FeeBalance);
+        assert!(leftover.is_none());
+        let keyed: i128 = ctx
+            .env
+            .storage()
+            .persistent()
+            .get(&DataKey::FeeBalanceToken(ctx.get_token()))
+            .unwrap();
+        assert_eq!(keyed, 100);
+    });
+
+    ctx.client()
+        .withdraw_fees(&collector, &ctx.get_token(), &None);
+    assert_eq!(ctx.token_client().balance(&collector), 100);
+    assert_eq!(ctx.client().get_fee_balance(&ctx.get_token()), 0);
 }
 
 #[test]

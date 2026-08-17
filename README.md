@@ -59,7 +59,7 @@ CONTRIBUTING.md
 - `get_total_tips(env, creator: Address) -> i128` — returns a creator's historical gross total tips (0 if never tipped).
 - `withdraw(env, caller: Address, creator: Address, to: Address, amount: Option<i128>)` — pays out a creator's full or partial withdrawable balance to their payout address.
 - `set_fee(env, caller: Address, bps: u32, collector: Address)` — admin-only; sets the protocol fee rate (hard-capped on-chain at 1,000 bps / 10%) and its collector. `bps = 0` disables fees.
-- `withdraw_fees(env, caller: Address, amount: Option<i128>)` — pays out the fee collector's full or partial share of accrued protocol fees.
+- `withdraw_fees(env, caller: Address, token: Address, amount: Option<i128>)` — pays out the fee collector's full or partial share of accrued protocol fees for `token` only.
 - `propose_admin` / `accept_admin` / `cancel_admin_transfer` — two-step admin handover: a proposal only takes effect once the proposed address itself accepts, so a typoed address can't brick governance.
 
 See `contracts/tipjar/src/lib.rs` for the full function list, including operator delegation and payout-address rotation.
@@ -71,7 +71,8 @@ See `contracts/tipjar/src/lib.rs` for the full function list, including operator
 - `Token` — the configured SEP-41 token contract address (instance storage).
 - `Admin` / `PendingAdmin` — the contract admin and any address proposed as its replacement (instance storage).
 - `FeeBps` / `FeeCollector` — the configured protocol fee rate and its collector (instance storage). Absent `FeeBps` means no fee.
-- `FeeBalance` — the fee collector's withdrawable accrued balance (persistent storage).
+- `FeeBalance` — legacy unparameterized fee counter; migrated into `FeeBalanceToken(token)` for the primary token on first fee access.
+- `FeeBalanceToken(Address)` — the fee collector's withdrawable accrued balance for a specific SEP-41 token (persistent storage).
 - `CreatorBalance(Address)` — a creator's current withdrawable balance, net of fees (persistent storage).
 - `CreatorTotal(Address)` — a creator's historical gross total ever tipped, never decreases (persistent storage).
 
