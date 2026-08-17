@@ -65,6 +65,36 @@ This document outlines the TipJar contract's trust assumptions, security invaria
 2. **Monitoring**: Alert on suspicious patterns (e.g., bulk withdrawals from cold addresses).
 3. **Incident response**: Have a pre-signed pause transaction ready for rapid deployment.
 
+
+### 4. Creator / Operator Keys and Payout-Address Delay
+
+**Assumption**: A creator/operator key that can authorize withdrawals is protected.
+The `PAYOUT_DELAY_LEDGERS` delay protects only changes to the destination of
+future withdrawals; it is not a withdrawal timelock.
+
+**What the delay protects**:
+- A compromised creator key cannot immediately redirect withdrawals to a newly
+  proposed payout address. The pending payout address is stored with an absolute
+  `effective_ledger`, and `withdraw()` applies it only when
+  `env.ledger().sequence() >= effective_ledger`.
+- Pausing or unpausing withdrawals does not recompute, shorten, extend, or clear
+  the pending payout change. While withdrawals are paused, `withdraw()` and
+  payout-management entrypoints are blocked; after unpause, the same absolute
+  ledger comparison determines whether the pending payout has matured.
+
+**What the delay does not protect**:
+- A compromised creator key can withdraw the existing escrowed balance
+  immediately to the currently valid payout address before the pending payout
+  change matures.
+- A compromised operator key can do the same within its remaining allowance and
+  expiry, but only to the currently valid payout address.
+
+**Operational guidance**: Product copy should describe payout-address delay as
+protection against malicious destination rotation for future withdrawals, not as
+protection against immediate draining by an already-authorized creator/operator
+key. Creators should still secure withdrawal-authorizing keys, keep operator
+allowances narrow, and monitor payout-change events.
+
 ---
 
 ## Storage Invariants
