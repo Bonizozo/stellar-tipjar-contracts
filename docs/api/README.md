@@ -61,7 +61,7 @@ client.init(&token, &admin, &upgrade_timelock_ledgers);
 
 Escrows `amount` of the configured token from `sender` for `creator`,
 less the protocol fee (if one is configured). The creator's balance is
-credited with `amount - fee`; the fee itself accrues to `FeeBalance`
+credited with `amount - fee`; the fee itself accrues to `FeeBalanceToken(token)`
 for later withdrawal by the fee collector. `fee + net == amount` holds
 for every input.
 
@@ -726,11 +726,11 @@ client.set_fee(&admin, &bps, &collector);
 
 ### `withdraw_fees`
 
-Pays out the fee collector's full or partial share of `FeeBalance`.
-Mirrors `withdraw`'s pattern, including TTL extension.
+Pays out the fee collector's full or partial share of `FeeBalanceToken(token)`.
+Only transfers units of `token`. Mirrors `withdraw`'s pattern, including TTL extension.
 
 ```rust
-pub fn withdraw_fees(caller: Address, amount: Option<i128>) -> ()
+pub fn withdraw_fees(caller: Address, token: Address, amount: Option<i128>) -> ()
 ```
 
 **Parameters**
@@ -738,12 +738,13 @@ pub fn withdraw_fees(caller: Address, amount: Option<i128>) -> ()
 | Name | Type |
 |------|------|
 | `caller` | `Address` |
+| `token` | `Address` |
 | `amount` | `Option<i128>` |
 
 **Example**
 
 ```rust
-client.withdraw_fees(&caller, &amount);
+client.withdraw_fees(&caller, &token, &amount);
 ```
 
 ---
@@ -783,7 +784,7 @@ client.get_fee_collector();
 ### `get_fee_balance`
 
 ```rust
-pub fn get_fee_balance() -> i128
+pub fn get_fee_balance(token: Address) -> i128
 ```
 
 **Returns** — `i128`
@@ -791,7 +792,7 @@ pub fn get_fee_balance() -> i128
 **Example**
 
 ```rust
-client.get_fee_balance();
+client.get_fee_balance(&token);
 ```
 
 ---
