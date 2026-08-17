@@ -10,6 +10,7 @@ struct Ctx {
     env: Env,
     contract_id: Address,
     token: Address,
+    admin: Address,
 }
 
 impl Ctx {
@@ -28,6 +29,7 @@ impl Ctx {
             env,
             contract_id,
             token,
+            admin,
         }
     }
 
@@ -206,6 +208,78 @@ fn test_payout_delay_and_cancellation() {
         token::TokenClient::new(&ctx.env, &ctx.token).balance(&new_payout),
         100
     );
+}
+
+#[test]
+fn test_payout_delay_uses_absolute_ledgers_across_pause_unpause() {
+    let ctx = Ctx::new();
+    let client = ctx.client();
+    let creator = Address::generate(&ctx.env);
+    let new_payout = Address::generate(&ctx.env);
+    let sender = ctx.fund(1000);
+
+    client.tip(&sender, &creator, &ctx.token, &1000);
+    let proposed_at = ctx.env.ledger().sequence();
+    client.set_payout_address(&creator, &new_payout);
+    let effective_ledger = proposed_at + 17280;
+
+    // Pausing withdrawals blocks withdraws, but it must not reset, shorten, or
+    // otherwise mutate the pending payout change's absolute effective ledger.
+    ctx.env.ledger().with_mut(|li| li.sequence_number += 100);
+    client.pause_withdrawals(&ctx.admin);
+    ctx.env.ledger().with_mut(|li| li.sequence_number += 1000);
+    assert_eq!(
+        client
+            .try_withdraw(&creator, &creator, &ctx.token, &new_payout, &Some(100))
+            .unwrap_err()
+            .unwrap(),
+        Error::WithdrawalsPaused.into()
+    );
+    client.unpause_withdrawals(&ctx.admin);
+
+    // Before the original effective ledger, the new payout still cannot be used.
+    ctx.env
+        .ledger()
+        .with_mut(|li| li.sequence_number = effective_ledger - 1);
+    assert_eq!(
+        client
+            .try_withdraw(&creator, &creator, &ctx.token, &new_payout, &Some(100))
+            .unwrap_err()
+            .unwrap(),
+        Error::InvalidTarget.into()
+    );
+
+    // At the original effective ledger, the pending change applies normally.
+    ctx.env
+        .ledger()
+        .with_mut(|li| li.sequence_number = effective_ledger);
+    client.withdraw(&creator, &creator, &ctx.token, &new_payout, &Some(100));
+    assert_eq!(
+        token::TokenClient::new(&ctx.env, &ctx.token).balance(&new_payout),
+        100
+    );
+}
+
+#[test]
+fn test_compromised_creator_can_withdraw_to_existing_payout_before_delay() {
+    let ctx = Ctx::new();
+    let client = ctx.client();
+    let creator = Address::generate(&ctx.env);
+    let attacker_payout = Address::generate(&ctx.env);
+    let sender = ctx.fund(1000);
+
+    client.tip(&sender, &creator, &ctx.token, &1000);
+    client.set_payout_address(&creator, &attacker_payout);
+
+    // The delay protects only a pending destination change. The authenticated
+    // creator key can still withdraw the escrowed balance immediately to the
+    // current payout address, which defaults to the creator address.
+    client.withdraw(&creator, &creator, &ctx.token, &creator, &None);
+    assert_eq!(
+        token::TokenClient::new(&ctx.env, &ctx.token).balance(&creator),
+        1000
+    );
+    assert_eq!(client.get_balance(&creator, &ctx.token), 0);
 }
 
 #[test]
