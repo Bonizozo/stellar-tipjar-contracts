@@ -13,6 +13,8 @@ mod test_exhaustive;
 mod test_invariants;
 #[cfg(test)]
 mod test_upgrade;
+#[cfg(test)]
+mod test_coverage_gaps;
 
 /// Ledger TTL bump applied to instance and persistent storage on every write.
 const LEDGER_THRESHOLD: u32 = 100_000;
@@ -1219,8 +1221,6 @@ impl TipJar {
     // Legacy methods for backward compatibility with v1 API
     // These use the first token in the allowlist as the default token
     pub fn tip_legacy(env: Env, sender: Address, creator: Address, amount: i128) {
-        sender.require_auth();
-
         let tokens = Self::get_tokens(env.clone());
         if tokens.is_empty() {
             panic_with_error!(&env, Error::NotInitialized);
