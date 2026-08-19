@@ -1,5 +1,12 @@
 #![cfg(test)]
 
+//! Partial-pause coverage for the legacy contract's `PauseScope`-keyed
+//! `pause_feature` circuit breaker. This is intentionally distinct from the
+//! modern `tipjar` package's repo-root `tests/partial_pause_tests.rs`, which
+//! exercises admin/guardian `PauseState` bitmask flags and entrypoint-to-flag
+//! gating. The shared target/file name reflects analogous behavior in sibling
+//! crates, not a copy-paste duplicate.
+
 extern crate std;
 
 use soroban_sdk::{testutils::Address as _, token, Address, Env, String as SorobanString};
