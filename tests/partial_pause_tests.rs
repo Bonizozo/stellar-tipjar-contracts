@@ -1,6 +1,14 @@
-//! Full (flag, entrypoint) test matrix for the granular circuit breaker,
-//! plus the acceptance-criteria tests for independent pause scopes:
+//! Full (flag, entrypoint) test matrix for the modern tipjar granular circuit
+//! breaker, plus the acceptance-criteria tests for independent pause scopes:
 //! withdrawals stay live while tips are paused, and vice versa.
+//!
+//! This is intentionally distinct from
+//! `contracts/tipjar-legacy/tests/partial_pause_tests.rs`: the modern contract
+//! stores admin/guardian `PauseState` flags (`PAUSE_FLAG_TIPS` and
+//! `PAUSE_FLAG_WITHDRAWALS`) and maps each public entrypoint to one of those
+//! bitmask gates. The legacy suite covers its older `PauseScope`-keyed
+//! `pause_feature` API instead, so the shared file name is not a copy-paste
+//! duplicate across packages.
 
 mod common;
 
