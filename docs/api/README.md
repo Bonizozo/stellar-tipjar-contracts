@@ -28,14 +28,18 @@
 | `20` | `InvalidFee` |
 | `21` | `FeeOverflow` |
 | `22` | `NotFeeCollector` |
+| `23` | `TokenNotAllowed` |
+| `24` | `TokenAlreadyExists` |
+| `25` | `MaxTokensReached` |
 
 ## Functions
 
 ### `init`
 
-One-time configuration of the token this jar accepts, the upgrade
-admin, and the ledger delay `execute_upgrade` must wait out after a
-`propose_upgrade`. Errors if called twice.
+One-time configuration: the token this jar accepts (seeded as the
+first entry of the multi-token allowlist), the admin, and the ledger
+delay `execute_upgrade` must wait out after a `propose_upgrade`.
+Errors if called twice.
 
 ```rust
 pub fn init(token: Address, admin: Address, upgrade_timelock_ledgers: u32) -> ()
@@ -61,12 +65,12 @@ client.init(&token, &admin, &upgrade_timelock_ledgers);
 
 Escrows `amount` of the configured token from `sender` for `creator`,
 less the protocol fee (if one is configured). The creator's balance is
-credited with `amount - fee`; the fee itself accrues to `FeeBalanceToken(token)`
-for later withdrawal by the fee collector. `fee + net == amount` holds
-for every input.
+credited with `amount - fee`; the fee itself accrues to
+`FeeBalance(token)` for later withdrawal by the fee collector.
+`fee + net == amount` holds for every input.
 
 ```rust
-pub fn tip(sender: Address, creator: Address, amount: i128) -> ()
+pub fn tip(sender: Address, creator: Address, token: Address, amount: i128) -> ()
 ```
 
 **Parameters**
@@ -75,22 +79,23 @@ pub fn tip(sender: Address, creator: Address, amount: i128) -> ()
 |------|------|
 | `sender` | `Address` |
 | `creator` | `Address` |
+| `token` | `Address` |
 | `amount` | `i128` |
 
 **Example**
 
 ```rust
-client.tip(&sender, &creator, &amount);
+client.tip(&sender, &creator, &token, &amount);
 ```
 
 ---
 
 ### `get_total_tips`
 
-Historical total ever tipped to `creator`. Zero if the creator has never been tipped.
+Historical total ever tipped to `creator` for a specific `token`. Zero if never tipped.
 
 ```rust
-pub fn get_total_tips(creator: Address) -> i128
+pub fn get_total_tips(creator: Address, token: Address) -> i128
 ```
 
 **Parameters**
@@ -98,25 +103,67 @@ pub fn get_total_tips(creator: Address) -> i128
 | Name | Type |
 |------|------|
 | `creator` | `Address` |
+| `token` | `Address` |
 
 **Returns** — `i128`
 
 **Example**
 
 ```rust
-client.get_total_tips(&creator);
+client.get_total_tips(&creator, &token);
+```
+
+---
+
+### `get_balance`
+
+Gets the withdrawable balance for a creator and specific token.
+
+```rust
+pub fn get_balance(creator: Address, token: Address) -> i128
+```
+
+**Parameters**
+
+| Name | Type |
+|------|------|
+| `creator` | `Address` |
+| `token` | `Address` |
+
+**Returns** — `i128`
+
+**Example**
+
+```rust
+client.get_balance(&creator, &token);
+```
+
+---
+
+### `get_tokens`
+
+Returns the list of allowed tokens.
+
+```rust
+pub fn get_tokens() -> Vec<Address>
+```
+
+**Returns** — `Vec<Address>`
+
+**Example**
+
+```rust
+client.get_tokens();
 ```
 
 ---
 
 ### `withdraw`
 
-Pays out a creator's full or partial withdrawable balance.
-If caller is an operator, checks their allowance and expiry.
-Applies any matured payout address change before transferring.
+Pays out a creator's withdrawable balance for a specific token.
 
 ```rust
-pub fn withdraw(caller: Address, creator: Address, to: Address, amount: Option<i128>) -> ()
+pub fn withdraw(caller: Address, creator: Address, token: Address, to: Address, amount: Option<i128>) -> ()
 ```
 
 **Parameters**
@@ -125,13 +172,61 @@ pub fn withdraw(caller: Address, creator: Address, to: Address, amount: Option<i
 |------|------|
 | `caller` | `Address` |
 | `creator` | `Address` |
+| `token` | `Address` |
 | `to` | `Address` |
 | `amount` | `Option<i128>` |
 
 **Example**
 
 ```rust
-client.withdraw(&caller, &creator, &to, &amount);
+client.withdraw(&caller, &creator, &token, &to, &amount);
+```
+
+---
+
+### `add_token`
+
+Adds a token to the allowlist. Admin-only operation.
+
+```rust
+pub fn add_token(admin: Address, token: Address) -> ()
+```
+
+**Parameters**
+
+| Name | Type |
+|------|------|
+| `admin` | `Address` |
+| `token` | `Address` |
+
+**Example**
+
+```rust
+client.add_token(&admin, &token);
+```
+
+---
+
+### `remove_token`
+
+Removes a token from the allowlist. Admin-only operation.
+Existing balances remain withdrawable.
+
+```rust
+pub fn remove_token(admin: Address, token: Address) -> ()
+```
+
+**Parameters**
+
+| Name | Type |
+|------|------|
+| `admin` | `Address` |
+| `token` | `Address` |
+
+**Example**
+
+```rust
+client.remove_token(&admin, &token);
 ```
 
 ---
@@ -726,8 +821,9 @@ client.set_fee(&admin, &bps, &collector);
 
 ### `withdraw_fees`
 
-Pays out the fee collector's full or partial share of `FeeBalanceToken(token)`.
-Only transfers units of `token`. Mirrors `withdraw`'s pattern, including TTL extension.
+Pays out the fee collector's full or partial share of
+`FeeBalance(token)`. Only moves units of `token`. Mirrors `withdraw`'s
+pattern, including TTL extension.
 
 ```rust
 pub fn withdraw_fees(caller: Address, token: Address, amount: Option<i128>) -> ()
@@ -787,6 +883,12 @@ client.get_fee_collector();
 pub fn get_fee_balance(token: Address) -> i128
 ```
 
+**Parameters**
+
+| Name | Type |
+|------|------|
+| `token` | `Address` |
+
 **Returns** — `i128`
 
 **Example**
@@ -820,6 +922,73 @@ pub fn preview_fee(amount: i128, bps: u32) -> (i128, i128)
 
 ```rust
 client.preview_fee(&amount, &bps);
+```
+
+---
+
+### `tip_legacy`
+
+```rust
+pub fn tip_legacy(sender: Address, creator: Address, amount: i128) -> ()
+```
+
+**Parameters**
+
+| Name | Type |
+|------|------|
+| `sender` | `Address` |
+| `creator` | `Address` |
+| `amount` | `i128` |
+
+**Example**
+
+```rust
+client.tip_legacy(&sender, &creator, &amount);
+```
+
+---
+
+### `get_total_tips_legacy`
+
+```rust
+pub fn get_total_tips_legacy(creator: Address) -> i128
+```
+
+**Parameters**
+
+| Name | Type |
+|------|------|
+| `creator` | `Address` |
+
+**Returns** — `i128`
+
+**Example**
+
+```rust
+client.get_total_tips_legacy(&creator);
+```
+
+---
+
+### `withdraw_legacy`
+
+```rust
+pub fn withdraw_legacy(caller: Address, creator: Address, to: Address, amount: Option<i128>) -> ()
+```
+
+**Parameters**
+
+| Name | Type |
+|------|------|
+| `caller` | `Address` |
+| `creator` | `Address` |
+| `to` | `Address` |
+| `amount` | `Option<i128>` |
+
+**Example**
+
+```rust
+client.withdraw_legacy(&caller, &creator, &to, &amount);
 ```
 
 ---

@@ -3,7 +3,7 @@
   "functions": [
     {
       "name": "init",
-      "doc": "One-time configuration of the token this jar accepts, the upgrade\nadmin, and the ledger delay `execute_upgrade` must wait out after a\n`propose_upgrade`. Errors if called twice.",
+      "doc": "One-time configuration: the token this jar accepts (seeded as the\nfirst entry of the multi-token allowlist), the admin, and the ledger\ndelay `execute_upgrade` must wait out after a `propose_upgrade`.\nErrors if called twice.",
       "params": [
         {
           "name": "token",
@@ -22,7 +22,7 @@
     },
     {
       "name": "tip",
-      "doc": "Escrows `amount` of the configured token from `sender` for `creator`,\nless the protocol fee (if one is configured). The creator's balance is\ncredited with `amount - fee`; the fee itself accrues to `FeeBalance`\nfor later withdrawal by the fee collector. `fee + net == amount` holds\nfor every input.",
+      "doc": "Escrows `amount` of the configured token from `sender` for `creator`,\nless the protocol fee (if one is configured). The creator's balance is\ncredited with `amount - fee`; the fee itself accrues to\n`FeeBalance(token)` for later withdrawal by the fee collector.\n`fee + net == amount` holds for every input.",
       "params": [
         {
           "name": "sender",
@@ -30,6 +30,10 @@
         },
         {
           "name": "creator",
+          "ty": "Address"
+        },
+        {
+          "name": "token",
           "ty": "Address"
         },
         {
@@ -41,18 +45,43 @@
     },
     {
       "name": "get_total_tips",
-      "doc": "Historical total ever tipped to `creator`. Zero if the creator has never been tipped.",
+      "doc": "Historical total ever tipped to `creator` for a specific `token`. Zero if never tipped.",
       "params": [
         {
           "name": "creator",
+          "ty": "Address"
+        },
+        {
+          "name": "token",
           "ty": "Address"
         }
       ],
       "returns": "i128"
     },
     {
+      "name": "get_balance",
+      "doc": "Gets the withdrawable balance for a creator and specific token.",
+      "params": [
+        {
+          "name": "creator",
+          "ty": "Address"
+        },
+        {
+          "name": "token",
+          "ty": "Address"
+        }
+      ],
+      "returns": "i128"
+    },
+    {
+      "name": "get_tokens",
+      "doc": "Returns the list of allowed tokens.",
+      "params": [],
+      "returns": "Vec<Address>"
+    },
+    {
       "name": "withdraw",
-      "doc": "Pays out a creator's full or partial withdrawable balance.\nIf caller is an operator, checks their allowance and expiry.\nApplies any matured payout address change before transferring.",
+      "doc": "Pays out a creator's withdrawable balance for a specific token.",
       "params": [
         {
           "name": "caller",
@@ -63,12 +92,46 @@
           "ty": "Address"
         },
         {
+          "name": "token",
+          "ty": "Address"
+        },
+        {
           "name": "to",
           "ty": "Address"
         },
         {
           "name": "amount",
           "ty": "Option<i128>"
+        }
+      ],
+      "returns": "()"
+    },
+    {
+      "name": "add_token",
+      "doc": "Adds a token to the allowlist. Admin-only operation.",
+      "params": [
+        {
+          "name": "admin",
+          "ty": "Address"
+        },
+        {
+          "name": "token",
+          "ty": "Address"
+        }
+      ],
+      "returns": "()"
+    },
+    {
+      "name": "remove_token",
+      "doc": "Removes a token from the allowlist. Admin-only operation.\nExisting balances remain withdrawable.",
+      "params": [
+        {
+          "name": "admin",
+          "ty": "Address"
+        },
+        {
+          "name": "token",
+          "ty": "Address"
         }
       ],
       "returns": "()"
@@ -381,10 +444,14 @@
     },
     {
       "name": "withdraw_fees",
-      "doc": "Pays out the fee collector's full or partial share of `FeeBalance`.\nMirrors `withdraw`'s pattern, including TTL extension.",
+      "doc": "Pays out the fee collector's full or partial share of\n`FeeBalance(token)`. Only moves units of `token`. Mirrors `withdraw`'s\npattern, including TTL extension.",
       "params": [
         {
           "name": "caller",
+          "ty": "Address"
+        },
+        {
+          "name": "token",
           "ty": "Address"
         },
         {
@@ -409,7 +476,12 @@
     {
       "name": "get_fee_balance",
       "doc": "",
-      "params": [],
+      "params": [
+        {
+          "name": "token",
+          "ty": "Address"
+        }
+      ],
       "returns": "i128"
     },
     {
@@ -426,6 +498,59 @@
         }
       ],
       "returns": "(i128, i128)"
+    },
+    {
+      "name": "tip_legacy",
+      "doc": "",
+      "params": [
+        {
+          "name": "sender",
+          "ty": "Address"
+        },
+        {
+          "name": "creator",
+          "ty": "Address"
+        },
+        {
+          "name": "amount",
+          "ty": "i128"
+        }
+      ],
+      "returns": "()"
+    },
+    {
+      "name": "get_total_tips_legacy",
+      "doc": "",
+      "params": [
+        {
+          "name": "creator",
+          "ty": "Address"
+        }
+      ],
+      "returns": "i128"
+    },
+    {
+      "name": "withdraw_legacy",
+      "doc": "",
+      "params": [
+        {
+          "name": "caller",
+          "ty": "Address"
+        },
+        {
+          "name": "creator",
+          "ty": "Address"
+        },
+        {
+          "name": "to",
+          "ty": "Address"
+        },
+        {
+          "name": "amount",
+          "ty": "Option<i128>"
+        }
+      ],
+      "returns": "()"
     }
   ],
   "errors": [
@@ -516,6 +641,18 @@
     {
       "name": "NotFeeCollector",
       "code": 22
+    },
+    {
+      "name": "TokenNotAllowed",
+      "code": 23
+    },
+    {
+      "name": "TokenAlreadyExists",
+      "code": 24
+    },
+    {
+      "name": "MaxTokensReached",
+      "code": 25
     }
   ]
 }
