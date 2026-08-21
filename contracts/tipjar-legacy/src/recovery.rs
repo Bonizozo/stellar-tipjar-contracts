@@ -1,4 +1,4 @@
-use soroban_sdk::{contracttype, Address, Env, Map, Vec};
+use soroban_sdk::{contracttype, Address, Env, Vec};
 
 /// Recovery request status
 #[contracttype]
@@ -49,8 +49,8 @@ pub struct RecoveryConfig {
     pub guardian_revocation_delay: u64, // Seconds before guardian removal is effective
 }
 
-impl RecoveryConfig {
-    pub fn default() -> Self {
+impl Default for RecoveryConfig {
+    fn default() -> Self {
         RecoveryConfig {
             approval_threshold: 66,
             timelock_delay: 604800,           // 7 days
@@ -143,7 +143,7 @@ fn get_total_guardian_weight(env: &Env, creator: &Address) -> u32 {
 pub fn create_recovery_request(env: &Env, creator: &Address, new_owner: &Address) {
     // Check guardian exists
     let guardians = get_active_guardians(env, creator);
-    if guardians.len() == 0 {
+    if guardians.is_empty() {
         panic!("No guardians set for recovery");
     }
 
@@ -153,7 +153,6 @@ pub fn create_recovery_request(env: &Env, creator: &Address, new_owner: &Address
     counter += 1;
     env.storage().instance().set(&counter_key, &counter);
 
-    let config = RecoveryConfig::default();
     let request = RecoveryRequest {
         id: counter,
         creator: creator.clone(),

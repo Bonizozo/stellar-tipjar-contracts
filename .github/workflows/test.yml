@@ -30,6 +30,12 @@ jobs:
         # disk before `cargo test -p tipjar` runs.
         run: cargo build -p tipjar-v2-fixture --target wasm32v1-none --release
 
+      - name: Verify pause_tests / partial_pause_tests wiring
+        # Guard against the orphaned-test-tree failure mode: confirm the two
+        # root-level integration tests are still registered as real [[test]]
+        # targets of the `tipjar` package (see tests/README.md).
+        run: cargo test -p tipjar --test pause_tests --test partial_pause_tests -- --list
+
       - name: Run unit & integration tests
         run: cargo test -p tipjar -- --test-threads=4
 

@@ -1,38 +1,61 @@
 # Tests directory
 
-Most contract unit tests live alongside the code in `contracts/tipjar/src/`
-(`test.rs`, `test_invariants.rs`, `test_upgrade.rs`, ...) and use Soroban's
-testing framework.
+This folder holds **integration tests that are compiled as part of the
+`tipjar` package** (`contracts/tipjar`), even though the files live at the
+repo root rather than under `contracts/tipjar/tests/`.
 
-This top-level directory holds integration-style suites that are wired up as
-explicit `[[test]]` targets of the packages that own them, rather than living
-under those packages' own `tests/` directories:
+## Why the files are here, not under `contracts/tipjar/tests/`
 
-- `pause_tests.rs`, `partial_pause_tests.rs` (+ `common/mod.rs`) — circuit-breaker
-  coverage for `contracts/tipjar`, declared via `[[test]]` entries in
-  `contracts/tipjar/Cargo.toml` (see `common/mod.rs` for why they live here
-  instead of `contracts/tipjar/tests/`).
+`pause_tests.rs` and `partial_pause_tests.rs` share a common harness in
+`tests/common/mod.rs`. Cargo compiles `mod common;` fresh into each
+`[[test]]` binary, so a single shared `tests/common/` directory is the
+simplest way to avoid duplicating the harness across two packages.
 
-`integration/` and `gas/` are their own things: `integration/` is a separate
-workspace member (`tests/integration/Cargo.toml`) exercising `contracts/tipjar`
-as an external dependency, and `gas/benchmarks.rs` is not currently wired into
-any package's `[[test]]`/`[[bench]]` list.
+Because Cargo's test auto-discovery only looks in a package's *own*
+`tests/` directory, these root-level files are **not** auto-discovered.
+They are wired in explicitly via `[[test]]` entries in
+`contracts/tipjar/Cargo.toml`:
 
-A prior version of this directory held 23 additional suites (plus a root
-`src/` "SDK" tree) with no `[package]` anywhere to compile them as — they were
-never part of any `cargo build`/`test`/`clippy` invocation and had been dead
-since the commit that added them (see #414). Of that tree:
-- the `src/config`/`src/simulation` SDK code was real and has been moved into
-  the (previously placeholder) `sdk` workspace member, where its tests now run
-  as `sdk/tests/simulation_tests.rs`.
-- the remaining 20 test files were written against a `TipJarContract`/
-  `TipJarError`/`Role`/`Subscription`/bridge/privacy/swap-shaped API that
-  matches `contracts/tipjar-legacy`, imported under the name `tipjar`
-  (`contracts/tipjar`'s real package name, but not its API shape) rather than
-  `tipjar_legacy`. Wiring them up as `tipjar-legacy` test targets is blocked on
-  a separate, pre-existing problem: `contracts/tipjar-legacy`'s library itself
-  does not currently compile (`cargo check -p tipjar-legacy` fails independent
-  of this tree, e.g. missing `TipJarError` variants and calls to the removed
-  `Env::invoker()` API in `lending`/`recovery`). Since fixing that is out of
-  scope here and the suites were never exercised in the first place, they were
-  deleted rather than left as dead weight that looks like real coverage.
+```toml
+[[test]]
+name = "pause_tests"
+path = "../../tests/pause_tests.rs"
+
+[[test]]
+name = "partial_pause_tests"
+path = "../../tests/partial_pause_tests.rs"
+```
+
+## How to verify the wiring
+
+These targets are real `[[test]]` targets of the `tipjar` package — they
+are **not** orphaned. You can confirm this directly:
+
+```bash
+# 1. They appear as `test` targets of the `tipjar` package in cargo metadata:
+cargo metadata --no-deps --format-version 1 \
+  | jq -r '.packages[] | select(.name=="tipjar") | .targets[] | select(.kind[0]=="test") | .name'
+# => pause_tests
+# => partial_pause_tests
+
+# 2. They enumerate their expected test functions:
+cargo test -p tipjar --test pause_tests --test partial_pause_tests -- --list
+
+# 3. They pass:
+cargo test -p tipjar --test pause_tests --test partial_pause_tests
+```
+
+> Note: `cargo test -p tipjar` (the full suite) additionally compiles the
+> in-tree unit tests under `contracts/tipjar/src/`, which embed a v2 upgrade
+> fixture WASM via `soroban_sdk::contractimport!`. That fixture must be built
+> first — see `docs/UPGRADE_GUIDE.md` and `.github/workflows/test.yml`.
+> The two integration targets above do **not** depend on that fixture and can
+> be run independently.
+
+## Other files in this directory
+
+The remaining `*.rs` files (`core_functionality.rs`, `edge_cases.rs`,
+`security_tests.rs`, etc.) are **not** wired to any package and are not
+compiled by `cargo test`. They are legacy/scratch integration tests kept
+for reference; see `tests/README.md` history and the audit notes in
+`docs/SECURITY.md` for the orphaned-test-tree context.

@@ -90,7 +90,6 @@ fn test_state_file_roundtrip() {
 
 #[test]
 fn test_time_advance() {
-    use soroban_sdk::testutils::Ledger as _;
     let sim = Simulator::new(false);
     let t0 = sim.env.ledger().timestamp();
     sim.advance_time(3600);

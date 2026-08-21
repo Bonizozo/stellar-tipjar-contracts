@@ -8,7 +8,6 @@ use tipjar_legacy::{TipJarContract, TipJarContractClient};
 struct Ctx {
     env: Env,
     client: TipJarContractClient<'static>,
-    admin: Address,
     token: Address,
 }
 
@@ -28,13 +27,9 @@ impl Ctx {
 
         client.init(&admin);
         client.add_token(&admin, &token);
+        client.set_min_tip(&admin, &1);
 
-        Ctx {
-            env,
-            client,
-            admin,
-            token,
-        }
+        Ctx { env, client, token }
     }
 
     fn mint(&self, to: &Address, amount: i128) {
