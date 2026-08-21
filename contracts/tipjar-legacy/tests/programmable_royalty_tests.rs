@@ -1,7 +1,5 @@
 #![cfg(test)]
 
-use soroban_sdk::{testutils::Address as _, Address, Env, Vec};
-
 // Import from the contract
 // Note: These tests would need the contract to be built as a Wasm library
 // For now, this is a template for integration tests
@@ -12,8 +10,8 @@ fn test_create_rule() {
     // Example structure:
     // let env = Env::default();
     // let contract = TipJarContractClient::new(&env, &contract_id);
-    // let creator = Address::random(&env);
-    // let owner = Address::random(&env);
+    // let creator = Address::generate(&env);
+    // let owner = Address::generate(&env);
     // let rule_id = create_rule(...);
     // assert!(rule_id > 0);
 }

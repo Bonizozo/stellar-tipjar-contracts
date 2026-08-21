@@ -6,12 +6,11 @@
 use std::time::Duration;
 
 use anyhow::Result;
-use reqwest::Client;
 use serde_json::Value;
 use sqlx::PgPool;
 use tracing::{error, info};
 
-use super::event_processor::{parse_tip_event, parse_withdrawal_event, send_webhook};
+use super::event_processor::send_webhook;
 use super::event_storage::store_event;
 use crate::event_listener::{EventListener, HorizonClient};
 use tokio::sync::broadcast;

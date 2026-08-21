@@ -1,5 +1,10 @@
-//! Reserved workspace member for a future Rust client.
+//! TipJar SDK for multi-network support.
 //!
-//! This crate intentionally contains no contract bindings. The supported
-//! client surface is generated TypeScript under `packages/contract-client`;
-//! see `docs/SDK_DRIFT_AUDIT.md` for the interface-drift audit.
+//! Provides network/contract-address configuration (`config`) and
+//! client-side transaction simulation/cost-preview helpers (`simulation`)
+//! for consumers integrating with TipJar off-chain.
+pub mod config;
+pub mod simulation;
+
+pub use config::{ContractAddresses, Network};
+pub use simulation::{CostCalculator, PreviewGenerator, TransactionSimulator};

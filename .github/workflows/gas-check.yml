@@ -16,9 +16,21 @@ jobs:
 
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32v1-none
 
       - name: Cache Rust dependencies
         uses: Swatinem/rust-cache@v2
+
+      - name: Build contract (WASM)
+        run: cargo build -p tipjar --target wasm32v1-none --release
+
+      - name: Build v2 upgrade test fixture (WASM)
+        # contracts/tipjar/src/test_upgrade.rs embeds this via
+        # soroban_sdk::contractimport! at compile time, so it must exist on
+        # disk before `cargo test -p tipjar` (which the gas profiler runs
+        # under the hood) can compile.
+        run: cargo build -p tipjar-v2-fixture --target wasm32v1-none --release
 
       # Run benchmarks on the current branch and save the report
       - name: Profile gas (current)

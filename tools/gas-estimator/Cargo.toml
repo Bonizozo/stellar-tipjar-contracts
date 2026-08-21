@@ -8,6 +8,10 @@ description = "Gas cost estimation tool for TipJar contract operations"
 name = "gas-estimator"
 path = "src/main.rs"
 
+[[bin]]
+name = "storage-rent-analysis"
+path = "src/storage_rent_analysis.rs"
+
 [lib]
 name = "gas_estimator"
 path = "src/lib.rs"

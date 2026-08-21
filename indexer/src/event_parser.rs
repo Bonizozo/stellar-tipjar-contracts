@@ -428,7 +428,7 @@ fn topic_value(event: &RawContractEvent, idx: usize, field: &str) -> Result<Stri
         .topic
         .get(idx)
         .and_then(value_to_string)
-        .ok_or_else(|| payload_err(topic_name(event), &format!("missing topic field {field}")))
+        .ok_or_else(|| payload_err(topic_name(event), format!("missing topic field {field}")))
 }
 
 fn topic_name(event: &RawContractEvent) -> String {
@@ -571,10 +571,10 @@ mod tests {
             }
             ScVal::I128(i) => {
                 let hi = i.hi as i128;
-                let lo = i.lo as u64 as i128; // avoid negative lo
-                                              // actually wait, lo is u64
-                                              // wait, Int128Parts hi is i64, lo is u64
-                                              // but let's just use string mapping
+                let lo = i.lo as i128; // avoid negative lo
+                                       // actually wait, lo is u64
+                                       // wait, Int128Parts hi is i64, lo is u64
+                                       // but let's just use string mapping
                 let num: i128 = (hi << 64) | lo;
                 json!({"i128": num.to_string()})
             }

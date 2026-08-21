@@ -1,6 +1,6 @@
 //! Peer-to-peer lending protocol for tip tokens with collateral and interest.
 
-use soroban_sdk::{contracttype, Address, Env};
+use soroban_sdk::{contracttype, Address};
 
 pub mod interest;
 pub mod loan;

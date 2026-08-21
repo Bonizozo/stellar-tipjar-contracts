@@ -3,7 +3,7 @@
 use soroban_sdk::{token, Address, Env};
 
 use super::interest::calculate_rate;
-use super::{Deposit, LendingError, LendingKey, Pool, PoolId};
+use super::{Deposit, LendingKey, Pool, PoolId};
 use crate::TipJarError;
 
 /// Create a new lending pool for a token.
@@ -38,17 +38,14 @@ pub fn get_pool(env: &Env, pool_id: PoolId) -> Result<Pool, TipJarError> {
     env.storage()
         .instance()
         .get(&(LendingKey::Pool(pool_id)))
-        .ok_or_else(|| {
-            env.panic_with_error(TipJarError::InvalidAmount);
-            TipJarError::InvalidAmount
-        })
+        .ok_or_else(|| env.panic_with_error(TipJarError::InvalidAmount))
 }
 
 /// Update pool state.
 fn set_pool(env: &Env, pool: &Pool) {
     env.storage()
         .instance()
-        .set(&(LendingKey::Pool(pool.id)), &pool);
+        .set(&(LendingKey::Pool(pool.id)), pool);
 }
 
 /// Lender deposits tokens into a pool.
@@ -154,8 +151,5 @@ pub fn get_deposit(env: &Env, lender: &Address, pool_id: PoolId) -> Result<Depos
     env.storage()
         .instance()
         .get(&(LendingKey::Deposit(lender.clone(), pool_id)))
-        .ok_or_else(|| {
-            env.panic_with_error(TipJarError::NothingToWithdraw);
-            TipJarError::NothingToWithdraw
-        })
+        .ok_or_else(|| env.panic_with_error(TipJarError::NothingToWithdraw))
 }

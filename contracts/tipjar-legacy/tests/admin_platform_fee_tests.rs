@@ -30,6 +30,7 @@ impl Ctx {
 
         client.init(&admin);
         client.add_token(&admin, &token);
+        client.set_min_tip(&admin, &1);
 
         Ctx {
             env,

@@ -1,25 +1,23 @@
 /// Gas benchmarks for TipJar contract functions.
 ///
 /// Soroban's test environment tracks CPU instructions and memory bytes consumed
-/// per invocation via `env.budget()`. These benchmarks capture those metrics
-/// for each major entry point so regressions are visible in CI output.
+/// per invocation via `env.cost_estimate().budget()`. These benchmarks capture
+/// those metrics for each major entry point so regressions are visible in CI
+/// output.
 ///
 /// Run with:
-///   cargo test -p tipjar -- bench --nocapture
+///   cargo test -p tipjar --test gas_benchmarks -- --nocapture
 #[cfg(test)]
 mod bench {
-    use soroban_sdk::{
-        testutils::{Address as _, Ledger as _},
-        token, Address, Env, Map, String,
-    };
-    use tipjar::{BatchTip, Role, TipJarContract, TipJarContractClient};
+    use soroban_sdk::{testutils::Address as _, token, Address, Env};
+    use tipjar::{TipJar, TipJarClient};
 
     // ── helpers ──────────────────────────────────────────────────────────────
 
     fn setup() -> (Env, Address, Address, Address) {
         let env = Env::default();
         env.mock_all_auths();
-        env.budget().reset_unlimited();
+        env.cost_estimate().budget().reset_unlimited();
 
         let token_admin = Address::generate(&env);
         let token_id = env
@@ -27,17 +25,17 @@ mod bench {
             .address();
 
         let admin = Address::generate(&env);
-        let contract_id = env.register(TipJarContract, ());
-        let client = TipJarContractClient::new(&env, &contract_id);
-        client.init(&admin);
-        client.add_token(&admin, &token_id);
+        let contract_id = env.register(TipJar, ());
+        let client = TipJarClient::new(&env, &contract_id);
+        client.init(&token_id, &admin, &100);
 
         (env, contract_id, token_id, admin)
     }
 
     fn print_budget(env: &Env, label: &str) {
-        let cpu = env.budget().cpu_instruction_count();
-        let mem = env.budget().memory_bytes_count();
+        let budget = env.cost_estimate().budget();
+        let cpu = budget.cpu_instruction_cost();
+        let mem = budget.memory_bytes_cost();
         println!("[BENCH] {label}: cpu={cpu} instructions, mem={mem} bytes");
     }
 
@@ -46,13 +44,13 @@ mod bench {
     #[test]
     fn bench_tip_single() {
         let (env, contract_id, token_id, _) = setup();
-        let client = TipJarContractClient::new(&env, &contract_id);
+        let client = TipJarClient::new(&env, &contract_id);
         let token_admin = token::StellarAssetClient::new(&env, &token_id);
         let sender = Address::generate(&env);
         let creator = Address::generate(&env);
         token_admin.mint(&sender, &1_000_000);
 
-        env.budget().reset_default();
+        env.cost_estimate().budget().reset_default();
         client.tip(&sender, &creator, &token_id, &1_000_000);
         print_budget(&env, "tip (first, cold storage)");
     }
@@ -60,7 +58,7 @@ mod bench {
     #[test]
     fn bench_tip_warm_storage() {
         let (env, contract_id, token_id, _) = setup();
-        let client = TipJarContractClient::new(&env, &contract_id);
+        let client = TipJarClient::new(&env, &contract_id);
         let token_admin = token::StellarAssetClient::new(&env, &token_id);
         let sender = Address::generate(&env);
         let creator = Address::generate(&env);
@@ -69,119 +67,69 @@ mod bench {
         // Warm up storage entries for this creator.
         client.tip(&sender, &creator, &token_id, &1_000);
 
-        env.budget().reset_default();
+        env.cost_estimate().budget().reset_default();
         client.tip(&sender, &creator, &token_id, &1_000);
         print_budget(&env, "tip (second, warm storage)");
     }
 
     #[test]
-    fn bench_tip_with_message() {
-        let (env, contract_id, token_id, _) = setup();
-        let client = TipJarContractClient::new(&env, &contract_id);
-        let token_admin = token::StellarAssetClient::new(&env, &token_id);
-        let sender = Address::generate(&env);
-        let creator = Address::generate(&env);
-        token_admin.mint(&sender, &1_000_000);
-
-        let message = String::from_str(&env, "Great content, keep it up!");
-        let metadata = Map::new(&env);
-
-        env.budget().reset_default();
-        client.tip_with_message(&sender, &creator, &token_id, &1_000_000, &message, &metadata);
-        print_budget(&env, "tip_with_message (cold storage)");
-    }
-
-    #[test]
     fn bench_withdraw() {
-        let (env, contract_id, token_id, admin) = setup();
-        let client = TipJarContractClient::new(&env, &contract_id);
+        let (env, contract_id, token_id, _) = setup();
+        let client = TipJarClient::new(&env, &contract_id);
         let token_admin = token::StellarAssetClient::new(&env, &token_id);
         let sender = Address::generate(&env);
         let creator = Address::generate(&env);
         token_admin.mint(&sender, &1_000_000);
 
         client.tip(&sender, &creator, &token_id, &1_000_000);
-        client.grant_role(&admin, &creator, &Role::Creator);
 
-        env.budget().reset_default();
-        client.withdraw(&creator, &token_id, &None);
+        env.cost_estimate().budget().reset_default();
+        client.withdraw(&creator, &creator, &token_id, &creator, &None);
         print_budget(&env, "withdraw");
-    }
-
-    #[test]
-    fn bench_tip_batch_10() {
-        let (env, contract_id, token_id, _) = setup();
-        let client = TipJarContractClient::new(&env, &contract_id);
-        let token_admin = token::StellarAssetClient::new(&env, &token_id);
-        let sender = Address::generate(&env);
-        let creator = Address::generate(&env);
-        token_admin.mint(&sender, &100_000);
-
-        let mut tips = soroban_sdk::Vec::new(&env);
-        for _ in 0..10 {
-            tips.push_back(BatchTip {
-                creator: creator.clone(),
-                token: token_id.clone(),
-                amount: 1_000,
-            });
-        }
-
-        env.budget().reset_default();
-        client.tip_batch(&sender, &tips);
-        print_budget(&env, "tip_batch (10 entries)");
-    }
-
-    #[test]
-    fn bench_tip_batch_50() {
-        let (env, contract_id, token_id, _) = setup();
-        let client = TipJarContractClient::new(&env, &contract_id);
-        let token_admin = token::StellarAssetClient::new(&env, &token_id);
-        let sender = Address::generate(&env);
-        let creator = Address::generate(&env);
-        token_admin.mint(&sender, &500_000);
-
-        let mut tips = soroban_sdk::Vec::new(&env);
-        for _ in 0..50 {
-            tips.push_back(BatchTip {
-                creator: creator.clone(),
-                token: token_id.clone(),
-                amount: 1_000,
-            });
-        }
-
-        env.budget().reset_default();
-        client.tip_batch(&sender, &tips);
-        print_budget(&env, "tip_batch (50 entries, max batch)");
     }
 
     #[test]
     fn bench_get_total_tips() {
         let (env, contract_id, token_id, _) = setup();
-        let client = TipJarContractClient::new(&env, &contract_id);
+        let client = TipJarClient::new(&env, &contract_id);
         let token_admin = token::StellarAssetClient::new(&env, &token_id);
         let sender = Address::generate(&env);
         let creator = Address::generate(&env);
         token_admin.mint(&sender, &1_000);
         client.tip(&sender, &creator, &token_id, &1_000);
 
-        env.budget().reset_default();
+        env.cost_estimate().budget().reset_default();
         client.get_total_tips(&creator, &token_id);
         print_budget(&env, "get_total_tips");
     }
 
     #[test]
-    fn bench_tip_locked() {
+    fn bench_get_balance() {
         let (env, contract_id, token_id, _) = setup();
-        let client = TipJarContractClient::new(&env, &contract_id);
+        let client = TipJarClient::new(&env, &contract_id);
         let token_admin = token::StellarAssetClient::new(&env, &token_id);
         let sender = Address::generate(&env);
         let creator = Address::generate(&env);
-        token_admin.mint(&sender, &1_000_000);
+        token_admin.mint(&sender, &1_000);
+        client.tip(&sender, &creator, &token_id, &1_000);
 
-        let unlock_ts = env.ledger().timestamp() + 1_000;
+        env.cost_estimate().budget().reset_default();
+        client.get_balance(&creator, &token_id);
+        print_budget(&env, "get_balance");
+    }
 
-        env.budget().reset_default();
-        client.tip_locked(&sender, &creator, &token_id, &1_000_000, &unlock_ts);
-        print_budget(&env, "tip_locked");
+    #[test]
+    fn bench_add_token() {
+        let (env, contract_id, _token_id, admin) = setup();
+        let client = TipJarClient::new(&env, &contract_id);
+
+        let second_token_admin = Address::generate(&env);
+        let second_token_id = env
+            .register_stellar_asset_contract_v2(second_token_admin)
+            .address();
+
+        env.cost_estimate().budget().reset_default();
+        client.add_token(&admin, &second_token_id);
+        print_budget(&env, "add_token");
     }
 }
