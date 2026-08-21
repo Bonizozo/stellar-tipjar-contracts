@@ -199,10 +199,7 @@ pub fn get_loan(env: &Env, loan_id: u64) -> Result<Loan, TipJarError> {
     env.storage()
         .instance()
         .get(&(LendingKey::Loan(loan_id)))
-        .ok_or_else(|| {
-            env.panic_with_error(TipJarError::InvalidAmount);
-            TipJarError::InvalidAmount
-        })
+        .ok_or_else(|| env.panic_with_error(TipJarError::InvalidAmount))
 }
 
 /// Get all loans for a borrower.

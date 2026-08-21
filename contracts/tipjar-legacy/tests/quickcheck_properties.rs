@@ -19,6 +19,7 @@ fn setup() -> (Env, TipJarContractClient<'static>, Address, Address) {
 
     client.init(&admin);
     client.add_token(&admin, &token);
+    client.set_min_tip(&admin, &1);
 
     (env, client, token, token_admin)
 }

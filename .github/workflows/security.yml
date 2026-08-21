@@ -20,6 +20,7 @@ jobs:
         uses: actions-rs/toolchain@v1
         with:
           toolchain: stable
+          target: wasm32v1-none
           components: clippy
           override: true
 
@@ -32,8 +33,14 @@ jobs:
       - name: Run cargo-audit
         run: cargo audit
 
+      - name: Build v2 upgrade test fixture (WASM)
+        # contracts/tipjar/src/test_upgrade.rs embeds this via
+        # soroban_sdk::contractimport! at compile time, so it must exist on
+        # disk before clippy or cargo test can compile contracts/tipjar.
+        run: cargo build -p tipjar-v2-fixture --target wasm32v1-none --release
+
       - name: Run Clippy (Static Analysis)
         run: cargo clippy --all-targets --all-features -- -D warnings
 
       - name: Run Security Test Suite
-        run: cargo test --features security-tests
+        run: cargo test -p tipjar-security

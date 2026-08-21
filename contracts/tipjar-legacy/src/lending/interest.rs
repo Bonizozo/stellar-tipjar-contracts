@@ -1,15 +1,13 @@
 //! Interest rate calculations for lending pools.
 
-use soroban_sdk::Env;
-
 const PRECISION: i128 = 1_000_000_000_000_000_000; // 1e18
 
 /// Calculate interest rate based on pool utilization.
 /// Returns rate as basis points (e.g., 500 = 5%).
 /// Rate = 5% + (utilization * 45%) = 5% to 50%
 pub fn calculate_rate(total_borrowed: i128, total_liquidity: i128) -> u32 {
-    if total_liquidity == 0 {
-        return 5000; // 50% if no liquidity
+    if total_borrowed == 0 && total_liquidity == 0 {
+        return 5000; // 5% base rate for an empty pool
     }
 
     let utilization = (total_borrowed * PRECISION) / (total_borrowed + total_liquidity);
@@ -64,8 +62,8 @@ mod tests {
 
     #[test]
     fn test_calculate_interest() {
-        // 1000 tokens at 10% annual for 1 year
-        let interest = calculate_interest(1000 * PRECISION, 10000, 31536000);
+        // 1000 tokens at 10% annual (1000 bps) for 1 year
+        let interest = calculate_interest(1000 * PRECISION, 1000, 31536000);
         assert_eq!(interest, 100 * PRECISION);
     }
 

@@ -396,7 +396,7 @@ impl EventListener {
             }
 
             pages_processed += 1;
-            if pages_processed % 10 == 0 {
+            if pages_processed.is_multiple_of(10) {
                 info!(
                     indexed_events = indexed,
                     failed_events = failed,
