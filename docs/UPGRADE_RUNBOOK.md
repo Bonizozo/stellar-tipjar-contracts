@@ -6,6 +6,21 @@ rollback stance. For the mechanism itself (storage layout, function
 semantics, backward-compatibility rules), see
 [`docs/UPGRADE_GUIDE.md`](./UPGRADE_GUIDE.md).
 
+> **Every command below targets a `contracts/tipjar` `<CONTRACT_ID>`, and
+> only that contract.** `contracts/tipjar-legacy` is a frozen reference
+> crate — not deployed anywhere, not the production TipJar — that happens to
+> carry its own `upgrade`/`get_version`/`migrate_state`/`migrate` functions,
+> including a same-named, same-signature `migrate(admin)` that is **not**
+> the timelocked flow documented here. If you land on this runbook after a
+> mistyped contract ID, a copy-pasted CLI command against the wrong deployed
+> address, or general confusion about which crate you're looking at:
+> `tipjar-legacy`'s upgrade-shaped functions are retired and must never be
+> invoked as a substitute for the `propose_upgrade`/`execute_upgrade`/
+> `cancel_upgrade`/`migrate` sequence below. If `stellar contract invoke`
+> against your `<CONTRACT_ID>` doesn't emit the events described in §3, stop
+> and re-verify the contract ID before proceeding — do not assume a
+> different-shaped response just means a different function signature.
+
 Two separate tools are involved and it's easy to conflate them:
 
 - **`stellar` CLI** — the only thing that actually calls the contract
