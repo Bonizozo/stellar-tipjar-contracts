@@ -16,6 +16,17 @@ bash scripts/generate-bindings.sh [network]   # defaults to "testnet"
 This reads the contract ID for `[network]` from `deployment/config.json` and
 overwrites `src/generated.ts`.
 
+For a local contract build, generate from the exact WASM artifact instead:
+
+```bash
+cargo build -p tipjar --target wasm32v1-none --release
+TIPJAR_WASM=target/wasm32v1-none/release/tipjar.wasm \
+  bash scripts/generate-bindings.sh
+```
+
+CI compares the generated `Client` declaration against this vendored output
+with `scripts/check-contract-client-drift.sh`.
+
 ## Building
 
 ```bash

@@ -1,4 +1,5 @@
-//! Placeholder library for the `tipjar-sdk` workspace member.
-
-// This crate currently exists only to satisfy the workspace manifest.
-// It is not used in the Soroban contract compilation path.
+//! Reserved workspace member for a future Rust client.
+//!
+//! This crate intentionally contains no contract bindings. The supported
+//! client surface is generated TypeScript under `packages/contract-client`;
+//! see `docs/SDK_DRIFT_AUDIT.md` for the interface-drift audit.
