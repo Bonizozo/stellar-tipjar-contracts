@@ -20,17 +20,14 @@ const client = new Client({
 });
 ```
 
-The SDK in `sdk/typescript/` also provides a lower-level wrapper around the contract.
+> **Note:** the hand-written client under `sdk/typescript/` is **not**
+> spec-generated and has drifted from the current contract interface. Prefer
+> `@tipjar/contract-client` above for new integrations. See
+> [`docs/SDK_DRIFT_AUDIT.md`](./SDK_DRIFT_AUDIT.md) for details.
+
+Send a tip with the generated client (simulate, then sign and send):
 
 ```typescript
-import { TipJarContract } from './sdk/typescript/src/TipJarContract';
-
-const client = new TipJarContract({
-  contractId: 'CABC...',
-  networkPassphrase: Networks.TESTNET,
-  rpcUrl: 'https://soroban-testnet.stellar.org',
-});
-
 // Send a tip
 await client.tip({
   sender: keypair.publicKey(),

@@ -43,6 +43,12 @@ jobs:
       - name: Build WASM
         run: cargo build -p tipjar --target wasm32v1-none --release
 
+      - name: Install Stellar CLI
+        run: cargo install --locked stellar-cli
+
+      - name: Verify generated contract client is current
+        run: scripts/check-contract-client-drift.sh target/wasm32v1-none/release/tipjar.wasm
+
       - name: Generate coverage
         run: |
           cargo install cargo-tarpaulin --locked

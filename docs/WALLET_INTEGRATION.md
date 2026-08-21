@@ -10,6 +10,13 @@ The TipJar contract requires transaction signing for all state-changing calls (`
 
 ---
 
+> **Note:** examples below use the hand-written client under `sdk/typescript/`,
+> which is **not** spec-generated and has drifted from the current contract
+> interface. For new integrations prefer the generated
+> `@tipjar/contract-client` package; see
+> [`SDK_DRIFT_AUDIT.md`](./SDK_DRIFT_AUDIT.md). The signing patterns shown here
+> (Keypair, Freighter, WalletConnect) apply regardless of which client you use.
+
 ## Keypair (Server / CLI)
 
 ```typescript
@@ -56,6 +63,7 @@ const xdr = await sdk.buildTipTransaction({
   amount: 10_000_000n,
   tipper: publicKey,
 });
+
 
 const signedXdr = await signTransaction(xdr, { network: 'TESTNET' });
 const result = await sdk.submitSignedTransaction(signedXdr);

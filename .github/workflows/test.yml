@@ -45,6 +45,12 @@ jobs:
       - name: Run integration test suite
         run: cargo test -p tipjar-integration-tests
 
+      - name: Install Stellar CLI
+        run: cargo install --locked stellar-cli
+
+      - name: Verify generated contract client is current
+        run: scripts/check-contract-client-drift.sh target/wasm32v1-none/release/tipjar.wasm
+
       - name: Install cargo-tarpaulin
         run: cargo install cargo-tarpaulin --locked
 

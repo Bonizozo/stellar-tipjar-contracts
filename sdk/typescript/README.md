@@ -2,6 +2,23 @@
 
 TypeScript SDK for the [Stellar tipjar smart contract](../../contracts/tipjar).
 
+> **⚠️ Interface drift warning — do not use for new integrations.**
+>
+> This client is **hand-written**, not generated from the contract's exported
+> spec, and it has already drifted from the current `contracts/tipjar` source:
+> `sendTip` calls `tip(sender, creator, amount)` but the contract's `tip` now
+> requires a `token` argument; `withdraw` uses an older single-argument payout
+> shape. Nothing in CI catches this drift.
+>
+> **New integrations should use the spec-generated client at
+> [`packages/contract-client`](../../packages/contract-client)**, which is
+> produced by `stellar contract bindings typescript` and is compared against
+> the contract WASM in CI via `scripts/check-contract-client-drift.sh`.
+>
+> See [`docs/SDK_DRIFT_AUDIT.md`](../../docs/SDK_DRIFT_AUDIT.md) for the full
+> audit and the rationale for not maintaining a second hand-written binding
+> layer.
+
 ## Installation
 
 ```bash
