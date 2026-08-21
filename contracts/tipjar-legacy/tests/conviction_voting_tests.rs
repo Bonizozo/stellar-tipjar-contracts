@@ -36,7 +36,7 @@ fn test_conviction_vote_recording() {
     // conviction::init_conviction_voting(&env);
 
     // Test recording a conviction vote
-    // let voter = Address::random(&env);
+    // let voter = Address::generate(&env);
     // let proposal_id = 1u64;
     // let base_voting_power = 1_000_000_000i128; // 1000 tokens
 
@@ -57,7 +57,7 @@ fn test_conviction_vote_change_with_decay() {
     // conviction::init_conviction_voting(&env);
 
     // Test changing a conviction vote with decay penalty
-    // let voter = Address::random(&env);
+    // let voter = Address::generate(&env);
     // let proposal_id = 1u64;
     // let initial_power = 1_000_000_000i128;
 
@@ -85,7 +85,7 @@ fn test_minimum_conviction_threshold() {
     // conviction::init_conviction_voting(&env);
 
     // Test that voting power below threshold is rejected
-    // let voter = Address::random(&env);
+    // let voter = Address::generate(&env);
     // let proposal_id = 1u64;
     // let low_power = 10_000i128; // Below default threshold
 
@@ -101,7 +101,7 @@ fn test_voter_total_conviction() {
     // conviction::init_conviction_voting(&env);
 
     // Test tracking total conviction across multiple proposals
-    // let voter = Address::random(&env);
+    // let voter = Address::generate(&env);
     // let power_per_proposal = 1_000_000_000i128;
 
     // Vote on multiple proposals
@@ -122,7 +122,7 @@ fn test_proposal_threshold_with_conviction() {
     // conviction::init_conviction_voting(&env);
 
     // Test that proposal threshold is reduced based on conviction
-    // let voter = Address::random(&env);
+    // let voter = Address::generate(&env);
 
     // No conviction yet
     // let threshold_no_conviction = conviction::get_proposal_threshold_with_conviction(&env, &voter);
@@ -146,7 +146,7 @@ fn test_conviction_history_tracking() {
     // conviction::init_conviction_voting(&env);
 
     // Test that conviction vote history is tracked
-    // let voter = Address::random(&env);
+    // let voter = Address::generate(&env);
     // let proposal_id = 1u64;
     // let base_voting_power = 1_000_000_000i128;
 
@@ -171,7 +171,7 @@ fn test_effective_voting_power_with_multiplier() {
     // conviction::init_conviction_voting(&env);
 
     // Test that effective voting power includes conviction multiplier
-    // let voter = Address::random(&env);
+    // let voter = Address::generate(&env);
     // let proposal_id = 1u64;
     // let base_voting_power = 1_000_000_000i128;
 
@@ -192,7 +192,7 @@ fn test_accumulated_conviction_over_time() {
     // conviction::init_conviction_voting(&env);
 
     // Test that conviction accumulates over time
-    // let voter = Address::random(&env);
+    // let voter = Address::generate(&env);
     // let proposal_id = 1u64;
     // let base_voting_power = 1_000_000_000i128;
 

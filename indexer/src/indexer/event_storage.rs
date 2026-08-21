@@ -11,6 +11,7 @@ use sqlx::{PgPool, Row};
 ///
 /// Uses `ON CONFLICT (tx_hash) DO NOTHING` so replaying the same event is
 /// idempotent.  Relies on the unique index on `tx_hash`.
+#[allow(clippy::too_many_arguments)]
 pub async fn store_event(
     pool: &PgPool,
     event_type: &str,

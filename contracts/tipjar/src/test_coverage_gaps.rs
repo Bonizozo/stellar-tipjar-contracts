@@ -352,7 +352,6 @@ struct LegacyCtx {
     env: Env,
     contract_id: Address,
     token: Address,
-    admin: Address,
 }
 
 impl LegacyCtx {
@@ -374,7 +373,6 @@ impl LegacyCtx {
             env,
             contract_id,
             token,
-            admin,
         }
     }
 

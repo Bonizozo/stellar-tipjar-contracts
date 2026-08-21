@@ -1487,6 +1487,14 @@ pub enum TipJarError {
     NoFeesToWithdraw = 291,
     /// Tip amount is below the configured minimum.
     BelowMinimumTip = 292,
+    /// A balance or total accumulator would overflow i128 on add.
+    BalanceOverflow = 293,
+    /// Loan is not in the `Active` status required for this operation.
+    LoanNotActive = 294,
+    /// Loan's collateral ratio does not meet the liquidation threshold.
+    CannotLiquidate = 295,
+    /// Posted collateral does not meet the minimum required ratio.
+    InsufficientCollateral = 296,
 }
 
 impl From<CoreError> for TipJarError {
@@ -12574,34 +12582,26 @@ impl TipJarContract {
 
     /// Add a trusted guardian for account recovery.
     pub fn recovery_add_guardian(env: Env, creator: Address, guardian: Address, weight: u32) {
-        // Verify caller is creator
-        if env.invoker() != creator {
-            panic!("Unauthorized");
-        }
+        creator.require_auth();
         recovery::add_guardian(&env, &creator, &guardian, weight);
     }
 
     /// Initiate revocation of a guardian (revocation applies after delay).
     pub fn recovery_revoke_guardian(env: Env, creator: Address, guardian: Address) {
-        // Verify caller is creator
-        if env.invoker() != creator {
-            panic!("Unauthorized");
-        }
+        creator.require_auth();
         recovery::revoke_guardian(&env, &creator, &guardian);
     }
 
     /// Create a recovery request (initiated by creator to recover access).
     pub fn recovery_create_request(env: Env, creator: Address, new_owner: Address) {
-        // Verify caller is creator
-        if env.invoker() != creator {
-            panic!("Unauthorized");
-        }
+        creator.require_auth();
         recovery::create_recovery_request(&env, &creator, &new_owner);
     }
 
     /// Guardian approves a recovery request.
-    pub fn recovery_approve(env: Env, request_id: u64) {
-        recovery::approve_recovery(&env, request_id, &env.invoker());
+    pub fn recovery_approve(env: Env, request_id: u64, guardian: Address) {
+        guardian.require_auth();
+        recovery::approve_recovery(&env, request_id, &guardian);
     }
 
     /// Execute a recovery request after timelock expires.

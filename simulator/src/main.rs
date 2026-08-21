@@ -44,7 +44,7 @@ fn main() -> Result<()> {
 
     match cli.cmd {
         Cmd::Run { tips, amount, save } => {
-            let mut sim = Simulator::new(cli.verbose);
+            let sim = Simulator::new(cli.verbose);
 
             let sender = sim.new_address();
             let creator = sim.new_address();

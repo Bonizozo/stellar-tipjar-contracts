@@ -420,8 +420,7 @@ pub fn append_to_history(history_path: &str, report: &EstimationReport) -> std::
             suggestions: report.suggestions.clone(),
         },
     };
-    let line = serde_json::to_string(&entry)
-        .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))?;
+    let line = serde_json::to_string(&entry).map_err(|e| std::io::Error::other(e.to_string()))?;
     let mut file = std::fs::OpenOptions::new()
         .create(true)
         .append(true)

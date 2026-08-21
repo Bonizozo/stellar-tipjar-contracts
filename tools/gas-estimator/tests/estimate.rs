@@ -1,7 +1,7 @@
 //! Gas estimation integration tests for TipJar contract operations.
 //!
 //! Each measurement function:
-//!   1. Calls `setup()` with `env.budget().reset_unlimited()` so setup overhead
+//!   1. Calls `setup()` with `env.cost_estimate().budget().reset_unlimited()` so setup overhead
 //!      is excluded from results.
 //!   2. Resets the budget to default immediately before the measured call.
 //!   3. Reads `cpu_instruction_cost()` and `memory_bytes_cost()` after the call.
@@ -36,7 +36,7 @@ use tipjar_legacy::{TipJarContract, TipJarContractClient, TipRecipient};
 fn setup() -> (Env, Address, Address, Address) {
     let env = Env::default();
     env.mock_all_auths_allowing_non_root_auth();
-    env.budget().reset_unlimited();
+    env.cost_estimate().budget().reset_unlimited();
 
     let token_admin = Address::generate(&env);
     let token_id = env
@@ -48,6 +48,7 @@ fn setup() -> (Env, Address, Address, Address) {
     let client = TipJarContractClient::new(&env, &contract_id);
     client.init(&admin);
     client.add_token(&admin, &token_id);
+    client.set_min_tip(&admin, &1);
 
     (env, contract_id, token_id, admin)
 }
@@ -66,10 +67,10 @@ fn measure_tip_cold() -> GasEstimate {
     let creator = Address::generate(&env);
     mint(&env, &token_id, &sender, 1_000_000);
 
-    env.budget().reset_default();
+    env.cost_estimate().budget().reset_default();
     client.tip(&sender, &creator, &token_id, &1_000_000);
-    let cpu = env.budget().cpu_instruction_cost();
-    let mem = env.budget().memory_bytes_cost();
+    let cpu = env.cost_estimate().budget().cpu_instruction_cost();
+    let mem = env.cost_estimate().budget().memory_bytes_cost();
     println!("[GAS] tip (cold)  cpu={cpu}  mem={mem}");
     make_estimate("tip", "cold", cpu, mem)
 }
@@ -83,10 +84,10 @@ fn measure_tip_warm() -> GasEstimate {
     mint(&env, &token_id, &sender, 2_000_000);
     client.tip(&sender, &creator, &token_id, &1_000); // warm-up, not measured
 
-    env.budget().reset_default();
+    env.cost_estimate().budget().reset_default();
     client.tip(&sender, &creator, &token_id, &1_000);
-    let cpu = env.budget().cpu_instruction_cost();
-    let mem = env.budget().memory_bytes_cost();
+    let cpu = env.cost_estimate().budget().cpu_instruction_cost();
+    let mem = env.cost_estimate().budget().memory_bytes_cost();
     println!("[GAS] tip (warm)  cpu={cpu}  mem={mem}");
     make_estimate("tip", "warm", cpu, mem)
 }
@@ -100,10 +101,10 @@ fn measure_tip_with_fee_low() -> GasEstimate {
     let creator = Address::generate(&env);
     mint(&env, &token_id, &sender, 1_000_000);
 
-    env.budget().reset_default();
+    env.cost_estimate().budget().reset_default();
     client.tip_with_fee(&sender, &creator, &token_id, &1_000_000, &0u32); // 0 = Low
-    let cpu = env.budget().cpu_instruction_cost();
-    let mem = env.budget().memory_bytes_cost();
+    let cpu = env.cost_estimate().budget().cpu_instruction_cost();
+    let mem = env.cost_estimate().budget().memory_bytes_cost();
     println!("[GAS] tip_with_fee (low-congestion)  cpu={cpu}  mem={mem}");
     make_estimate("tip_with_fee", "low-congestion", cpu, mem)
 }
@@ -115,10 +116,10 @@ fn measure_tip_with_fee_normal() -> GasEstimate {
     let creator = Address::generate(&env);
     mint(&env, &token_id, &sender, 1_000_000);
 
-    env.budget().reset_default();
+    env.cost_estimate().budget().reset_default();
     client.tip_with_fee(&sender, &creator, &token_id, &1_000_000, &1u32); // 1 = Normal
-    let cpu = env.budget().cpu_instruction_cost();
-    let mem = env.budget().memory_bytes_cost();
+    let cpu = env.cost_estimate().budget().cpu_instruction_cost();
+    let mem = env.cost_estimate().budget().memory_bytes_cost();
     println!("[GAS] tip_with_fee (normal-congestion)  cpu={cpu}  mem={mem}");
     make_estimate("tip_with_fee", "normal-congestion", cpu, mem)
 }
@@ -130,10 +131,10 @@ fn measure_tip_with_fee_high() -> GasEstimate {
     let creator = Address::generate(&env);
     mint(&env, &token_id, &sender, 1_000_000);
 
-    env.budget().reset_default();
+    env.cost_estimate().budget().reset_default();
     client.tip_with_fee(&sender, &creator, &token_id, &1_000_000, &2u32); // 2 = High
-    let cpu = env.budget().cpu_instruction_cost();
-    let mem = env.budget().memory_bytes_cost();
+    let cpu = env.cost_estimate().budget().cpu_instruction_cost();
+    let mem = env.cost_estimate().budget().memory_bytes_cost();
     println!("[GAS] tip_with_fee (high-congestion)  cpu={cpu}  mem={mem}");
     make_estimate("tip_with_fee", "high-congestion", cpu, mem)
 }
@@ -148,10 +149,10 @@ fn measure_withdraw_warm() -> GasEstimate {
     mint(&env, &token_id, &sender, 1_000_000);
     client.tip(&sender, &creator, &token_id, &1_000_000); // pre-state, not measured
 
-    env.budget().reset_default();
+    env.cost_estimate().budget().reset_default();
     client.withdraw(&creator, &token_id, &None);
-    let cpu = env.budget().cpu_instruction_cost();
-    let mem = env.budget().memory_bytes_cost();
+    let cpu = env.cost_estimate().budget().cpu_instruction_cost();
+    let mem = env.cost_estimate().budget().memory_bytes_cost();
     println!("[GAS] withdraw (warm)  cpu={cpu}  mem={mem}");
     make_estimate("withdraw", "warm", cpu, mem)
 }
@@ -164,10 +165,10 @@ fn measure_get_withdrawable_balance_warm() -> GasEstimate {
     mint(&env, &token_id, &sender, 1_000);
     client.tip(&sender, &creator, &token_id, &1_000);
 
-    env.budget().reset_default();
+    env.cost_estimate().budget().reset_default();
     client.get_withdrawable_balance(&creator, &token_id);
-    let cpu = env.budget().cpu_instruction_cost();
-    let mem = env.budget().memory_bytes_cost();
+    let cpu = env.cost_estimate().budget().cpu_instruction_cost();
+    let mem = env.cost_estimate().budget().memory_bytes_cost();
     println!("[GAS] get_withdrawable_balance (warm)  cpu={cpu}  mem={mem}");
     make_estimate("get_withdrawable_balance", "warm", cpu, mem)
 }
@@ -180,10 +181,10 @@ fn measure_get_total_tips_warm() -> GasEstimate {
     mint(&env, &token_id, &sender, 1_000);
     client.tip(&sender, &creator, &token_id, &1_000);
 
-    env.budget().reset_default();
+    env.cost_estimate().budget().reset_default();
     client.get_total_tips(&creator, &token_id);
-    let cpu = env.budget().cpu_instruction_cost();
-    let mem = env.budget().memory_bytes_cost();
+    let cpu = env.cost_estimate().budget().cpu_instruction_cost();
+    let mem = env.cost_estimate().budget().memory_bytes_cost();
     println!("[GAS] get_total_tips (warm)  cpu={cpu}  mem={mem}");
     make_estimate("get_total_tips", "warm", cpu, mem)
 }
@@ -192,7 +193,7 @@ fn measure_get_total_tips_warm() -> GasEstimate {
 
 fn build_recipients(env: &Env, count: u32) -> SorobanVec<TipRecipient> {
     assert!(
-        count >= 2 && count <= 10,
+        (2..=10).contains(&count),
         "tip_split requires 2–10 recipients"
     );
     let mut recipients = SorobanVec::new(env);
@@ -219,10 +220,10 @@ fn measure_tip_split_3() -> GasEstimate {
     mint(&env, &token_id, &sender, 1_000_000);
     let recipients = build_recipients(&env, 3);
 
-    env.budget().reset_default();
+    env.cost_estimate().budget().reset_default();
     client.tip_split(&sender, &token_id, &recipients, &1_000_000);
-    let cpu = env.budget().cpu_instruction_cost();
-    let mem = env.budget().memory_bytes_cost();
+    let cpu = env.cost_estimate().budget().cpu_instruction_cost();
+    let mem = env.cost_estimate().budget().memory_bytes_cost();
     println!("[GAS] tip_split (3-recipients)  cpu={cpu}  mem={mem}");
     make_estimate("tip_split", "3-recipients", cpu, mem)
 }
@@ -234,10 +235,10 @@ fn measure_tip_split_10() -> GasEstimate {
     mint(&env, &token_id, &sender, 1_000_000);
     let recipients = build_recipients(&env, 10);
 
-    env.budget().reset_default();
+    env.cost_estimate().budget().reset_default();
     client.tip_split(&sender, &token_id, &recipients, &1_000_000);
-    let cpu = env.budget().cpu_instruction_cost();
-    let mem = env.budget().memory_bytes_cost();
+    let cpu = env.cost_estimate().budget().cpu_instruction_cost();
+    let mem = env.cost_estimate().budget().memory_bytes_cost();
     println!("[GAS] tip_split (10-recipients)  cpu={cpu}  mem={mem}");
     make_estimate("tip_split", "10-recipients", cpu, mem)
 }
@@ -252,14 +253,14 @@ fn measure_get_leaderboard_1() -> GasEstimate {
     let creator = Address::generate(&env);
     client.tip(&sender, &creator, &token_id, &1_000);
 
-    env.budget().reset_default();
+    env.cost_estimate().budget().reset_default();
     client.get_leaderboard(
         &tipjar_legacy::TimePeriod::AllTime,
         &tipjar_legacy::ParticipantKind::Creator,
         &10u32,
     );
-    let cpu = env.budget().cpu_instruction_cost();
-    let mem = env.budget().memory_bytes_cost();
+    let cpu = env.cost_estimate().budget().cpu_instruction_cost();
+    let mem = env.cost_estimate().budget().memory_bytes_cost();
     println!("[GAS] get_leaderboard (1-creator)  cpu={cpu}  mem={mem}");
     make_estimate("get_leaderboard", "1-creator", cpu, mem)
 }
@@ -274,14 +275,14 @@ fn measure_get_leaderboard_10() -> GasEstimate {
         client.tip(&sender, &creator, &token_id, &1_000);
     }
 
-    env.budget().reset_default();
+    env.cost_estimate().budget().reset_default();
     client.get_leaderboard(
         &tipjar_legacy::TimePeriod::AllTime,
         &tipjar_legacy::ParticipantKind::Creator,
         &10u32,
     );
-    let cpu = env.budget().cpu_instruction_cost();
-    let mem = env.budget().memory_bytes_cost();
+    let cpu = env.cost_estimate().budget().cpu_instruction_cost();
+    let mem = env.cost_estimate().budget().memory_bytes_cost();
     println!("[GAS] get_leaderboard (10-creators)  cpu={cpu}  mem={mem}");
     make_estimate("get_leaderboard", "10-creators", cpu, mem)
 }
@@ -294,10 +295,10 @@ fn measure_create_subscription_cold() -> GasEstimate {
     let subscriber = Address::generate(&env);
     let creator = Address::generate(&env);
 
-    env.budget().reset_default();
+    env.cost_estimate().budget().reset_default();
     client.create_subscription(&subscriber, &creator, &token_id, &1_000, &86_400u64);
-    let cpu = env.budget().cpu_instruction_cost();
-    let mem = env.budget().memory_bytes_cost();
+    let cpu = env.cost_estimate().budget().cpu_instruction_cost();
+    let mem = env.cost_estimate().budget().memory_bytes_cost();
     println!("[GAS] create_subscription (cold)  cpu={cpu}  mem={mem}");
     make_estimate("create_subscription", "cold", cpu, mem)
 }
@@ -311,10 +312,10 @@ fn measure_execute_subscription_payment_warm() -> GasEstimate {
     client.create_subscription(&subscriber, &creator, &token_id, &1_000, &86_400u64);
     env.ledger().with_mut(|l| l.timestamp += 86_400);
 
-    env.budget().reset_default();
+    env.cost_estimate().budget().reset_default();
     client.execute_subscription_payment(&subscriber, &creator);
-    let cpu = env.budget().cpu_instruction_cost();
-    let mem = env.budget().memory_bytes_cost();
+    let cpu = env.cost_estimate().budget().cpu_instruction_cost();
+    let mem = env.cost_estimate().budget().memory_bytes_cost();
     println!("[GAS] execute_subscription_payment (warm)  cpu={cpu}  mem={mem}");
     make_estimate("execute_subscription_payment", "warm", cpu, mem)
 }
@@ -334,10 +335,10 @@ fn measure_execute_conditional_tip_cold() -> GasEstimate {
     let mut conditions = SorobanVec::new(&env);
     conditions.push_back(Condition::Always);
 
-    env.budget().reset_default();
+    env.cost_estimate().budget().reset_default();
     client.execute_conditional_tip(&sender, &creator, &token_id, &1_000_000, &conditions);
-    let cpu = env.budget().cpu_instruction_cost();
-    let mem = env.budget().memory_bytes_cost();
+    let cpu = env.cost_estimate().budget().cpu_instruction_cost();
+    let mem = env.cost_estimate().budget().memory_bytes_cost();
     println!("[GAS] execute_conditional_tip (cold)  cpu={cpu}  mem={mem}");
     make_estimate("execute_conditional_tip", "cold", cpu, mem)
 }
@@ -348,10 +349,10 @@ fn measure_is_paused() -> GasEstimate {
     let (env, contract_id, _, _) = setup();
     let client = TipJarContractClient::new(&env, &contract_id);
 
-    env.budget().reset_default();
+    env.cost_estimate().budget().reset_default();
     client.is_paused();
-    let cpu = env.budget().cpu_instruction_cost();
-    let mem = env.budget().memory_bytes_cost();
+    let cpu = env.cost_estimate().budget().cpu_instruction_cost();
+    let mem = env.cost_estimate().budget().memory_bytes_cost();
     println!("[GAS] is_paused  cpu={cpu}  mem={mem}");
     make_estimate("is_paused", "warm", cpu, mem)
 }
@@ -360,10 +361,10 @@ fn measure_get_current_fee_bps() -> GasEstimate {
     let (env, contract_id, _, _) = setup();
     let client = TipJarContractClient::new(&env, &contract_id);
 
-    env.budget().reset_default();
+    env.cost_estimate().budget().reset_default();
     client.get_current_fee_bps();
-    let cpu = env.budget().cpu_instruction_cost();
-    let mem = env.budget().memory_bytes_cost();
+    let cpu = env.cost_estimate().budget().cpu_instruction_cost();
+    let mem = env.cost_estimate().budget().memory_bytes_cost();
     println!("[GAS] get_current_fee_bps  cpu={cpu}  mem={mem}");
     make_estimate("get_current_fee_bps", "warm", cpu, mem)
 }
@@ -372,10 +373,10 @@ fn measure_get_version() -> GasEstimate {
     let (env, contract_id, _, _) = setup();
     let client = TipJarContractClient::new(&env, &contract_id);
 
-    env.budget().reset_default();
+    env.cost_estimate().budget().reset_default();
     client.get_version();
-    let cpu = env.budget().cpu_instruction_cost();
-    let mem = env.budget().memory_bytes_cost();
+    let cpu = env.cost_estimate().budget().cpu_instruction_cost();
+    let mem = env.cost_estimate().budget().memory_bytes_cost();
     println!("[GAS] get_version  cpu={cpu}  mem={mem}");
     make_estimate("get_version", "warm", cpu, mem)
 }

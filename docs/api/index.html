@@ -29,7 +29,11 @@
 <nav><ul><li><a href="#fn-init">init</a></li>
 <li><a href="#fn-tip">tip</a></li>
 <li><a href="#fn-get_total_tips">get_total_tips</a></li>
+<li><a href="#fn-get_balance">get_balance</a></li>
+<li><a href="#fn-get_tokens">get_tokens</a></li>
 <li><a href="#fn-withdraw">withdraw</a></li>
+<li><a href="#fn-add_token">add_token</a></li>
+<li><a href="#fn-remove_token">remove_token</a></li>
 <li><a href="#fn-set_payout_address">set_payout_address</a></li>
 <li><a href="#fn-cancel_payout_address">cancel_payout_address</a></li>
 <li><a href="#fn-authorize_operator">authorize_operator</a></li>
@@ -62,6 +66,9 @@
 <li><a href="#fn-get_fee_collector">get_fee_collector</a></li>
 <li><a href="#fn-get_fee_balance">get_fee_balance</a></li>
 <li><a href="#fn-preview_fee">preview_fee</a></li>
+<li><a href="#fn-tip_legacy">tip_legacy</a></li>
+<li><a href="#fn-get_total_tips_legacy">get_total_tips_legacy</a></li>
+<li><a href="#fn-withdraw_legacy">withdraw_legacy</a></li>
 </ul></nav>
 <section id="errors"><h2>Error Codes</h2><table><thead><tr><th>Code</th><th>Name</th></tr></thead><tbody><tr><td><code>1</code></td><td><code>AlreadyInitialized</code></td></tr>
 <tr><td><code>2</code></td><td><code>NotInitialized</code></td></tr>
@@ -84,11 +91,14 @@
 <tr><td><code>19</code></td><td><code>InvalidDuration</code></td></tr>
 <tr><td><code>20</code></td><td><code>InvalidFee</code></td></tr>
 <tr><td><code>21</code></td><td><code>FeeOverflow</code></td></tr>
-<tr><td><code>22</code></td><td><code>NotFeeCollector</code></td></tr></tbody></table></section>
+<tr><td><code>22</code></td><td><code>NotFeeCollector</code></td></tr>
+<tr><td><code>23</code></td><td><code>TokenNotAllowed</code></td></tr>
+<tr><td><code>24</code></td><td><code>TokenAlreadyExists</code></td></tr>
+<tr><td><code>25</code></td><td><code>MaxTokensReached</code></td></tr></tbody></table></section>
 <h2>Functions</h2>
 <section class="fn-section" id="fn-init">
 <h3>init</h3>
-<p>One-time configuration of the token this jar accepts, the upgrade<br>admin, and the ledger delay `execute_upgrade` must wait out after a<br>`propose_upgrade`. Errors if called twice.</p>
+<p>One-time configuration: the token this jar accepts (seeded as the<br>first entry of the multi-token allowlist), the admin, and the ledger<br>delay `execute_upgrade` must wait out after a `propose_upgrade`.<br>Errors if called twice.</p>
 <pre><code>pub fn init(token: Address, admin: Address, upgrade_timelock_ledgers: u32) -&gt; ()</code></pre>
 <h4>Parameters</h4><table><thead><tr><th>Name</th><th>Type</th></tr></thead><tbody><tr><td><code>token</code></td><td><code>Address</code></td></tr>
 <tr><td><code>admin</code></td><td><code>Address</code></td></tr>
@@ -99,35 +109,77 @@
 </section>
 <section class="fn-section" id="fn-tip">
 <h3>tip</h3>
-<p>Escrows `amount` of the configured token from `sender` for `creator`,<br>less the protocol fee (if one is configured). The creator's balance is<br>credited with `amount - fee`; the fee itself accrues to `FeeBalance`<br>for later withdrawal by the fee collector. `fee + net == amount` holds<br>for every input.</p>
-<pre><code>pub fn tip(sender: Address, creator: Address, amount: i128) -&gt; ()</code></pre>
+<p>Escrows `amount` of the configured token from `sender` for `creator`,<br>less the protocol fee (if one is configured). The creator's balance is<br>credited with `amount - fee`; the fee itself accrues to<br>`FeeBalance(token)` for later withdrawal by the fee collector.<br>`fee + net == amount` holds for every input.</p>
+<pre><code>pub fn tip(sender: Address, creator: Address, token: Address, amount: i128) -&gt; ()</code></pre>
 <h4>Parameters</h4><table><thead><tr><th>Name</th><th>Type</th></tr></thead><tbody><tr><td><code>sender</code></td><td><code>Address</code></td></tr>
 <tr><td><code>creator</code></td><td><code>Address</code></td></tr>
+<tr><td><code>token</code></td><td><code>Address</code></td></tr>
 <tr><td><code>amount</code></td><td><code>i128</code></td></tr></tbody></table>
 
 <h4>Example</h4>
-<pre><code>client.tip(&amp;sender, &amp;creator, &amp;amount);</code></pre>
+<pre><code>client.tip(&amp;sender, &amp;creator, &amp;token, &amp;amount);</code></pre>
 </section>
 <section class="fn-section" id="fn-get_total_tips">
 <h3>get_total_tips</h3>
-<p>Historical total ever tipped to `creator`. Zero if the creator has never been tipped.</p>
-<pre><code>pub fn get_total_tips(creator: Address) -&gt; i128</code></pre>
-<h4>Parameters</h4><table><thead><tr><th>Name</th><th>Type</th></tr></thead><tbody><tr><td><code>creator</code></td><td><code>Address</code></td></tr></tbody></table>
+<p>Historical total ever tipped to `creator` for a specific `token`. Zero if never tipped.</p>
+<pre><code>pub fn get_total_tips(creator: Address, token: Address) -&gt; i128</code></pre>
+<h4>Parameters</h4><table><thead><tr><th>Name</th><th>Type</th></tr></thead><tbody><tr><td><code>creator</code></td><td><code>Address</code></td></tr>
+<tr><td><code>token</code></td><td><code>Address</code></td></tr></tbody></table>
 <p><strong>Returns</strong> — <code>i128</code></p>
 <h4>Example</h4>
-<pre><code>client.get_total_tips(&amp;creator);</code></pre>
+<pre><code>client.get_total_tips(&amp;creator, &amp;token);</code></pre>
+</section>
+<section class="fn-section" id="fn-get_balance">
+<h3>get_balance</h3>
+<p>Gets the withdrawable balance for a creator and specific token.</p>
+<pre><code>pub fn get_balance(creator: Address, token: Address) -&gt; i128</code></pre>
+<h4>Parameters</h4><table><thead><tr><th>Name</th><th>Type</th></tr></thead><tbody><tr><td><code>creator</code></td><td><code>Address</code></td></tr>
+<tr><td><code>token</code></td><td><code>Address</code></td></tr></tbody></table>
+<p><strong>Returns</strong> — <code>i128</code></p>
+<h4>Example</h4>
+<pre><code>client.get_balance(&amp;creator, &amp;token);</code></pre>
+</section>
+<section class="fn-section" id="fn-get_tokens">
+<h3>get_tokens</h3>
+<p>Returns the list of allowed tokens.</p>
+<pre><code>pub fn get_tokens() -&gt; Vec<Address></code></pre>
+
+<p><strong>Returns</strong> — <code>Vec<Address></code></p>
+<h4>Example</h4>
+<pre><code>client.get_tokens();</code></pre>
 </section>
 <section class="fn-section" id="fn-withdraw">
 <h3>withdraw</h3>
-<p>Pays out a creator's full or partial withdrawable balance.<br>If caller is an operator, checks their allowance and expiry.<br>Applies any matured payout address change before transferring.</p>
-<pre><code>pub fn withdraw(caller: Address, creator: Address, to: Address, amount: Option<i128>) -&gt; ()</code></pre>
+<p>Pays out a creator's withdrawable balance for a specific token.</p>
+<pre><code>pub fn withdraw(caller: Address, creator: Address, token: Address, to: Address, amount: Option<i128>) -&gt; ()</code></pre>
 <h4>Parameters</h4><table><thead><tr><th>Name</th><th>Type</th></tr></thead><tbody><tr><td><code>caller</code></td><td><code>Address</code></td></tr>
 <tr><td><code>creator</code></td><td><code>Address</code></td></tr>
+<tr><td><code>token</code></td><td><code>Address</code></td></tr>
 <tr><td><code>to</code></td><td><code>Address</code></td></tr>
 <tr><td><code>amount</code></td><td><code>Option<i128></code></td></tr></tbody></table>
 
 <h4>Example</h4>
-<pre><code>client.withdraw(&amp;caller, &amp;creator, &amp;to, &amp;amount);</code></pre>
+<pre><code>client.withdraw(&amp;caller, &amp;creator, &amp;token, &amp;to, &amp;amount);</code></pre>
+</section>
+<section class="fn-section" id="fn-add_token">
+<h3>add_token</h3>
+<p>Adds a token to the allowlist. Admin-only operation.</p>
+<pre><code>pub fn add_token(admin: Address, token: Address) -&gt; ()</code></pre>
+<h4>Parameters</h4><table><thead><tr><th>Name</th><th>Type</th></tr></thead><tbody><tr><td><code>admin</code></td><td><code>Address</code></td></tr>
+<tr><td><code>token</code></td><td><code>Address</code></td></tr></tbody></table>
+
+<h4>Example</h4>
+<pre><code>client.add_token(&amp;admin, &amp;token);</code></pre>
+</section>
+<section class="fn-section" id="fn-remove_token">
+<h3>remove_token</h3>
+<p>Removes a token from the allowlist. Admin-only operation.<br>Existing balances remain withdrawable.</p>
+<pre><code>pub fn remove_token(admin: Address, token: Address) -&gt; ()</code></pre>
+<h4>Parameters</h4><table><thead><tr><th>Name</th><th>Type</th></tr></thead><tbody><tr><td><code>admin</code></td><td><code>Address</code></td></tr>
+<tr><td><code>token</code></td><td><code>Address</code></td></tr></tbody></table>
+
+<h4>Example</h4>
+<pre><code>client.remove_token(&amp;admin, &amp;token);</code></pre>
 </section>
 <section class="fn-section" id="fn-set_payout_address">
 <h3>set_payout_address</h3>
@@ -385,13 +437,14 @@
 </section>
 <section class="fn-section" id="fn-withdraw_fees">
 <h3>withdraw_fees</h3>
-<p>Pays out the fee collector's full or partial share of `FeeBalance`.<br>Mirrors `withdraw`'s pattern, including TTL extension.</p>
-<pre><code>pub fn withdraw_fees(caller: Address, amount: Option<i128>) -&gt; ()</code></pre>
+<p>Pays out the fee collector's full or partial share of<br>`FeeBalance(token)`. Only moves units of `token`. Mirrors `withdraw`'s<br>pattern, including TTL extension.</p>
+<pre><code>pub fn withdraw_fees(caller: Address, token: Address, amount: Option<i128>) -&gt; ()</code></pre>
 <h4>Parameters</h4><table><thead><tr><th>Name</th><th>Type</th></tr></thead><tbody><tr><td><code>caller</code></td><td><code>Address</code></td></tr>
+<tr><td><code>token</code></td><td><code>Address</code></td></tr>
 <tr><td><code>amount</code></td><td><code>Option<i128></code></td></tr></tbody></table>
 
 <h4>Example</h4>
-<pre><code>client.withdraw_fees(&amp;caller, &amp;amount);</code></pre>
+<pre><code>client.withdraw_fees(&amp;caller, &amp;token, &amp;amount);</code></pre>
 </section>
 <section class="fn-section" id="fn-get_fee_bps">
 <h3>get_fee_bps</h3>
@@ -414,11 +467,11 @@
 <section class="fn-section" id="fn-get_fee_balance">
 <h3>get_fee_balance</h3>
 
-<pre><code>pub fn get_fee_balance() -&gt; i128</code></pre>
-
+<pre><code>pub fn get_fee_balance(token: Address) -&gt; i128</code></pre>
+<h4>Parameters</h4><table><thead><tr><th>Name</th><th>Type</th></tr></thead><tbody><tr><td><code>token</code></td><td><code>Address</code></td></tr></tbody></table>
 <p><strong>Returns</strong> — <code>i128</code></p>
 <h4>Example</h4>
-<pre><code>client.get_fee_balance();</code></pre>
+<pre><code>client.get_fee_balance(&amp;token);</code></pre>
 </section>
 <section class="fn-section" id="fn-preview_fee">
 <h3>preview_fee</h3>
@@ -429,6 +482,38 @@
 <p><strong>Returns</strong> — <code>(i128, i128)</code></p>
 <h4>Example</h4>
 <pre><code>client.preview_fee(&amp;amount, &amp;bps);</code></pre>
+</section>
+<section class="fn-section" id="fn-tip_legacy">
+<h3>tip_legacy</h3>
+
+<pre><code>pub fn tip_legacy(sender: Address, creator: Address, amount: i128) -&gt; ()</code></pre>
+<h4>Parameters</h4><table><thead><tr><th>Name</th><th>Type</th></tr></thead><tbody><tr><td><code>sender</code></td><td><code>Address</code></td></tr>
+<tr><td><code>creator</code></td><td><code>Address</code></td></tr>
+<tr><td><code>amount</code></td><td><code>i128</code></td></tr></tbody></table>
+
+<h4>Example</h4>
+<pre><code>client.tip_legacy(&amp;sender, &amp;creator, &amp;amount);</code></pre>
+</section>
+<section class="fn-section" id="fn-get_total_tips_legacy">
+<h3>get_total_tips_legacy</h3>
+
+<pre><code>pub fn get_total_tips_legacy(creator: Address) -&gt; i128</code></pre>
+<h4>Parameters</h4><table><thead><tr><th>Name</th><th>Type</th></tr></thead><tbody><tr><td><code>creator</code></td><td><code>Address</code></td></tr></tbody></table>
+<p><strong>Returns</strong> — <code>i128</code></p>
+<h4>Example</h4>
+<pre><code>client.get_total_tips_legacy(&amp;creator);</code></pre>
+</section>
+<section class="fn-section" id="fn-withdraw_legacy">
+<h3>withdraw_legacy</h3>
+
+<pre><code>pub fn withdraw_legacy(caller: Address, creator: Address, to: Address, amount: Option<i128>) -&gt; ()</code></pre>
+<h4>Parameters</h4><table><thead><tr><th>Name</th><th>Type</th></tr></thead><tbody><tr><td><code>caller</code></td><td><code>Address</code></td></tr>
+<tr><td><code>creator</code></td><td><code>Address</code></td></tr>
+<tr><td><code>to</code></td><td><code>Address</code></td></tr>
+<tr><td><code>amount</code></td><td><code>Option<i128></code></td></tr></tbody></table>
+
+<h4>Example</h4>
+<pre><code>client.withdraw_legacy(&amp;caller, &amp;creator, &amp;to, &amp;amount);</code></pre>
 </section>
 
 <script>

@@ -1,4 +1,3 @@
-use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use soroban_sdk::{
     testutils::{Address as _, Ledger as _, Snapshot},
@@ -23,7 +22,6 @@ pub struct Simulator {
     pub env: Env,
     pub contract: Address,
     pub token: Address,
-    token_admin: Address,
     pub admin: Address,
     pub verbose: bool,
 }
@@ -33,7 +31,7 @@ impl Simulator {
     pub fn new(verbose: bool) -> Self {
         let env = Env::default();
         env.mock_all_auths();
-        env.budget().reset_unlimited();
+        env.cost_estimate().budget().reset_unlimited();
 
         let token_admin = Address::generate(&env);
         let token = env
@@ -46,6 +44,7 @@ impl Simulator {
 
         client.init(&admin);
         client.add_token(&admin, &token);
+        client.set_min_tip(&admin, &1);
 
         if verbose {
             eprintln!("[sim] contract={contract:?}  token={token:?}  admin={admin:?}");
@@ -55,13 +54,12 @@ impl Simulator {
             env,
             contract,
             token,
-            token_admin,
             admin,
             verbose,
         }
     }
 
-    fn client(&self) -> TipJarContractClient {
+    fn client(&self) -> TipJarContractClient<'_> {
         TipJarContractClient::new(&self.env, &self.contract)
     }
 
@@ -86,9 +84,9 @@ impl Simulator {
 
     /// Simulate a tip and return a `SimResult`.
     pub fn simulate_tip(&self, sender: &Address, creator: &Address, amount: i128) -> SimResult {
-        self.env.budget().reset_unlimited();
+        self.env.cost_estimate().budget().reset_unlimited();
         let result = self.client().try_tip(sender, creator, &self.token, &amount);
-        let cpu = self.env.budget().cpu_instruction_cost();
+        let cpu = self.env.cost_estimate().budget().cpu_instruction_cost();
         let ok = result.is_ok();
         let error = result.err().map(|e| format!("{e:?}"));
         if self.verbose {
@@ -103,9 +101,9 @@ impl Simulator {
 
     /// Simulate a withdrawal and return a `SimResult`.
     pub fn simulate_withdraw(&self, creator: &Address) -> SimResult {
-        self.env.budget().reset_unlimited();
+        self.env.cost_estimate().budget().reset_unlimited();
         let result = self.client().try_withdraw(creator, &self.token, &None);
-        let cpu = self.env.budget().cpu_instruction_cost();
+        let cpu = self.env.cost_estimate().budget().cpu_instruction_cost();
         let ok = result.is_ok();
         let error = result.err().map(|e| format!("{e:?}"));
         if self.verbose {
@@ -137,6 +135,6 @@ impl Simulator {
     pub fn restore_snapshot(&mut self, snap: Snapshot) {
         self.env = Env::from_snapshot(snap);
         self.env.mock_all_auths();
-        self.env.budget().reset_unlimited();
+        self.env.cost_estimate().budget().reset_unlimited();
     }
 }

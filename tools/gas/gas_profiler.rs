@@ -1,6 +1,7 @@
-//! gas-profiler — runs `cargo test -- bench --nocapture` and captures the
-//! `[BENCH]` lines emitted by `tests/gas/benchmarks.rs`, then writes a
-//! structured JSON report to `gas-report.json` (or a path given via --output).
+//! gas-profiler — runs `cargo test -p tipjar --test gas_benchmarks --
+//! --nocapture` and captures the `[BENCH]` lines emitted by
+//! `tests/gas/benchmarks.rs`, then writes a structured JSON report to
+//! `gas-report.json` (or a path given via --output).
 //!
 //! Usage:
 //!   cargo run --bin gas-profiler -- [--output path/to/report.json]
@@ -40,7 +41,15 @@ fn main() -> Result<()> {
 
     eprintln!("Running gas benchmarks...");
     let output = Command::new("cargo")
-        .args(["test", "-p", "tipjar", "--", "bench", "--nocapture"])
+        .args([
+            "test",
+            "-p",
+            "tipjar",
+            "--test",
+            "gas_benchmarks",
+            "--",
+            "--nocapture",
+        ])
         .output()
         .context("failed to run cargo test")?;
 
