@@ -1,4 +1,10 @@
-//! Placeholder library for the `tipjar-sdk` workspace member.
+//! TipJar SDK for multi-network support.
+//!
+//! Provides network/contract-address configuration (`config`) and
+//! client-side transaction simulation/cost-preview helpers (`simulation`)
+//! for consumers integrating with TipJar off-chain.
+pub mod config;
+pub mod simulation;
 
-// This crate currently exists only to satisfy the workspace manifest.
-// It is not used in the Soroban contract compilation path.
+pub use config::{ContractAddresses, Network};
+pub use simulation::{CostCalculator, PreviewGenerator, TransactionSimulator};

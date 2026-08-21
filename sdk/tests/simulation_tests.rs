@@ -26,10 +26,7 @@ fn test_simulate_withdrawal_transaction() {
 
 #[test]
 fn test_simulate_batch_tips() {
-    let tips = vec![
-        ("creator1".to_string(), 100),
-        ("creator2".to_string(), 200),
-    ];
+    let tips = vec![("creator1".to_string(), 100), ("creator2".to_string(), 200)];
 
     let result = TransactionSimulator::simulate_batch_tips(tips);
     assert!(result.is_ok());
@@ -88,9 +85,7 @@ fn test_error_handling_insufficient_balance() {
 
 #[test]
 fn test_error_handling_batch_too_large() {
-    let tips: Vec<_> = (0..101)
-        .map(|i| (format!("creator{}", i), 100))
-        .collect();
+    let tips: Vec<_> = (0..101).map(|i| (format!("creator{}", i), 100)).collect();
 
     let result = TransactionSimulator::simulate_batch_tips(tips);
     assert!(result.is_err());

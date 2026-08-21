@@ -50,7 +50,7 @@ impl Network {
     }
 
     /// Parse network from string
-    pub fn from_str(s: &str) -> Option<Self> {
+    pub fn parse_network(s: &str) -> Option<Self> {
         match s.to_lowercase().as_str() {
             "testnet" => Some(Network::Testnet),
             "mainnet" => Some(Network::Mainnet),
@@ -95,9 +95,12 @@ mod tests {
 
     #[test]
     fn test_network_parsing() {
-        assert_eq!(Network::from_str("testnet"), Some(Network::Testnet));
-        assert_eq!(Network::from_str("mainnet"), Some(Network::Mainnet));
-        assert_eq!(Network::from_str("futurenet"), Some(Network::Futurenet));
-        assert_eq!(Network::from_str("invalid"), None);
+        assert_eq!(Network::parse_network("testnet"), Some(Network::Testnet));
+        assert_eq!(Network::parse_network("mainnet"), Some(Network::Mainnet));
+        assert_eq!(
+            Network::parse_network("futurenet"),
+            Some(Network::Futurenet)
+        );
+        assert_eq!(Network::parse_network("invalid"), None);
     }
 }

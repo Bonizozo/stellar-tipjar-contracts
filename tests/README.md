@@ -1,4 +1,4 @@
-# Tests Directory
+# Tests directory
 
 This folder holds **integration tests that are compiled as part of the
 `tipjar` package** (`contracts/tipjar`), even though the files live at the
