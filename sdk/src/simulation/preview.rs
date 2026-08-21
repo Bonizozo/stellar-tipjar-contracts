@@ -1,7 +1,7 @@
 /// Preview generator for transaction outcomes
 use serde::{Deserialize, Serialize};
 
-use super::simulator::{ContractEvent, SimulationResult, StateChange};
+use super::simulator::{SimulationResult, StateChange};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TransactionPreview {
@@ -23,15 +23,18 @@ pub struct PreviewGenerator;
 
 impl PreviewGenerator {
     /// Generate preview from simulation result
-    pub fn generate_preview(
-        operation: &str,
-        simulation: &SimulationResult,
-    ) -> TransactionPreview {
+    pub fn generate_preview(operation: &str, simulation: &SimulationResult) -> TransactionPreview {
         let description = Self::describe_operation(operation);
         let outcome = if simulation.success {
             "Transaction will succeed".to_string()
         } else {
-            format!("Transaction will fail: {}", simulation.error.as_ref().unwrap_or(&"Unknown error".to_string()))
+            format!(
+                "Transaction will fail: {}",
+                simulation
+                    .error
+                    .as_ref()
+                    .unwrap_or(&"Unknown error".to_string())
+            )
         };
 
         let estimated_cost = Self::calculate_total_cost(simulation.gas_cost);
@@ -112,7 +115,10 @@ impl PreviewGenerator {
                 "- Creator {} balance increases by {}\n- Creator {} total tips increases by {}",
                 creator, amount, creator, amount
             ),
-            events: vec![format!("Tip event: {} sends {} to {}", tipper, amount, creator)],
+            events: vec![format!(
+                "Tip event: {} sends {} to {}",
+                tipper, amount, creator
+            )],
             warnings: vec![],
         }
     }
@@ -127,7 +133,10 @@ impl PreviewGenerator {
                 "- Creator {} balance decreases by {}\n- Funds transferred to creator account",
                 creator, amount
             ),
-            events: vec![format!("Withdrawal event: {} withdraws {}", creator, amount)],
+            events: vec![format!(
+                "Withdrawal event: {} withdraws {}",
+                creator, amount
+            )],
             warnings: vec!["Ensure sufficient balance before withdrawal".to_string()],
         }
     }

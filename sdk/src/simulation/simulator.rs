@@ -137,9 +137,7 @@ impl TransactionSimulator {
     }
 
     /// Simulate batch tip operation
-    pub fn simulate_batch_tips(
-        tips: Vec<(String, i128)>,
-    ) -> Result<SimulationResult, String> {
+    pub fn simulate_batch_tips(tips: Vec<(String, i128)>) -> Result<SimulationResult, String> {
         if tips.is_empty() {
             return Err("Empty batch".to_string());
         }
@@ -148,7 +146,6 @@ impl TransactionSimulator {
             return Err("Batch too large".to_string());
         }
 
-        let total_amount: i128 = tips.iter().map(|(_, amount)| amount).sum();
         let gas_cost = Self::calculate_gas_cost((tips.len() as u64) * 100);
 
         let state_changes: Vec<StateChange> = tips
@@ -221,10 +218,7 @@ mod tests {
 
     #[test]
     fn test_simulate_batch_tips() {
-        let tips = vec![
-            ("creator1".to_string(), 100),
-            ("creator2".to_string(), 200),
-        ];
+        let tips = vec![("creator1".to_string(), 100), ("creator2".to_string(), 200)];
         let result = TransactionSimulator::simulate_batch_tips(tips);
         assert!(result.is_ok());
         let sim = result.unwrap();
@@ -234,9 +228,7 @@ mod tests {
 
     #[test]
     fn test_simulate_batch_too_large() {
-        let tips: Vec<_> = (0..101)
-            .map(|i| (format!("creator{}", i), 100))
-            .collect();
+        let tips: Vec<_> = (0..101).map(|i| (format!("creator{}", i), 100)).collect();
         let result = TransactionSimulator::simulate_batch_tips(tips);
         assert!(result.is_err());
     }
