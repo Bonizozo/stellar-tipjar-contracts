@@ -262,6 +262,9 @@ mod tests {
 
         let order = client.get_order(&order_id);
         assert_eq!(order.filled, 100);
+        assert_eq!(order.amount_in, 100);
+        assert_eq!(order.limit_price, 50);
+        assert_eq!(order.owner, buyer);
     }
 
     #[test]
@@ -301,6 +304,8 @@ mod tests {
 
         let order = client.get_order(&order_id);
         assert_eq!(order.filled, 100); // full fill since match_order fills all remaining
+        assert_eq!(order.id, order_id);
+        assert!(!order.cancelled);
     }
 
     #[test]
@@ -324,6 +329,8 @@ mod tests {
 
         let order = client.get_order(&order_id);
         assert!(order.cancelled);
+        assert_eq!(order.filled, 0);
+        assert_eq!(order.amount_in, 500);
     }
 
     #[test]

@@ -240,6 +240,8 @@ mod tests {
         let profile = client.check_exposure(&user);
         assert_eq!(profile.exposure, 500);
         assert_eq!(profile.risk_score, 50); // 500*100/1000 = 50
+        assert_eq!(profile.alert_threshold, 1000);
+        assert_eq!(profile.owner, user);
     }
 
     #[test]
@@ -252,6 +254,7 @@ mod tests {
         client.update_exposure(&user, &200i128); // 200% -> capped at 100
 
         let profile = client.check_exposure(&user);
+        assert_eq!(profile.exposure, 200);
         assert_eq!(profile.risk_score, 100);
     }
 
@@ -304,6 +307,7 @@ mod tests {
         let profile = client.check_exposure(&user);
         assert_eq!(profile.exposure, 0);
         assert_eq!(profile.risk_score, 0);
+        assert_eq!(profile.alert_threshold, 1000);
     }
 
     #[test]
@@ -317,5 +321,6 @@ mod tests {
 
         let metrics = client.get_risk_metrics();
         assert_eq!(metrics.total_exposure, 300);
+        assert_eq!(metrics.high_risk_count, 0);
     }
 }

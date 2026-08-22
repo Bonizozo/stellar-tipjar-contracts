@@ -1,0 +1,37 @@
+name: Snapshot Review Gate
+
+on:
+  pull_request:
+    branches: [main, develop]
+    paths:
+      - 'contracts/derivatives/test_snapshots/tests/*.1.json'
+      - 'contracts/risk-management/test_snapshots/tests/*.1.json'
+      - 'contracts/limit-orders/test_snapshots/tests/*.1.json'
+      - 'contracts/arbitrage/test_snapshots/tests/*.1.json'
+      - '.github/workflows/snapshot-review.yml'
+
+jobs:
+  require-review-note:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Confirm snapshot review checklist is acknowledged
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: |
+          set -eu
+          if printf '%s\n' "$PR_BODY" | grep -Eiq '\[[xX]\].*snapshot files changed'; then
+            exit 0
+          fi
+
+          cat <<'MSG'
+          This PR changes a DeFi contract test snapshot under one of:
+            - contracts/derivatives/test_snapshots/tests/*.1.json
+            - contracts/risk-management/test_snapshots/tests/*.1.json
+            - contracts/limit-orders/test_snapshots/tests/*.1.json
+            - contracts/arbitrage/test_snapshots/tests/*.1.json
+
+          Snapshot diffs must not be blindly regenerated. Update the PR body's
+          Snapshot diff review checklist to explain the intended storage/event
+          diff and confirm the JSON diff was reviewed.
+          MSG
+          exit 1
