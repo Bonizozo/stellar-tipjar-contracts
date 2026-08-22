@@ -275,11 +275,17 @@ mod tests {
 
         let profit =
             client.execute_arbitrage(&executor, &token, &buy_market, &sell_market, &100i128);
-        assert!(profit > 0);
+        assert_eq!(profit, 20);
 
         let records = client.get_performance(&executor);
         assert_eq!(records.len(), 1);
-        assert_eq!(records.get(0).unwrap().profit, profit);
+        let record = records.get(0).unwrap();
+        assert_eq!(record.id, 1);
+        assert_eq!(record.executor, executor);
+        assert_eq!(record.token, token);
+        assert_eq!(record.buy_market, buy_market);
+        assert_eq!(record.sell_market, sell_market);
+        assert_eq!(record.profit, profit);
     }
 
     #[test]
@@ -322,8 +328,14 @@ mod tests {
 
         let executor_records = client.get_performance(&executor);
         assert_eq!(executor_records.len(), 2);
+        assert_eq!(executor_records.get(0).unwrap().id, 1);
+        assert_eq!(executor_records.get(0).unwrap().profit, 20);
+        assert_eq!(executor_records.get(1).unwrap().id, 2);
+        assert_eq!(executor_records.get(1).unwrap().profit, 40);
 
         let other_records = client.get_performance(&other);
         assert_eq!(other_records.len(), 1);
+        assert_eq!(other_records.get(0).unwrap().id, 3);
+        assert_eq!(other_records.get(0).unwrap().profit, 10);
     }
 }

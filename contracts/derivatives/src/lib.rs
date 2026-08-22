@@ -320,9 +320,14 @@ mod tests {
         let buy_pos = client.get_position(&buyer, &buy_id);
         assert_eq!(buy_pos.quantity, 10);
         assert_eq!(buy_pos.entry_price, 100);
+        assert_eq!(buy_pos.owner, buyer);
+        assert_eq!(buy_pos.derivative_id, buy_id);
 
         let sell_pos = client.get_position(&seller, &sell_id);
         assert_eq!(sell_pos.quantity, 10);
+        assert_eq!(sell_pos.entry_price, 100);
+        assert_eq!(sell_pos.owner, seller);
+        assert_eq!(sell_pos.derivative_id, sell_id);
     }
 
     #[test]
@@ -364,6 +369,9 @@ mod tests {
                 .unwrap()
         });
         assert!(order.settled);
+        assert_eq!(order.id, order_id);
+        assert_eq!(order.quantity, 5);
+        assert_eq!(order.strike_price, 50);
     }
 
     #[test]
@@ -438,5 +446,7 @@ mod tests {
                 .unwrap()
         });
         assert!(order.settled);
+        assert_eq!(order.owner, owner);
+        assert_eq!(order.quantity, 1);
     }
 }
