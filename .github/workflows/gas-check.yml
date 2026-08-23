@@ -26,7 +26,8 @@ jobs:
         run: cargo build -p tipjar --target wasm32v1-none --release
 
       - name: Build v2 upgrade test fixture (WASM)
-        # contracts/tipjar/src/test_upgrade.rs embeds this via
+        # contracts/tipjar/src/test_upgrade.rs and tests/gas/benchmarks.rs
+        # (bench_propose_upgrade / bench_execute_upgrade) both embed this via
         # soroban_sdk::contractimport! at compile time, so it must exist on
         # disk before `cargo test -p tipjar` (which the gas profiler runs
         # under the hood) can compile.
