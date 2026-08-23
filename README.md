@@ -51,6 +51,14 @@ CONTRIBUTING.md
 > two contracts in the same crate can't both export a function called `tip`).
 > It was relocated byte-for-byte rather than deleted. It currently does not
 > compile (pre-existing, unrelated to the contract documented here).
+>
+> **`contracts/tipjar-legacy/` is excluded from the default workspace build.**
+> Running `cargo build`, `cargo check`, `cargo clippy`, or `cargo test` at the
+> workspace root never compiles it — it has its own `[workspace]` table in
+> `contracts/tipjar-legacy/Cargo.toml` and is listed in the root `exclude`
+> array. `simulator` and `tools/gas-estimator` still depend on it via direct
+> path dependencies and are built/tested in a separate CI job. See
+> [CONTRIBUTING.md](CONTRIBUTING.md) for how to build or test it explicitly.
 
 ## Contract Capabilities
 

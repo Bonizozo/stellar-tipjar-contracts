@@ -5,6 +5,48 @@ frontend client (`packages/contract-client/`). It does not apply to the
 unrelated code under `contracts/tipjar-legacy/` or the other workspace
 members.
 
+## Build Structure
+
+`contracts/tipjar-legacy/` is **excluded from the default workspace build**
+(see the `exclude` entry in the root `Cargo.toml`). This means:
+
+- `cargo build`, `cargo check`, `cargo clippy`, and `cargo test` at the
+  workspace root never compile the legacy fixture's ~60 kloc of speculative
+  DeFi primitives.
+- The blanket `#![allow(...)]` suppressions that previously kept CI's
+  `clippy -D warnings` green across that code no longer affect the
+  production-contract build.
+
+`simulator` and `tools/gas-estimator` still depend on `tipjar-legacy` via
+plain path dependencies in their own `Cargo.toml` files. Cargo resolves those
+through the legacy crate's own `[workspace]` (in
+`contracts/tipjar-legacy/Cargo.toml`) rather than the root workspace, so the
+production-contract build remains clean.
+
+### Working with the legacy fixture
+
+To build or test `tipjar-legacy` explicitly:
+
+```bash
+# From the repo root:
+cargo build -p tipjar-legacy --manifest-path contracts/tipjar-legacy/Cargo.toml
+cargo test  -p tipjar-legacy --manifest-path contracts/tipjar-legacy/Cargo.toml
+
+# Or from its own directory:
+cd contracts/tipjar-legacy
+cargo build
+cargo test
+```
+
+`simulator` and `gas-estimator` continue to work with no special flags because
+they are workspace members whose `Cargo.toml` already lists
+`tipjar-legacy = { path = … }` as a direct dependency:
+
+```bash
+cargo test -p tipjar-simulator
+cargo test -p gas-estimator
+```
+
 ## Branching Strategy
 
 - `main` is protected: always reviewable and releasable, no direct pushes.

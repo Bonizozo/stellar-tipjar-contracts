@@ -1,5 +1,33 @@
 [workspace]
-members = ["contracts/tipjar", "contracts/tipjar-v2-fixture", "contracts/tipjar-legacy", "contracts/derivatives", "contracts/risk-management", "contracts/limit-orders", "contracts/arbitrage", "indexer", "sdk", "tests/integration", "security", "simulator", "tools/gas-estimator", "tools/gas", "tools/doc-generator"]
+members = [
+    "contracts/tipjar",
+    "contracts/tipjar-v2-fixture",
+    "contracts/derivatives",
+    "contracts/risk-management",
+    "contracts/limit-orders",
+    "contracts/arbitrage",
+    "indexer",
+    "sdk",
+    "tests/integration",
+    "security",
+    "simulator",
+    "tools/gas-estimator",
+    "tools/gas",
+    "tools/doc-generator",
+]
+# tipjar-legacy is a frozen reference fixture used only by `simulator` and
+# `tools/gas-estimator` (via direct path dependencies in their own Cargo.toml).
+# Excluding it from the default workspace build means `cargo build / check /
+# clippy / test` at the workspace root never compiles its ~60 kloc of
+# speculative DeFi primitives, removing the associated compile-time cost and
+# the need for blanket `#![allow(...)]` suppressions to keep CI's
+# `clippy -D warnings` green across code we will never deploy.
+#
+# To build or test the fixture explicitly, use its own workspace:
+#   cargo build -p tipjar-legacy --manifest-path contracts/tipjar-legacy/Cargo.toml
+#   cargo test  -p tipjar-legacy --manifest-path contracts/tipjar-legacy/Cargo.toml
+# Or go into the directory and run `cargo build` / `cargo test` directly.
+exclude = ["contracts/tipjar-legacy"]
 resolver = "2"
 
 [workspace.package]
