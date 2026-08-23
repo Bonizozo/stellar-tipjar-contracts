@@ -60,6 +60,46 @@ jobs:
           files: coverage/cobertura.xml
           fail_ci_if_error: false
 
+  # tipjar-legacy is excluded from the default workspace build (see root
+  # Cargo.toml) so the production-contract jobs above never pay its compile-time
+  # cost.  This separate job builds and tests it explicitly, ensuring that
+  # `simulator` and `tools/gas-estimator` — which depend on it via path — remain
+  # in a working state.
+  simulator-and-tools:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+
+      - name: Check tipjar-legacy formatting
+        # Run fmt check inside the legacy workspace; it has its own [workspace]
+        # table so `cargo fmt` will not traverse the root workspace.
+        run: cargo fmt --manifest-path contracts/tipjar-legacy/Cargo.toml -- --check
+
+      - name: Build tipjar-legacy (standalone)
+        # Builds the legacy fixture in its own workspace, confirming it still
+        # compiles independently of the root workspace.
+        run: cargo build --manifest-path contracts/tipjar-legacy/Cargo.toml
+
+      - name: Build simulator
+        run: cargo build -p tipjar-simulator
+
+      - name: Test simulator
+        run: cargo test -p tipjar-simulator
+
+      - name: Build gas-estimator
+        run: cargo build -p gas-estimator
+
+      - name: Test gas-estimator
+        run: cargo test -p gas-estimator
+
   security:
     runs-on: ubuntu-latest
     steps:
