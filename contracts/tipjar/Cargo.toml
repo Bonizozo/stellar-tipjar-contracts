@@ -20,6 +20,10 @@ soroban-sdk = "26.1.0"
 [dev-dependencies]
 soroban-sdk = { version = "26.1.0", features = ["testutils"] }
 proptest = "1.4"
+# Used in the `fixtures` test module to produce human-readable JSON companion
+# files alongside binary XDR golden fixtures — making event-schema diffs
+# reviewable in PRs without decoding opaque binary blobs.
+serde_json = "1.0.149"
 
 # `pause_tests` and `partial_pause_tests` live under the repo-root `tests/`
 # directory (shared with `tests/common`) rather than `contracts/tipjar/tests/`

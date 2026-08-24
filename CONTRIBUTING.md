@@ -94,6 +94,82 @@ single PR.
   (real SAC test token, `mock_all_auths()`, `try_<fn>()` for expected errors,
   `env.events().all().filter_by_contract(...)` for event assertions).
 
+## Event fixture golden files
+
+`contracts/tipjar/tests/fixtures/` holds binary XDR golden files that pin the
+exact on-chain encoding of each event's topics and data fields:
+
+```
+tip_topics.xdr      — VecM<ScVal> for the Tip event's topics
+tip_data.xdr        — ScVal for the Tip event's data
+withdraw_topics.xdr — VecM<ScVal> for the Withdraw event's topics
+withdraw_data.xdr   — ScVal for the Withdraw event's data
+```
+
+Alongside every `.xdr` file there is a **human-readable `.json` companion**
+(e.g. `tip_data.json`). Both files are generated and verified by the
+`fixtures::event_schema_golden_fixtures` test in `src/test.rs`.
+
+### What the JSON files contain
+
+The `.json` files decode the same XDR payload into a readable representation
+where each `ScVal` variant is wrapped in a one-key JSON object showing the
+type:
+
+```json
+{
+  "Vec": [
+    { "Address": { "Contract": "692c36..." } },
+    { "Address": { "Contract": "000000...06" } },
+    { "I128": "250" }
+  ]
+}
+```
+
+This format is designed for git diffs: if a field moves from position 2 to
+position 3, or its type changes from `I128` to `I64`, the JSON diff shows it
+immediately — unlike the binary `.xdr` diff which is opaque.
+
+### Regenerating fixtures after an intentional event-schema change
+
+If you intentionally change the topics or data of the `tip` or `withdraw`
+event (field order, type, presence, or any other schema detail), you must
+regenerate both the `.xdr` and `.json` companion files:
+
+```bash
+# Linux / macOS
+UPDATE_FIXTURES=1 cargo test -p tipjar fixtures::event_schema_golden_fixtures
+
+# Windows PowerShell
+$env:UPDATE_FIXTURES="1"; cargo test -p tipjar fixtures::event_schema_golden_fixtures
+```
+
+This overwrites both the `.xdr` binary and the `.json` companion with values
+produced by the current code.
+
+**After regenerating:**
+
+1. Run `cargo test -p tipjar` (without `UPDATE_FIXTURES`) and confirm all
+   tests pass — the freshly written fixtures must round-trip correctly.
+2. Open the "Files changed" view in your PR and read the diff of every changed
+   `.json` file carefully. The JSON diff is the ground truth for what changed
+   in the event schema.
+3. Tick the appropriate checkbox in the **Fixture diff review** section of the
+   PR description (see `.github/pull_request_template.md`).
+
+### CI gate: fixture-review workflow
+
+`.github/workflows/fixture-review.yml` triggers on any PR that touches
+`contracts/tipjar/tests/fixtures/*.xdr` or `*.json`. It fails with a
+descriptive error message until the PR body contains a checked checkbox from
+the fixture review section.
+
+This gate exists because event-schema changes are part of the contract's
+on-chain interface. Off-chain indexers and the frontend SDK both depend on
+`tip` and `withdraw` events having specific fields in a specific order. A
+silently-absorbed schema regression would break them in production without any
+compile-time signal.
+
 ## Commit Convention
 
 Use [Conventional Commits](https://www.conventionalcommits.org/):

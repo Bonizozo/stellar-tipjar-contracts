@@ -1,0 +1,72 @@
+name: Fixture Review Gate
+
+# This workflow triggers on any PR that touches an XDR or JSON event-fixture
+# file under contracts/tipjar/tests/fixtures/. Its sole job is to ensure that
+# the PR body contains an explicit reviewer acknowledgment before the PR can
+# be merged.
+#
+# Why this exists:
+#   Binary XDR golden files are not human-readable in a standard `git diff`.
+#   The companion .json files decode the same payload into a reviewable form,
+#   but only if someone actually looks at them. This gate makes that look
+#   mandatory — the CI check goes red until the PR body contains a checked
+#   checkbox from the fixture review section of the PR template.
+#
+# To pass this check:
+#   1. Review the diff of every changed .json companion file.
+#   2. Tick the appropriate checkbox in the "Fixture diff review" section of
+#      the PR description (see .github/pull_request_template.md).
+
+on:
+  pull_request:
+    branches: [main, develop]
+    paths:
+      - 'contracts/tipjar/tests/fixtures/*.xdr'
+      - 'contracts/tipjar/tests/fixtures/*.json'
+      - '.github/workflows/fixture-review.yml'
+
+jobs:
+  require-fixture-review-acknowledgment:
+    name: Require fixture-diff review acknowledgment
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check PR body for fixture review checkbox
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: |
+          set -eu
+
+          # Accept either of these checked-box patterns:
+          #   [x] Fixture files changed, and the JSON companion diff was reviewed.
+          #   [X] No fixture files changed in this PR.
+          # The second option is included so a PR that only touches
+          # fixture-review.yml itself (workflow change, no fixture diff) can
+          # still pass by ticking the "no fixtures changed" box.
+          if printf '%s\n' "$PR_BODY" | grep -Eiq '\[[xX]\].*(fixture|no fixture)'; then
+            echo "Fixture review acknowledgment found. ✓"
+            exit 0
+          fi
+
+          cat <<'MSG'
+          ──────────────────────────────────────────────────────────────────────
+          FIXTURE REVIEW GATE FAILED
+          ──────────────────────────────────────────────────────────────────────
+          This PR modifies one or more XDR or JSON fixture files under
+            contracts/tipjar/tests/fixtures/
+
+          Those files are golden event-schema fixtures. The companion .json
+          files exist precisely so that reviewers can see "the token field
+          moved from position 2 to position 3" in a readable diff, rather than
+          staring at an opaque binary blob.
+
+          Before this PR can be merged:
+            1. Open the "Fixture diff review" section of the PR description.
+            2. Review every changed .json file in the PR diff.
+            3. Tick the checkbox that describes what changed and confirm you
+               reviewed it.
+
+          See CONTRIBUTING.md § "Event fixture golden files" for the full
+          process, including how to regenerate fixtures with UPDATE_FIXTURES=1.
+          ──────────────────────────────────────────────────────────────────────
+          MSG
+          exit 1
