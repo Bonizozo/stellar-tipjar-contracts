@@ -61,6 +61,10 @@
 <li><a href="#fn-guardian_pause_expiry_ledger">guardian_pause_expiry_ledger</a></li>
 <li><a href="#fn-get_guardian">get_guardian</a></li>
 <li><a href="#fn-set_fee">set_fee</a></li>
+<li><a href="#fn-propose_fee_collector">propose_fee_collector</a></li>
+<li><a href="#fn-accept_fee_collector">accept_fee_collector</a></li>
+<li><a href="#fn-cancel_fee_collector_transfer">cancel_fee_collector_transfer</a></li>
+<li><a href="#fn-get_pending_fee_collector">get_pending_fee_collector</a></li>
 <li><a href="#fn-withdraw_fees">withdraw_fees</a></li>
 <li><a href="#fn-get_fee_bps">get_fee_bps</a></li>
 <li><a href="#fn-get_fee_collector">get_fee_collector</a></li>
@@ -94,7 +98,8 @@
 <tr><td><code>22</code></td><td><code>NotFeeCollector</code></td></tr>
 <tr><td><code>23</code></td><td><code>TokenNotAllowed</code></td></tr>
 <tr><td><code>24</code></td><td><code>TokenAlreadyExists</code></td></tr>
-<tr><td><code>25</code></td><td><code>MaxTokensReached</code></td></tr></tbody></table></section>
+<tr><td><code>25</code></td><td><code>MaxTokensReached</code></td></tr>
+<tr><td><code>26</code></td><td><code>NoPendingFeeCollector</code></td></tr></tbody></table></section>
 <h2>Functions</h2>
 <section class="fn-section" id="fn-init">
 <h3>init</h3>
@@ -426,14 +431,50 @@
 </section>
 <section class="fn-section" id="fn-set_fee">
 <h3>set_fee</h3>
-<p>Sets the protocol fee rate and its collector. Admin-only; `bps` is<br>hard-capped at `MAX_FEE_BPS`. Setting `bps` to 0 disables fees.</p>
-<pre><code>pub fn set_fee(admin: Address, bps: u32, collector: Address) -&gt; ()</code></pre>
+<p>Sets the protocol fee rate. Admin-only; `bps` is hard-capped at<br>`MAX_FEE_BPS`. Setting `bps` to 0 disables fees. The fee collector is<br>deliberately NOT settable here: changing `FeeCollector` in a single<br>call would let a typo'd or malicious address immediately and<br>irreversibly redirect all subsequently-accrued protocol revenue.<br>Rotate the collector through the two-step flow instead —<br>`propose_fee_collector` + `accept_fee_collector` (mirroring the<br>`Admin` transfer), so a mistaken change has a window to be cancelled.</p>
+<pre><code>pub fn set_fee(admin: Address, bps: u32) -&gt; ()</code></pre>
 <h4>Parameters</h4><table><thead><tr><th>Name</th><th>Type</th></tr></thead><tbody><tr><td><code>admin</code></td><td><code>Address</code></td></tr>
-<tr><td><code>bps</code></td><td><code>u32</code></td></tr>
-<tr><td><code>collector</code></td><td><code>Address</code></td></tr></tbody></table>
+<tr><td><code>bps</code></td><td><code>u32</code></td></tr></tbody></table>
 
 <h4>Example</h4>
-<pre><code>client.set_fee(&amp;admin, &amp;bps, &amp;collector);</code></pre>
+<pre><code>client.set_fee(&amp;admin, &amp;bps);</code></pre>
+</section>
+<section class="fn-section" id="fn-propose_fee_collector">
+<h3>propose_fee_collector</h3>
+<p>Proposes `new_collector` as the next fee collector. Admin-only. Takes<br>effect only once `new_collector` calls `accept_fee_collector` — a<br>single-step change to a typo'd or malicious address could never be<br>caught before it redirected protocol revenue. Only one proposal may be<br>pending at a time; cancel the existing one first to replace it.</p>
+<pre><code>pub fn propose_fee_collector(admin: Address, new_collector: Address) -&gt; ()</code></pre>
+<h4>Parameters</h4><table><thead><tr><th>Name</th><th>Type</th></tr></thead><tbody><tr><td><code>admin</code></td><td><code>Address</code></td></tr>
+<tr><td><code>new_collector</code></td><td><code>Address</code></td></tr></tbody></table>
+
+<h4>Example</h4>
+<pre><code>client.propose_fee_collector(&amp;admin, &amp;new_collector);</code></pre>
+</section>
+<section class="fn-section" id="fn-accept_fee_collector">
+<h3>accept_fee_collector</h3>
+<p>Completes a two-step fee-collector transfer. Must be called by the<br>address named in the pending proposal.</p>
+<pre><code>pub fn accept_fee_collector(new_collector: Address) -&gt; ()</code></pre>
+<h4>Parameters</h4><table><thead><tr><th>Name</th><th>Type</th></tr></thead><tbody><tr><td><code>new_collector</code></td><td><code>Address</code></td></tr></tbody></table>
+
+<h4>Example</h4>
+<pre><code>client.accept_fee_collector(&amp;new_collector);</code></pre>
+</section>
+<section class="fn-section" id="fn-cancel_fee_collector_transfer">
+<h3>cancel_fee_collector_transfer</h3>
+<p>Abandons a pending fee-collector transfer, leaving the current<br>collector in place. Admin-only.</p>
+<pre><code>pub fn cancel_fee_collector_transfer(admin: Address) -&gt; ()</code></pre>
+<h4>Parameters</h4><table><thead><tr><th>Name</th><th>Type</th></tr></thead><tbody><tr><td><code>admin</code></td><td><code>Address</code></td></tr></tbody></table>
+
+<h4>Example</h4>
+<pre><code>client.cancel_fee_collector_transfer(&amp;admin);</code></pre>
+</section>
+<section class="fn-section" id="fn-get_pending_fee_collector">
+<h3>get_pending_fee_collector</h3>
+<p>Address currently proposed as the next fee collector, if any.</p>
+<pre><code>pub fn get_pending_fee_collector() -&gt; Option<Address></code></pre>
+
+<p><strong>Returns</strong> — <code>Option<Address></code></p>
+<h4>Example</h4>
+<pre><code>client.get_pending_fee_collector();</code></pre>
 </section>
 <section class="fn-section" id="fn-withdraw_fees">
 <h3>withdraw_fees</h3>

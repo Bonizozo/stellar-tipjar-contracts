@@ -425,7 +425,7 @@
     },
     {
       "name": "set_fee",
-      "doc": "Sets the protocol fee rate and its collector. Admin-only; `bps` is\nhard-capped at `MAX_FEE_BPS`. Setting `bps` to 0 disables fees.",
+      "doc": "Sets the protocol fee rate. Admin-only; `bps` is hard-capped at\n`MAX_FEE_BPS`. Setting `bps` to 0 disables fees. The fee collector is\ndeliberately NOT settable here: changing `FeeCollector` in a single\ncall would let a typo'd or malicious address immediately and\nirreversibly redirect all subsequently-accrued protocol revenue.\nRotate the collector through the two-step flow instead —\n`propose_fee_collector` + `accept_fee_collector` (mirroring the\n`Admin` transfer), so a mistaken change has a window to be cancelled.",
       "params": [
         {
           "name": "admin",
@@ -434,13 +434,52 @@
         {
           "name": "bps",
           "ty": "u32"
+        }
+      ],
+      "returns": "()"
+    },
+    {
+      "name": "propose_fee_collector",
+      "doc": "Proposes `new_collector` as the next fee collector. Admin-only. Takes\neffect only once `new_collector` calls `accept_fee_collector` — a\nsingle-step change to a typo'd or malicious address could never be\ncaught before it redirected protocol revenue. Only one proposal may be\npending at a time; cancel the existing one first to replace it.",
+      "params": [
+        {
+          "name": "admin",
+          "ty": "Address"
         },
         {
-          "name": "collector",
+          "name": "new_collector",
           "ty": "Address"
         }
       ],
       "returns": "()"
+    },
+    {
+      "name": "accept_fee_collector",
+      "doc": "Completes a two-step fee-collector transfer. Must be called by the\naddress named in the pending proposal.",
+      "params": [
+        {
+          "name": "new_collector",
+          "ty": "Address"
+        }
+      ],
+      "returns": "()"
+    },
+    {
+      "name": "cancel_fee_collector_transfer",
+      "doc": "Abandons a pending fee-collector transfer, leaving the current\ncollector in place. Admin-only.",
+      "params": [
+        {
+          "name": "admin",
+          "ty": "Address"
+        }
+      ],
+      "returns": "()"
+    },
+    {
+      "name": "get_pending_fee_collector",
+      "doc": "Address currently proposed as the next fee collector, if any.",
+      "params": [],
+      "returns": "Option<Address>"
     },
     {
       "name": "withdraw_fees",
@@ -653,6 +692,10 @@
     {
       "name": "MaxTokensReached",
       "code": 25
+    },
+    {
+      "name": "NoPendingFeeCollector",
+      "code": 26
     }
   ]
 }
