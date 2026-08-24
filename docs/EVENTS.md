@@ -45,13 +45,28 @@ All data payloads are serialized in Soroban as arrays (using `data_format = "vec
 
 ### 8. `FeeConfigured`
 - **Topics**: `["fee_configured", admin: Address]`
-- **Data (Vec)**: `[bps: u32, collector: Address]`
-- **Semantics**: Emitted by `set_fee()` whenever the admin changes the protocol fee rate and/or collector. `bps` is hard-capped on-chain at 1,000 (10%).
+- **Data (Vec)**: `[bps: u32]`
+- **Semantics**: Emitted by `set_fee()` when the admin changes the protocol fee rate. `bps` is hard-capped on-chain at 1,000 (10%). Note that `set_fee` never changes the fee collector — see the transfer events below.
 
 ### 9. `FeeWithdraw`
 - **Topics**: `["fee_withdraw", collector: Address]`
 - **Data (Vec)**: `[amount: i128]`
 - **Semantics**: Emitted by `withdraw_fees()` when the fee collector withdraws its accrued share of `FeeBalanceToken(token)`. The token is the `token` argument of that call.
+
+### 10. `FeeCollectorTransferProposed`
+- **Topics**: `["fee_collector_transfer_proposed"]`
+- **Data (Vec)**: `[current_admin: Address, new_collector: Address]`
+- **Semantics**: Emitted by `propose_fee_collector()` when the admin stages a new fee collector. Like `AdminTransferProposed`, this does NOT move the collector — it only records the proposal so a mistaken or malicious change has a window to be caught and cancelled before it redirects protocol revenue.
+
+### 11. `FeeCollectorTransferAccepted`
+- **Topics**: `["fee_collector_transfer_accepted"]`
+- **Data (Vec)**: `[new_collector: Address]`
+- **Semantics**: Emitted by `accept_fee_collector()` once the proposed address itself confirms, at which point `FeeCollector` takes effect.
+
+### 12. `FeeCollectorTransferCancelled`
+- **Topics**: `["fee_collector_transfer_cancelled", admin: Address]`
+- **Data (Vec)**: `[]`
+- **Semantics**: Emitted by `cancel_fee_collector_transfer()` when the admin abandons a pending collector proposal, leaving the current collector in place.
 
 ## Legacy Events (TipJarLegacy)
 

@@ -224,7 +224,9 @@ fn test_multifeature_non_primary_token_fee_operator_after_guardian_pause_expires
     let fee_collector = Address::generate(&ctx.env);
     let guardian = Address::generate(&ctx.env);
 
-    ctx.c().set_fee(&ctx.admin, &250, &fee_collector);
+    ctx.c().set_fee(&ctx.admin, &250);
+    ctx.c().propose_fee_collector(&ctx.admin, &fee_collector);
+    ctx.c().accept_fee_collector(&fee_collector);
     ctx.c().set_guardian(&ctx.admin, &guardian);
     ctx.c().set_guardian_pause_duration(&ctx.admin, &5);
     ctx.c().pause_all(&guardian);

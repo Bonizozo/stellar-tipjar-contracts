@@ -64,6 +64,15 @@ impl Ctx {
     fn get_token(&self) -> Address {
         self.token.clone()
     }
+
+    // Configure a protocol fee AND rotate the collector into place through the
+    // two-step flow (propose + accept), so tests exercising fee accrual don't
+    // need to repeat the three calls everywhere.
+    fn configure_fee(&self, bps: u32, collector: &Address) {
+        self.client().set_fee(&self.admin, &bps);
+        self.client().propose_fee_collector(&self.admin, collector);
+        self.client().accept_fee_collector(collector);
+    }
 }
 
 #[test]
@@ -336,7 +345,7 @@ fn explicit_zero_fee_config_is_also_a_true_noop() {
     let creator = Address::generate(&ctx.env);
     let collector = Address::generate(&ctx.env);
 
-    ctx.client().set_fee(&ctx.admin, &0, &collector);
+    ctx.configure_fee(0, &collector);
     ctx.client().tip(&sender, &creator, &ctx.get_token(), &400);
 
     // Checked immediately after tip(): no FeeCharged event, even though a
@@ -365,7 +374,7 @@ fn tip_with_fee_credits_net_to_creator_and_accrues_fee_conserving_gross() {
     let creator = Address::generate(&ctx.env);
     let collector = Address::generate(&ctx.env);
 
-    ctx.client().set_fee(&ctx.admin, &250, &collector); // 2.5%
+    ctx.configure_fee(250, &collector); // 2.5%
     ctx.client()
         .tip(&sender, &creator, &ctx.get_token(), &10_000);
 
@@ -409,7 +418,7 @@ fn one_stroop_tip_at_max_fee_floors_to_zero_fee_but_still_conserves() {
     let creator = Address::generate(&ctx.env);
     let collector = Address::generate(&ctx.env);
 
-    ctx.client().set_fee(&ctx.admin, &1_000, &collector); // 10%, the cap
+    ctx.configure_fee(1_000, &collector); // 10%, the cap
     ctx.client().tip(&sender, &creator, &ctx.get_token(), &1);
 
     // floor(1 * 1_000 / 10_000) == 0: the creator gets the whole stroop.
@@ -428,7 +437,7 @@ fn tip_fee_overflow_near_i128_max_panics_with_typed_error() {
     let sender = Address::generate(&ctx.env);
     token::StellarAssetClient::new(&ctx.env, &ctx.token).mint(&sender, &i128::MAX);
 
-    ctx.client().set_fee(&ctx.admin, &1_000, &collector);
+    ctx.configure_fee(1_000, &collector);
 
     let err = ctx
         .client()
@@ -447,11 +456,10 @@ fn tip_fee_overflow_near_i128_max_panics_with_typed_error() {
 fn set_fee_by_non_admin_panics_with_typed_error() {
     let ctx = Ctx::new();
     let stranger = Address::generate(&ctx.env);
-    let collector = Address::generate(&ctx.env);
 
     let err = ctx
         .client()
-        .try_set_fee(&stranger, &250, &collector)
+        .try_set_fee(&stranger, &250)
         .unwrap_err()
         .unwrap();
     assert_eq!(err, Error::Unauthorized.into());
@@ -460,17 +468,16 @@ fn set_fee_by_non_admin_panics_with_typed_error() {
 #[test]
 fn set_fee_above_cap_panics_with_typed_error() {
     let ctx = Ctx::new();
-    let collector = Address::generate(&ctx.env);
 
     let err = ctx
         .client()
-        .try_set_fee(&ctx.admin, &1_001, &collector)
+        .try_set_fee(&ctx.admin, &1_001)
         .unwrap_err()
         .unwrap();
     assert_eq!(err, Error::InvalidFee.into());
 
     // The cap itself must still be settable.
-    ctx.client().set_fee(&ctx.admin, &1_000, &collector);
+    ctx.client().set_fee(&ctx.admin, &1_000);
     assert_eq!(ctx.client().get_fee_bps(), 1_000);
 }
 
@@ -481,7 +488,7 @@ fn withdraw_fees_pays_out_collector_and_resets_balance() {
     let creator = Address::generate(&ctx.env);
     let collector = Address::generate(&ctx.env);
 
-    ctx.client().set_fee(&ctx.admin, &500, &collector); // 5%
+    ctx.configure_fee(500, &collector); // 5%
     ctx.client()
         .tip(&sender, &creator, &ctx.get_token(), &2_000); // fee = 100
 
@@ -507,7 +514,7 @@ fn withdraw_fees_by_non_collector_panics_with_typed_error() {
     let collector = Address::generate(&ctx.env);
     let stranger = Address::generate(&ctx.env);
 
-    ctx.client().set_fee(&ctx.admin, &500, &collector);
+    ctx.configure_fee(500, &collector);
     ctx.client()
         .tip(&sender, &creator, &ctx.get_token(), &2_000);
 
@@ -550,7 +557,7 @@ fn withdraw_fees_is_isolated_per_token() {
     let creator = Address::generate(&ctx.env);
     let collector = Address::generate(&ctx.env);
 
-    ctx.client().set_fee(&ctx.admin, &1_000, &collector); // 10%
+    ctx.configure_fee(1_000, &collector); // 10%
     ctx.client()
         .tip(&sender_a, &creator, &ctx.get_token(), &2_000); // fee = 200
     ctx.client().tip(&sender_b, &creator, &token_b, &5_000); // fee = 500
@@ -586,7 +593,7 @@ fn withdraw_fees_is_isolated_per_token() {
 fn legacy_unparameterized_fee_balance_migrates_to_primary_token() {
     let ctx = Ctx::new();
     let collector = Address::generate(&ctx.env);
-    ctx.client().set_fee(&ctx.admin, &500, &collector);
+    ctx.configure_fee(500, &collector);
 
     ctx.env.as_contract(&ctx.contract_id, || {
         ctx.env
@@ -622,7 +629,6 @@ fn legacy_unparameterized_fee_balance_migrates_to_primary_token() {
 fn two_step_admin_transfer_completes_and_moves_governance() {
     let ctx = Ctx::new();
     let new_admin = Address::generate(&ctx.env);
-    let collector = Address::generate(&ctx.env);
 
     ctx.client().propose_admin(&ctx.admin, &new_admin);
     assert_eq!(ctx.client().get_pending_admin(), Some(new_admin.clone()));
@@ -635,13 +641,13 @@ fn two_step_admin_transfer_completes_and_moves_governance() {
     // The old admin has lost governance...
     let err = ctx
         .client()
-        .try_set_fee(&ctx.admin, &100, &collector)
+        .try_set_fee(&ctx.admin, &100)
         .unwrap_err()
         .unwrap();
     assert_eq!(err, Error::Unauthorized.into());
 
     // ...and the new admin now holds it.
-    ctx.client().set_fee(&new_admin, &100, &collector);
+    ctx.client().set_fee(&new_admin, &100);
 }
 
 #[test]
@@ -713,6 +719,120 @@ fn cancel_admin_transfer_with_nothing_pending_errors() {
         .unwrap_err()
         .unwrap();
     assert_eq!(err, Error::NoPendingAdmin.into());
+}
+
+#[test]
+fn two_step_fee_collector_transfer_completes_and_moves_collector() {
+    let ctx = Ctx::new();
+    let collector_a = Address::generate(&ctx.env);
+    let collector_b = Address::generate(&ctx.env);
+
+    ctx.configure_fee(250, &collector_a);
+    assert_eq!(ctx.client().get_fee_collector(), Some(collector_a.clone()));
+
+    // Rotate to collector_b through the two-step flow.
+    ctx.client().propose_fee_collector(&ctx.admin, &collector_b);
+    assert_eq!(
+        ctx.client().get_pending_fee_collector(),
+        Some(collector_b.clone())
+    );
+    // Proposal alone does not move the active collector.
+    assert_eq!(ctx.client().get_fee_collector(), Some(collector_a.clone()));
+
+    ctx.client().accept_fee_collector(&collector_b);
+    assert_eq!(ctx.client().get_fee_collector(), Some(collector_b));
+    assert_eq!(ctx.client().get_pending_fee_collector(), None);
+}
+
+/// The core security property behind this issue: a single `set_fee` call can
+/// never redirect an already-configured collector. Only the two-step
+/// propose/accept flow can, and it gives a window to cancel before the change
+/// takes effect.
+#[test]
+fn set_fee_cannot_rotate_an_established_collector() {
+    let ctx = Ctx::new();
+    let collector = Address::generate(&ctx.env);
+
+    ctx.configure_fee(250, &collector);
+
+    // set_fee only adjusts the bps; it never touches the collector.
+    ctx.client().set_fee(&ctx.admin, &500);
+    assert_eq!(ctx.client().get_fee_bps(), 500);
+    assert_eq!(ctx.client().get_fee_collector(), Some(collector.clone()));
+    assert_eq!(ctx.client().get_pending_fee_collector(), None);
+}
+
+#[test]
+fn accept_fee_collector_rejects_an_address_that_was_not_proposed() {
+    let ctx = Ctx::new();
+    let proposed = Address::generate(&ctx.env);
+    let impostor = Address::generate(&ctx.env);
+
+    ctx.client().propose_fee_collector(&ctx.admin, &proposed);
+
+    let err = ctx
+        .client()
+        .try_accept_fee_collector(&impostor)
+        .unwrap_err()
+        .unwrap();
+    assert_eq!(err, Error::NoPendingFeeCollector.into());
+}
+
+#[test]
+fn fee_collector_transfer_can_be_cancelled_before_accept() {
+    let ctx = Ctx::new();
+    let collector = Address::generate(&ctx.env);
+    let proposed = Address::generate(&ctx.env);
+
+    ctx.configure_fee(250, &collector);
+    ctx.client().propose_fee_collector(&ctx.admin, &proposed);
+    assert_eq!(
+        ctx.client().get_pending_fee_collector(),
+        Some(proposed.clone())
+    );
+
+    ctx.client().cancel_fee_collector_transfer(&ctx.admin);
+    assert_eq!(ctx.client().get_pending_fee_collector(), None);
+    // The active collector is untouched.
+    assert_eq!(ctx.client().get_fee_collector(), Some(collector));
+
+    // The abandoned proposal can no longer be accepted.
+    let err = ctx
+        .client()
+        .try_accept_fee_collector(&proposed)
+        .unwrap_err()
+        .unwrap();
+    assert_eq!(err, Error::NoPendingFeeCollector.into());
+}
+
+#[test]
+fn propose_fee_collector_by_non_admin_panics_with_typed_error() {
+    let ctx = Ctx::new();
+    let stranger = Address::generate(&ctx.env);
+    let target = Address::generate(&ctx.env);
+
+    let err = ctx
+        .client()
+        .try_propose_fee_collector(&stranger, &target)
+        .unwrap_err()
+        .unwrap();
+    assert_eq!(err, Error::Unauthorized.into());
+}
+
+#[test]
+fn propose_fee_collector_rejects_current_collector_as_noop() {
+    let ctx = Ctx::new();
+    let collector = Address::generate(&ctx.env);
+
+    ctx.configure_fee(250, &collector);
+
+    // Proposing the already-active collector is a no-op and is rejected.
+    let err = ctx
+        .client()
+        .try_propose_fee_collector(&ctx.admin, &collector)
+        .unwrap_err()
+        .unwrap();
+    assert_eq!(err, Error::InvalidTarget.into());
 }
 
 #[cfg(test)]

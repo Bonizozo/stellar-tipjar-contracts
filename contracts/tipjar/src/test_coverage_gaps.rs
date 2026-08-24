@@ -318,8 +318,8 @@ fn get_guardian_returns_none_before_set_and_address_after() {
 
 // ─── get_fee_collector ───────────────────────────────────────────────────────
 
-/// Happy path: `get_fee_collector` returns `None` before `set_fee` is called
-/// and `Some(collector)` afterwards.
+/// Happy path: `get_fee_collector` returns `None` until a fee collector is
+/// proposed and accepted through the two-step flow.
 #[test]
 fn get_fee_collector_returns_none_before_set_fee_and_address_after() {
     let ctx = Ctx::new();
@@ -328,10 +328,18 @@ fn get_fee_collector_returns_none_before_set_fee_and_address_after() {
     // No collector configured yet.
     assert_eq!(client.get_fee_collector(), None);
 
+    // A proposal alone does not take effect: the pending address is visible,
+    // but the collector is unchanged until the new collector accepts.
     let collector = Address::generate(&ctx.env);
-    client.set_fee(&ctx.admin, &100, &collector);
+    client.set_fee(&ctx.admin, &100);
+    client.propose_fee_collector(&ctx.admin, &collector);
+    assert_eq!(client.get_fee_collector(), None);
+    assert_eq!(client.get_pending_fee_collector(), Some(collector.clone()));
+
+    client.accept_fee_collector(&collector);
 
     assert_eq!(client.get_fee_collector(), Some(collector));
+    assert_eq!(client.get_pending_fee_collector(), None);
 }
 
 // ─── legacy entrypoints ──────────────────────────────────────────────────────

@@ -31,6 +31,7 @@
 | `23` | `TokenNotAllowed` |
 | `24` | `TokenAlreadyExists` |
 | `25` | `MaxTokensReached` |
+| `26` | `NoPendingFeeCollector` |
 
 ## Functions
 
@@ -796,11 +797,17 @@ client.get_guardian();
 
 ### `set_fee`
 
-Sets the protocol fee rate and its collector. Admin-only; `bps` is
-hard-capped at `MAX_FEE_BPS`. Setting `bps` to 0 disables fees.
+Sets the protocol fee rate. Admin-only; `bps` is hard-capped at
+`MAX_FEE_BPS`. Setting `bps` to 0 disables fees. The fee collector is
+deliberately NOT settable here: changing `FeeCollector` in a single
+call would let a typo'd or malicious address immediately and
+irreversibly redirect all subsequently-accrued protocol revenue.
+Rotate the collector through the two-step flow instead —
+`propose_fee_collector` + `accept_fee_collector` (mirroring the
+`Admin` transfer), so a mistaken change has a window to be cancelled.
 
 ```rust
-pub fn set_fee(admin: Address, bps: u32, collector: Address) -> ()
+pub fn set_fee(admin: Address, bps: u32) -> ()
 ```
 
 **Parameters**
@@ -809,12 +816,102 @@ pub fn set_fee(admin: Address, bps: u32, collector: Address) -> ()
 |------|------|
 | `admin` | `Address` |
 | `bps` | `u32` |
-| `collector` | `Address` |
 
 **Example**
 
 ```rust
-client.set_fee(&admin, &bps, &collector);
+client.set_fee(&admin, &bps);
+```
+
+---
+
+### `propose_fee_collector`
+
+Proposes `new_collector` as the next fee collector. Admin-only. Takes
+effect only once `new_collector` calls `accept_fee_collector` — a
+single-step change to a typo'd or malicious address could never be
+caught before it redirected protocol revenue. Only one proposal may be
+pending at a time; cancel the existing one first to replace it.
+
+```rust
+pub fn propose_fee_collector(admin: Address, new_collector: Address) -> ()
+```
+
+**Parameters**
+
+| Name | Type |
+|------|------|
+| `admin` | `Address` |
+| `new_collector` | `Address` |
+
+**Example**
+
+```rust
+client.propose_fee_collector(&admin, &new_collector);
+```
+
+---
+
+### `accept_fee_collector`
+
+Completes a two-step fee-collector transfer. Must be called by the
+address named in the pending proposal.
+
+```rust
+pub fn accept_fee_collector(new_collector: Address) -> ()
+```
+
+**Parameters**
+
+| Name | Type |
+|------|------|
+| `new_collector` | `Address` |
+
+**Example**
+
+```rust
+client.accept_fee_collector(&new_collector);
+```
+
+---
+
+### `cancel_fee_collector_transfer`
+
+Abandons a pending fee-collector transfer, leaving the current
+collector in place. Admin-only.
+
+```rust
+pub fn cancel_fee_collector_transfer(admin: Address) -> ()
+```
+
+**Parameters**
+
+| Name | Type |
+|------|------|
+| `admin` | `Address` |
+
+**Example**
+
+```rust
+client.cancel_fee_collector_transfer(&admin);
+```
+
+---
+
+### `get_pending_fee_collector`
+
+Address currently proposed as the next fee collector, if any.
+
+```rust
+pub fn get_pending_fee_collector() -> Option<Address>
+```
+
+**Returns** — `Option<Address>`
+
+**Example**
+
+```rust
+client.get_pending_fee_collector();
 ```
 
 ---

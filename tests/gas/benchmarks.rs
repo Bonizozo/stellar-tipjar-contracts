@@ -204,7 +204,9 @@ mod bench {
         let (env, contract_id, token_id, admin) = setup();
         let client = TipJarClient::new(&env, &contract_id);
         let collector = Address::generate(&env);
-        client.set_fee(&admin, &250, &collector); // 2.5%
+        client.set_fee(&admin, &250); // 2.5%
+        client.propose_fee_collector(&admin, &collector);
+        client.accept_fee_collector(&collector);
 
         let token_admin = token::StellarAssetClient::new(&env, &token_id);
         let sender = Address::generate(&env);

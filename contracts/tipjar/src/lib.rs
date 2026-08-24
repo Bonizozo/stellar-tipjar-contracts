@@ -98,6 +98,10 @@ pub enum DataKey {
     FeeBps,
     /// Address authorized to withdraw accrued protocol fees.
     FeeCollector,
+    /// Two-step fee-collector transfer: address that may call
+    /// `accept_fee_collector`. Mirrors `PendingAdmin` so a mistaken collector
+    /// change cannot immediately and irreversibly redirect protocol revenue.
+    PendingFeeCollector,
     /// Legacy unparameterized protocol fee counter. Kept so existing
     /// persistent entries remain readable after upgrade; migrated into
     /// `FeeBalance(token)` for the primary token on first fee access.
@@ -273,13 +277,12 @@ pub struct FeeCharged {
     net: i128,
 }
 
-/// Topics `("fee_configured", admin)`, data `[bps, collector]`.
+/// Topics `("fee_configured", admin)`, data `[bps]`.
 #[contractevent(data_format = "vec")]
 pub struct FeeConfigured {
     #[topic]
     admin: Address,
     bps: u32,
-    collector: Address,
 }
 
 /// Topics `("fee_withdraw", collector)`, data `[amount]`.
@@ -288,6 +291,27 @@ pub struct FeeWithdraw {
     #[topic]
     collector: Address,
     amount: i128,
+}
+
+/// Topics `("fee_collector_transfer_proposed",)`, data `(current_admin, new_collector)`.
+/// Mirrors `AdminTransferProposed` for fee-collector rotation.
+#[contractevent(data_format = "vec")]
+pub struct FeeCollectorTransferProposed {
+    current_admin: Address,
+    new_collector: Address,
+}
+
+/// Topics `("fee_collector_transfer_accepted",)`, data `(new_collector,)`.
+#[contractevent(data_format = "vec")]
+pub struct FeeCollectorTransferAccepted {
+    new_collector: Address,
+}
+
+/// Topics `("fee_collector_transfer_cancelled", admin)`, data `[]`.
+#[contractevent(data_format = "vec")]
+pub struct FeeCollectorTransferCancelled {
+    #[topic]
+    admin: Address,
 }
 
 #[contracterror]
@@ -319,6 +343,8 @@ pub enum Error {
     TokenNotAllowed = 23,
     TokenAlreadyExists = 24,
     MaxTokensReached = 25,
+    /// No fee-collector transfer is currently pending.
+    NoPendingFeeCollector = 26,
 }
 
 #[contract]
@@ -1086,9 +1112,15 @@ impl TipJar {
 
     // ── protocol fee ─────────────────────────────────────────────────────
 
-    /// Sets the protocol fee rate and its collector. Admin-only; `bps` is
-    /// hard-capped at `MAX_FEE_BPS`. Setting `bps` to 0 disables fees.
-    pub fn set_fee(env: Env, admin: Address, bps: u32, collector: Address) {
+    /// Sets the protocol fee rate. Admin-only; `bps` is hard-capped at
+    /// `MAX_FEE_BPS`. Setting `bps` to 0 disables fees. The fee collector is
+    /// deliberately NOT settable here: changing `FeeCollector` in a single
+    /// call would let a typo'd or malicious address immediately and
+    /// irreversibly redirect all subsequently-accrued protocol revenue.
+    /// Rotate the collector through the two-step flow instead —
+    /// `propose_fee_collector` + `accept_fee_collector` (mirroring the
+    /// `Admin` transfer), so a mistaken change has a window to be cancelled.
+    pub fn set_fee(env: Env, admin: Address, bps: u32) {
         admin.require_auth();
         Self::require_admin(&env, &admin);
         if bps > MAX_FEE_BPS {
@@ -1098,17 +1130,89 @@ impl TipJar {
         env.storage().instance().set(&DataKey::FeeBps, &bps);
         env.storage()
             .instance()
-            .set(&DataKey::FeeCollector, &collector);
+            .extend_ttl(LEDGER_THRESHOLD, LEDGER_BUMP);
+
+        FeeConfigured { admin, bps }.publish(&env);
+    }
+
+    /// Proposes `new_collector` as the next fee collector. Admin-only. Takes
+    /// effect only once `new_collector` calls `accept_fee_collector` — a
+    /// single-step change to a typo'd or malicious address could never be
+    /// caught before it redirected protocol revenue. Only one proposal may be
+    /// pending at a time; cancel the existing one first to replace it.
+    pub fn propose_fee_collector(env: Env, admin: Address, new_collector: Address) {
+        admin.require_auth();
+        Self::require_admin(&env, &admin);
+
+        if let Some(current) = env
+            .storage()
+            .instance()
+            .get::<_, Address>(&DataKey::FeeCollector)
+        {
+            if current == new_collector {
+                panic_with_error!(&env, Error::InvalidTarget);
+            }
+        }
+
+        env.storage()
+            .instance()
+            .set(&DataKey::PendingFeeCollector, &new_collector);
         env.storage()
             .instance()
             .extend_ttl(LEDGER_THRESHOLD, LEDGER_BUMP);
 
-        FeeConfigured {
-            admin,
-            bps,
-            collector,
+        FeeCollectorTransferProposed {
+            current_admin: admin,
+            new_collector,
         }
         .publish(&env);
+    }
+
+    /// Completes a two-step fee-collector transfer. Must be called by the
+    /// address named in the pending proposal.
+    pub fn accept_fee_collector(env: Env, new_collector: Address) {
+        new_collector.require_auth();
+
+        let pending: Address = env
+            .storage()
+            .instance()
+            .get(&DataKey::PendingFeeCollector)
+            .unwrap_or_else(|| panic_with_error!(&env, Error::NoPendingFeeCollector));
+        if pending != new_collector {
+            panic_with_error!(&env, Error::NoPendingFeeCollector);
+        }
+
+        env.storage()
+            .instance()
+            .set(&DataKey::FeeCollector, &new_collector);
+        env.storage()
+            .instance()
+            .remove(&DataKey::PendingFeeCollector);
+        env.storage()
+            .instance()
+            .extend_ttl(LEDGER_THRESHOLD, LEDGER_BUMP);
+
+        FeeCollectorTransferAccepted { new_collector }.publish(&env);
+    }
+
+    /// Abandons a pending fee-collector transfer, leaving the current
+    /// collector in place. Admin-only.
+    pub fn cancel_fee_collector_transfer(env: Env, admin: Address) {
+        admin.require_auth();
+        Self::require_admin(&env, &admin);
+        if !env.storage().instance().has(&DataKey::PendingFeeCollector) {
+            panic_with_error!(&env, Error::NoPendingFeeCollector);
+        }
+
+        env.storage()
+            .instance()
+            .remove(&DataKey::PendingFeeCollector);
+        FeeCollectorTransferCancelled { admin }.publish(&env);
+    }
+
+    /// Address currently proposed as the next fee collector, if any.
+    pub fn get_pending_fee_collector(env: Env) -> Option<Address> {
+        env.storage().instance().get(&DataKey::PendingFeeCollector)
     }
 
     /// Pays out the fee collector's full or partial share of
