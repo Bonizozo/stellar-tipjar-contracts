@@ -276,7 +276,7 @@ struct ActiveModel;
 
 impl ActivityModel for ActiveModel {
     fn should_tip(&self, _idx: usize, ledger: u32) -> bool {
-        ledger % (LEDGERS_PER_DAY * 30) == 0
+        ledger.is_multiple_of(LEDGERS_PER_DAY * 30)
     }
 }
 
@@ -297,7 +297,7 @@ impl ActivityModel for MixedModel {
     fn should_tip(&self, idx: usize, ledger: u32) -> bool {
         if idx < self.active_cutoff {
             // Active: tip monthly
-            ledger % (LEDGERS_PER_DAY * 30) == 0
+            ledger.is_multiple_of(LEDGERS_PER_DAY * 30)
         } else {
             // Dormant: tip once at ledger 0
             ledger == 0
@@ -319,7 +319,7 @@ fn run_simulation(cli: &Cli) -> Result<StorageRentReport> {
     };
 
     let mut state = SimulationState::new(total_pairs);
-    let mut snapshots = Vec::new();
+    let mut snapshots: Vec<StorageSnapshot> = Vec::new();
 
     // Snapshot interval: 30 days
     let snapshot_interval = LEDGERS_PER_DAY * 30;
@@ -357,7 +357,11 @@ fn run_simulation(cli: &Cli) -> Result<StorageRentReport> {
     }
 
     // Generate summary
-    let peak_active = snapshots.iter().map(|s| s.active_entries).max().unwrap_or(0);
+    let peak_active = snapshots
+        .iter()
+        .map(|s| s.active_entries)
+        .max()
+        .unwrap_or(0);
     let final_snap = snapshots.last().unwrap();
     let avg_cost_per_creator_per_year = if cli.creators > 0 && cli.years > 0 {
         final_snap.cumulative_cost_xlm / cli.creators as f64 / cli.years as f64
@@ -507,18 +511,39 @@ fn main() -> Result<()> {
     println!("\n=== Storage-Rent Trajectory Summary ===\n");
     println!("Scenario:");
     println!("  Creators: {}", report.scenario.total_creators);
-    println!("  Tokens per creator: {}", report.scenario.tokens_per_creator);
-    println!("  Total (creator, token) pairs: {}", report.summary.total_pairs);
+    println!(
+        "  Tokens per creator: {}",
+        report.scenario.tokens_per_creator
+    );
+    println!(
+        "  Total (creator, token) pairs: {}",
+        report.summary.total_pairs
+    );
     println!("  Years modeled: {}", report.scenario.years);
     println!("  Activity model: {}", report.scenario.activity_model);
     println!();
 
     println!("Results:");
-    println!("  Peak active entries: {}", report.summary.peak_active_entries);
-    println!("  Final active entries: {}", report.summary.final_active_entries);
-    println!("  Final archived entries: {}", report.summary.final_archived_entries);
-    println!("  Total cost: {:.6} XLM ({} stroops)", report.summary.total_cost_xlm, report.summary.total_cost_stroops);
-    println!("  Average cost per creator per year: {:.6} XLM", report.summary.avg_cost_per_creator_per_year_xlm);
+    println!(
+        "  Peak active entries: {}",
+        report.summary.peak_active_entries
+    );
+    println!(
+        "  Final active entries: {}",
+        report.summary.final_active_entries
+    );
+    println!(
+        "  Final archived entries: {}",
+        report.summary.final_archived_entries
+    );
+    println!(
+        "  Total cost: {:.6} XLM ({} stroops)",
+        report.summary.total_cost_xlm, report.summary.total_cost_stroops
+    );
+    println!(
+        "  Average cost per creator per year: {:.6} XLM",
+        report.summary.avg_cost_per_creator_per_year_xlm
+    );
     println!();
 
     println!("Recommendations:");
@@ -529,12 +554,20 @@ fn main() -> Result<()> {
     // Verbose: print snapshots
     if cli.verbose {
         println!("\n=== Monthly Snapshots ===\n");
-        println!("{:>6} {:>8} {:>12} {:>12} {:>20} {:>18}",
-                 "Ledger", "Days", "Active", "Archived", "Cumulative (XLM)", "Period Cost (stroops)");
+        println!(
+            "{:>6} {:>8} {:>12} {:>12} {:>20} {:>18}",
+            "Ledger", "Days", "Active", "Archived", "Cumulative (XLM)", "Period Cost (stroops)"
+        );
         for snap in &report.snapshots {
-            println!("{:>6} {:>8.1} {:>12} {:>12} {:>20.6} {:>18}",
-                     snap.ledger, snap.days, snap.active_entries, snap.archived_entries,
-                     snap.cumulative_cost_xlm, snap.period_cost_stroops);
+            println!(
+                "{:>6} {:>8.1} {:>12} {:>12} {:>20.6} {:>18}",
+                snap.ledger,
+                snap.days,
+                snap.active_entries,
+                snap.archived_entries,
+                snap.cumulative_cost_xlm,
+                snap.period_cost_stroops
+            );
         }
     }
 

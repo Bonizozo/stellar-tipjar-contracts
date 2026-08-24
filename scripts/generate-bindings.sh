@@ -58,8 +58,31 @@ else
 fi
 stellar "${ARGS[@]}"
 
+GENERATED="$TMP_DIR/src/index.ts"
+CHECKED_IN="$PACKAGE_DIR/src/generated.ts"
+
+# `--wasm` mode has no deployed contract to read a network/contractId from,
+# so its output never defines `networks` — unlike `--contract-id` mode.
+# Carry forward whatever `networks` block is already vendored rather than
+# silently dropping that deployment metadata (see check-contract-client-drift.sh,
+# which deliberately excludes it from the interface-drift comparison for the
+# same reason: the WASM is the source of truth for the interface, not for
+# which contract ID is currently deployed where).
+if [[ -n "$WASM_PATH" ]] && [[ -f "$CHECKED_IN" ]] && ! grep -q '^export const networks' "$GENERATED"; then
+  EXISTING_NETWORKS="$(awk '/^export const networks = \{/{f=1} f{print} f&&/^} as const$/{exit}' "$CHECKED_IN")"
+  if [[ -n "$EXISTING_NETWORKS" ]]; then
+    log "Preserving existing 'networks' export (--wasm mode doesn't produce one)"
+    awk -v block="$EXISTING_NETWORKS" '
+      /^if \(typeof window/ { print; in_window=1; next }
+      in_window && /^}/ { print; print ""; print ""; print block; print ""; in_window=0; next }
+      { print }
+    ' "$GENERATED" > "$GENERATED.tmp"
+    mv "$GENERATED.tmp" "$GENERATED"
+  fi
+fi
+
 mkdir -p "$PACKAGE_DIR/src"
-cp "$TMP_DIR/src/index.ts" "$PACKAGE_DIR/src/generated.ts"
+cp "$GENERATED" "$CHECKED_IN"
 
 log "Wrote $PACKAGE_DIR/src/generated.ts"
 log "Run 'npm install && npm run build' in $PACKAGE_DIR to compile the package."

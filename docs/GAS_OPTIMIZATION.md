@@ -76,23 +76,29 @@ bash scripts/analyze_gas.sh
 cargo test -p tipjar -- bench --nocapture
 ```
 
-The benchmarks in `tests/gas/benchmarks.rs` use `env.budget()` to capture
-CPU instructions and memory bytes for each entry point:
+The benchmarks in `tests/gas/benchmarks.rs` use `env.cost_estimate().budget()`
+to capture CPU instructions and memory bytes for each entry point:
 
 | Benchmark | What it measures |
 |-----------|-----------------|
 | `bench_tip_single` | Cold-storage tip (first tip for a creator) |
 | `bench_tip_warm_storage` | Warm-storage tip (existing balance/total keys) |
-| `bench_tip_with_message` | Tip with message + metadata |
-| `bench_withdraw` | Creator withdrawal |
-| `bench_tip_batch_10` | Batch of 10 tips |
-| `bench_tip_batch_50` | Batch of 50 tips (maximum allowed) |
+| `bench_tip_against_full_allowlist` | Tip against a `MAX_ALLOWED_TOKENS`-sized allowlist (worst-case `ensure_token_allowed` scan) |
+| `bench_tip_with_fee` | Fee-bearing tip (protocol fee bookkeeping + `FeeCharged` event) |
+| `bench_withdraw` | Creator (self) withdrawal |
+| `bench_operator_withdraw` | Delegated withdrawal via an authorized operator |
 | `bench_get_total_tips` | Read-only query |
-| `bench_tip_locked` | Time-locked tip creation |
+| `bench_get_balance` | Read-only query |
+| `bench_add_token` | Admin adds a token to the allowlist |
+| `bench_authorize_operator` | Admin/creator authorizes an operator allowance |
+| `bench_propose_admin` / `bench_accept_admin` | Two-step admin transfer |
+| `bench_propose_upgrade` / `bench_execute_upgrade` | Timelocked upgrade proposal and post-timelock WASM swap |
+| `bench_guardian_pause_all` | Guardian-triggered circuit breaker pause |
 
 Cold vs warm storage: the first tip for a creator is more expensive because
 Soroban must allocate new ledger entries. Subsequent tips update existing entries
-at lower cost.
+at lower cost. Tipping against a full allowlist adds the cost of scanning past
+every earlier entry before finding a match at the end.
 
 ---
 

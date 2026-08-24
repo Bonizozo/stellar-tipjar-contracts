@@ -45,6 +45,13 @@ jobs:
       - name: Run integration test suite
         run: cargo test -p tipjar-integration-tests
 
+      - name: Install stellar-cli native build dependencies
+        # stellar-cli pulls in a keyring crate that links against libdbus,
+        # and a hidapi crate (Ledger hardware-wallet support) that links
+        # against libudev — neither's headers are preinstalled on
+        # ubuntu-latest, so the `cargo install` below fails otherwise.
+        run: sudo apt-get update && sudo apt-get install -y libdbus-1-dev libudev-dev pkg-config
+
       - name: Install Stellar CLI
         run: cargo install --locked stellar-cli
 
