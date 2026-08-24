@@ -839,7 +839,11 @@ fn propose_fee_collector_rejects_current_collector_as_noop() {
 mod fixtures {
     extern crate std;
     use super::*;
-    use soroban_sdk::{testutils::Events, xdr::WriteXdr, Address, Env};
+    use soroban_sdk::{
+        testutils::Events,
+        xdr::{ScVal, WriteXdr},
+        Address, Env,
+    };
     use std::{fs, path::PathBuf};
 
     #[test]
@@ -895,26 +899,215 @@ mod fixtures {
         );
     }
 
+    /// Decode raw XDR bytes to a JSON string that is human-readable in a PR
+    /// diff. The XDR payload is always a single `ScVal` (for event `data`) or
+    /// a `ScVec` (for event `topics`). We attempt both: first a `ScVec`
+    /// (topics form), then a bare `ScVal` (data form). The resulting JSON is
+    /// pretty-printed and deterministic.
+    fn xdr_to_json(xdr_bytes: &[u8]) -> String {
+        use soroban_sdk::xdr::{Limits, ReadXdr, ScVal, ScVec};
+
+        // Try decoding as ScVec (topics form) first, then as a bare ScVal
+        // (data form). This matches how the indexer decodes the same bytes.
+        let json_value = if let Ok(vec_sc) = ScVec::from_xdr(xdr_bytes, Limits::none()) {
+            let items: Vec<serde_json::Value> = vec_sc.iter().map(scval_to_json).collect();
+            serde_json::Value::Array(items)
+        } else {
+            let sc_val = ScVal::from_xdr(xdr_bytes, Limits::none())
+                .unwrap_or_else(|e| {
+                    panic!(
+                        "Failed to decode XDR as ScVal or ScVec: {:?}",
+                        e
+                    )
+                });
+            scval_to_json(&sc_val)
+        };
+
+        // Two-space indent for readable diffs; trailing newline for clean
+        // `diff` output.
+        let mut out = serde_json::to_string_pretty(&json_value)
+            .expect("serde_json serialization is infallible for Value");
+        out.push('\n');
+        out
+    }
+
+    /// Recursively convert an XDR `ScVal` to a `serde_json::Value`.
+    ///
+    /// The representation is chosen to be maximally readable in a git diff:
+    /// - Every variant is wrapped in a one-key object so the type is
+    ///   immediately visible without looking at the surrounding context.
+    /// - Large integers that exceed JS's safe-integer range are emitted as
+    ///   JSON strings to avoid precision loss in tools that parse the JSON.
+    /// - Raw byte sequences (e.g. `Bytes`, `BytesN`) are hex-encoded.
+    /// - `Address` is emitted as a `{"AccountId": "<hex>"}` object (the raw
+    ///   XDR public-key bytes; the strkey form is not available in test-utils
+    ///   without extra dependencies).
+    fn scval_to_json(val: &ScVal) -> serde_json::Value {
+        use soroban_sdk::xdr::{AccountId, Hash, PublicKey, ScAddress, Uint256};
+        use serde_json::{json, Value};
+
+        match val {
+            ScVal::Bool(b) => json!({"Bool": b}),
+            ScVal::Void => json!({"Void": null}),
+            ScVal::Error(e) => json!({"Error": std::format!("{:?}", e)}),
+            ScVal::U32(n) => json!({"U32": n}),
+            ScVal::I32(n) => json!({"I32": n}),
+            // U64/I64: values outside JS's safe integer range are strings.
+            ScVal::U64(n) => {
+                if *n <= 9_007_199_254_740_991u64 {
+                    json!({"U64": n})
+                } else {
+                    json!({"U64": n.to_string()})
+                }
+            }
+            ScVal::I64(n) => {
+                if *n >= -9_007_199_254_740_991i64 && *n <= 9_007_199_254_740_991i64 {
+                    json!({"I64": n})
+                } else {
+                    json!({"I64": n.to_string()})
+                }
+            }
+            ScVal::Timepoint(tp) => json!({"Timepoint": tp.0.to_string()}),
+            ScVal::Duration(d) => json!({"Duration": d.0.to_string()}),
+            // U128/I128: always emit as strings to avoid precision loss.
+            ScVal::U128(parts) => {
+                let hi = parts.hi as u128;
+                let lo = parts.lo as u128;
+                let v = (hi << 64) | lo;
+                json!({"U128": v.to_string()})
+            }
+            ScVal::I128(parts) => {
+                // hi is i64, lo is u64 — reconstruct the i128 value.
+                let hi = parts.hi as i128;
+                let lo = parts.lo as u128 as i128;
+                let v = (hi << 64) | lo;
+                json!({"I128": v.to_string()})
+            }
+            ScVal::U256(parts) => {
+                json!({"U256": std::format!(
+                    "{:016x}:{:016x}:{:016x}:{:016x}",
+                    parts.hi_hi, parts.hi_lo, parts.lo_hi, parts.lo_lo
+                )})
+            }
+            ScVal::I256(parts) => {
+                json!({"I256": std::format!(
+                    "{:016x}:{:016x}:{:016x}:{:016x}",
+                    parts.hi_hi, parts.hi_lo, parts.lo_hi, parts.lo_lo
+                )})
+            }
+            ScVal::Bytes(b) => {
+                // ScBytes is BytesM<N> — deref to &[u8] for iteration.
+                let hex: String = b.iter().map(|byte| std::format!("{:02x}", byte)).collect();
+                json!({"Bytes": hex})
+            }
+            ScVal::String(s) => {
+                // ScString is StringM<N> — use as_slice() for bytes.
+                let text = std::str::from_utf8(s.as_slice())
+                    .map(|t| Value::String(t.to_string()))
+                    .unwrap_or_else(|_| {
+                        let hex: String =
+                            s.as_slice().iter().map(|b| std::format!("{:02x}", b)).collect();
+                        Value::String(std::format!("0x{}", hex))
+                    });
+                json!({"String": text})
+            }
+            ScVal::Symbol(sym) => {
+                // ScSymbol has a to_string() impl that gives the symbol text.
+                json!({"Symbol": sym.to_string()})
+            }
+            ScVal::Vec(Some(vec)) => {
+                // ScVec implements Deref<Target=[ScVal]>.
+                let items: Vec<Value> = vec.iter().map(scval_to_json).collect();
+                json!({"Vec": items})
+            }
+            ScVal::Vec(None) => json!({"Vec": null}),
+            ScVal::Map(Some(map)) => {
+                // ScMap is a sorted VecM<ScMapEntry>. Represent as ordered
+                // array of {key, val} pairs — preserves sort order and avoids
+                // the JSON-object restriction of string-only keys.
+                let pairs: Vec<Value> = map.iter()
+                    .map(|entry| json!({
+                        "key": scval_to_json(&entry.key),
+                        "val": scval_to_json(&entry.val)
+                    }))
+                    .collect();
+                json!({"Map": pairs})
+            }
+            ScVal::Map(None) => json!({"Map": null}),
+            ScVal::Address(addr) => {
+                match addr {
+                    ScAddress::Account(AccountId(
+                        PublicKey::PublicKeyTypeEd25519(Uint256(bytes)),
+                    )) => {
+                        let hex: String =
+                            bytes.iter().map(|b| std::format!("{:02x}", b)).collect();
+                        json!({"Address": {"Account": hex}})
+                    }
+                    ScAddress::Contract(Hash(bytes)) => {
+                        let hex: String =
+                            bytes.iter().map(|b| std::format!("{:02x}", b)).collect();
+                        json!({"Address": {"Contract": hex}})
+                    }
+                }
+            }
+            ScVal::LedgerKeyContractInstance => json!({"LedgerKeyContractInstance": null}),
+            ScVal::LedgerKeyNonce(n) => json!({"LedgerKeyNonce": n.nonce}),
+            ScVal::ContractInstance(_inst) => {
+                json!({"ContractInstance": "<opaque>"})
+            }
+        }
+    }
+
+    /// Assert that `actual_xdr` matches the committed `.xdr` golden file and
+    /// that the decoded `.json` companion matches as well.
+    ///
+    /// When `UPDATE_FIXTURES=1` is set both files are written (or overwritten)
+    /// from the current run. The `.json` file exists solely so that PR diffs
+    /// show a human-readable representation of what changed — reviewers should
+    /// look at the JSON diff, not the binary XDR diff.
     fn assert_fixture(name: &str, actual_xdr: &[u8]) {
         let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").unwrap();
-        let fixture_path = PathBuf::from(manifest_dir)
+        let fixture_dir = PathBuf::from(manifest_dir)
             .join("tests")
-            .join("fixtures")
-            .join(std::format!("{}.xdr", name));
+            .join("fixtures");
+        let xdr_path = fixture_dir.join(std::format!("{}.xdr", name));
+        let json_path = fixture_dir.join(std::format!("{}.json", name));
+
+        let actual_json = xdr_to_json(actual_xdr);
 
         if std::env::var("UPDATE_FIXTURES").is_ok() {
-            fs::create_dir_all(fixture_path.parent().unwrap()).unwrap();
-            fs::write(&fixture_path, actual_xdr).unwrap();
+            fs::create_dir_all(&fixture_dir).unwrap();
+            fs::write(&xdr_path, actual_xdr).unwrap();
+            fs::write(&json_path, actual_json.as_bytes()).unwrap();
         } else {
-            let expected_xdr = fs::read(&fixture_path).unwrap_or_else(|_| {
+            // --- XDR assertion ---
+            let expected_xdr = fs::read(&xdr_path).unwrap_or_else(|_| {
                 panic!(
-                    "Fixture missing: {:?}. Run with UPDATE_FIXTURES=1",
-                    fixture_path
+                    "XDR fixture missing: {:?}. Run with UPDATE_FIXTURES=1",
+                    xdr_path
                 )
             });
             assert_eq!(
                 expected_xdr, actual_xdr,
-                "Fixture {} mismatch! Run with UPDATE_FIXTURES=1 to update.",
+                "XDR fixture '{}' mismatch — run with UPDATE_FIXTURES=1 to regenerate, \
+                 then review the companion .json diff carefully before committing.",
+                name
+            );
+
+            // --- JSON companion assertion ---
+            // This is the human-readable counterpart: its diff is what
+            // reviewers must inspect when UPDATE_FIXTURES=1 was used in a PR.
+            let expected_json = fs::read_to_string(&json_path).unwrap_or_else(|_| {
+                panic!(
+                    "JSON companion fixture missing: {:?}. Run with UPDATE_FIXTURES=1",
+                    json_path
+                )
+            });
+            assert_eq!(
+                expected_json, actual_json,
+                "JSON companion fixture '{}' mismatch — if you ran UPDATE_FIXTURES=1, \
+                 the .json file was also regenerated. Review it carefully: the diff \
+                 shows exactly which event fields, types, or ordering changed.",
                 name
             );
         }
