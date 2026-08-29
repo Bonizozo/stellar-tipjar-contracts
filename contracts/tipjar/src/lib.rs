@@ -2,7 +2,7 @@
 
 use soroban_sdk::{
     contract, contracterror, contractevent, contractimpl, contracttype, panic_with_error, token,
-    Address, BytesN, Env, MuxedAddress, Vec,
+    Address, BytesN, Env, MuxedAddress, String, Vec,
 };
 
 #[cfg(test)]
@@ -34,7 +34,7 @@ const MAX_FEE_BPS: u32 = 1_000;
 /// Unrelated to multi-token migration (see `ensure_token_allowed`/
 /// `maybe_migrate_creator_data`), which is keyed off the presence of
 /// `DataKey::AllowedTokens` / `DataKey::Token`, not this version number.
-const DATA_VERSION: u32 = 1;
+const DATA_VERSION: u32 = 2;
 
 /// Maximum number of tokens that can be in the multi-token allowlist.
 const MAX_ALLOWED_TOKENS: u32 = 50;
@@ -125,12 +125,15 @@ pub enum DataKey {
 ///   `guardian_expiry` (a single shared ledger checkpoint) unless the admin
 ///   confirms them first by calling the matching `pause_*`, which promotes
 ///   them into `admin_flags` and clears them here.
+///
+/// Added in v2: `notes` field for documenting pause reasons (synthetic migration test).
 #[contracttype]
 #[derive(Clone)]
 pub struct PauseState {
     pub admin_flags: u32,
     pub guardian_flags: u32,
     pub guardian_expiry: u32,
+    pub notes: Option<String>,
 }
 
 /// Topics `("tip", creator)`, data `(token, sender, amount)`.
@@ -918,8 +921,29 @@ impl TipJar {
             return;
         }
 
-        // Storage-layout transformations for this version step would run
-        // here, ahead of recording the new version below.
+        // Migration from v1 to v2: add notes field to PauseState
+        if current == 1 {
+            // If a pause state exists, we need to migrate it by adding the notes field.
+            // In v1, PauseState had only admin_flags, guardian_flags, and guardian_expiry.
+            // In v2, we add an optional notes field for documenting pause reasons.
+            if let Some(pause_state) = env
+                .storage()
+                .instance()
+                .get::<_, PauseState>(&DataKey::Pause)
+            {
+                // Create new PauseState with notes field initialized to None
+                let migrated_state = PauseState {
+                    admin_flags: pause_state.admin_flags,
+                    guardian_flags: pause_state.guardian_flags,
+                    guardian_expiry: pause_state.guardian_expiry,
+                    notes: None, // Initialize notes field to None for all existing pause states
+                };
+                env.storage()
+                    .instance()
+                    .set(&DataKey::Pause, &migrated_state);
+            }
+        }
+
         env.storage()
             .instance()
             .set(&DataKey::DataVersion, &DATA_VERSION);
@@ -1100,6 +1124,7 @@ impl TipJar {
                 admin_flags: 0,
                 guardian_flags: 0,
                 guardian_expiry: 0,
+                notes: None,
             })
     }
 
