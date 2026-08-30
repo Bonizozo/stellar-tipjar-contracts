@@ -340,6 +340,7 @@ fn upgrade_and_admin_events_have_the_documented_topics_and_data() {
 fn admin_transfer_events_have_the_documented_topics_and_data() {
     let ctx = Ctx::new();
     let next_admin = Address::generate(&ctx.env);
+    let ledger_before_propose = ctx.env.ledger().sequence();
 
     ctx.client().propose_admin(&ctx.admin, &next_admin);
     let events = ctx.env.events().all().filter_by_contract(&ctx.contract_id);
@@ -350,7 +351,12 @@ fn admin_transfer_events_have_the_documented_topics_and_data() {
             (
                 ctx.contract_id.clone(),
                 (Symbol::new(&ctx.env, "admin_transfer_proposed"),).into_val(&ctx.env),
-                (ctx.admin.clone(), next_admin.clone()).into_val(&ctx.env),
+                (
+                    ctx.admin.clone(),
+                    next_admin.clone(),
+                    ledger_before_propose + crate::ADMIN_TRANSFER_EXPIRY_LEDGERS,
+                )
+                    .into_val(&ctx.env),
             ),
         ]
     );
