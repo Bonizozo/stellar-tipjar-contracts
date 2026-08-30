@@ -8,6 +8,13 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Removed
+- `INTEGRATION.md` — documented `tip_with_memo`, `createSubscription`,
+  `tipSplit`, and other entrypoints that don't exist on the real
+  `contracts/tipjar` contract (verified against `contracts/tipjar/src/lib.rs`).
+  `INTEGRATION_GUIDE.md` covers the same ground accurately; keeping both
+  risked a caller shipping a call to a nonexistent contract function.
+
 ### Added
 - `ARCHITECTURE.md` — repository layout, request/data flow diagrams, component hierarchy.
 - `STATE_MANAGEMENT.md` — on-chain storage model, state transitions, off-chain indexer schema.
