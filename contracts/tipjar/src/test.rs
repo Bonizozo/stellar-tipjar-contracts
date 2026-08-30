@@ -9,7 +9,7 @@
 use crate::{DataKey, Error, TipJar, TipJarClient};
 use soroban_sdk::{
     symbol_short,
-    testutils::{Address as _, Events as _},
+    testutils::{Address as _, Events as _, Ledger as _},
     token, vec, Address, Env, IntoVal, Symbol,
 };
 
@@ -722,6 +722,86 @@ fn cancel_admin_transfer_with_nothing_pending_errors() {
 }
 
 #[test]
+fn propose_admin_rejects_second_proposal_while_one_is_pending() {
+    let ctx = Ctx::new();
+    let proposed = Address::generate(&ctx.env);
+    let another = Address::generate(&ctx.env);
+
+    ctx.client().propose_admin(&ctx.admin, &proposed);
+
+    let err = ctx
+        .client()
+        .try_propose_admin(&ctx.admin, &another)
+        .unwrap_err()
+        .unwrap();
+    assert_eq!(err, Error::AdminTransferAlreadyPending.into());
+
+    // The original proposal is still intact.
+    assert_eq!(ctx.client().get_pending_admin(), Some(proposed));
+}
+
+#[test]
+fn accept_admin_after_expiry_panics_with_typed_error() {
+    let ctx = Ctx::new();
+    let new_admin = Address::generate(&ctx.env);
+
+    ctx.client().propose_admin(&ctx.admin, &new_admin);
+
+    // Wind ledger past the expiry window.
+    ctx.env
+        .ledger()
+        .with_mut(|li| li.sequence_number += crate::ADMIN_TRANSFER_EXPIRY_LEDGERS + 1);
+
+    let err = ctx
+        .client()
+        .try_accept_admin(&new_admin)
+        .unwrap_err()
+        .unwrap();
+    assert_eq!(err, Error::AdminTransferExpired.into());
+
+    // Admin is unchanged.
+    assert_eq!(ctx.client().get_admin(), ctx.admin);
+}
+
+#[test]
+fn accept_admin_exactly_at_expiry_ledger_succeeds() {
+    let ctx = Ctx::new();
+    let new_admin = Address::generate(&ctx.env);
+
+    ctx.client().propose_admin(&ctx.admin, &new_admin);
+
+    // Advance to exactly the expiry ledger — the boundary must still be accepted.
+    ctx.env
+        .ledger()
+        .with_mut(|li| li.sequence_number += crate::ADMIN_TRANSFER_EXPIRY_LEDGERS);
+
+    ctx.client().accept_admin(&new_admin);
+    assert_eq!(ctx.client().get_admin(), new_admin);
+}
+
+#[test]
+fn cancel_admin_transfer_clears_expired_proposal_so_new_one_can_be_proposed() {
+    let ctx = Ctx::new();
+    let stale = Address::generate(&ctx.env);
+    let fresh = Address::generate(&ctx.env);
+
+    ctx.client().propose_admin(&ctx.admin, &stale);
+
+    // Wind ledger past expiry.
+    ctx.env
+        .ledger()
+        .with_mut(|li| li.sequence_number += crate::ADMIN_TRANSFER_EXPIRY_LEDGERS + 1);
+
+    // Admin cancels the stale proposal.
+    ctx.client().cancel_admin_transfer(&ctx.admin);
+    assert_eq!(ctx.client().get_pending_admin(), None);
+
+    // Now a new proposal can be made.
+    ctx.client().propose_admin(&ctx.admin, &fresh);
+    assert_eq!(ctx.client().get_pending_admin(), Some(fresh));
+}
+
+#[test]
 fn two_step_fee_collector_transfer_completes_and_moves_collector() {
     let ctx = Ctx::new();
     let collector_a = Address::generate(&ctx.env);
@@ -833,6 +913,89 @@ fn propose_fee_collector_rejects_current_collector_as_noop() {
         .unwrap_err()
         .unwrap();
     assert_eq!(err, Error::InvalidTarget.into());
+}
+
+#[test]
+fn propose_fee_collector_rejects_second_proposal_while_one_is_pending() {
+    let ctx = Ctx::new();
+    let proposed = Address::generate(&ctx.env);
+    let another = Address::generate(&ctx.env);
+
+    ctx.client().propose_fee_collector(&ctx.admin, &proposed);
+
+    let err = ctx
+        .client()
+        .try_propose_fee_collector(&ctx.admin, &another)
+        .unwrap_err()
+        .unwrap();
+    assert_eq!(err, Error::FeeCollectorTransferAlreadyPending.into());
+
+    // The original proposal is still intact.
+    assert_eq!(
+        ctx.client().get_pending_fee_collector(),
+        Some(proposed)
+    );
+}
+
+#[test]
+fn accept_fee_collector_after_expiry_panics_with_typed_error() {
+    let ctx = Ctx::new();
+    let collector = Address::generate(&ctx.env);
+
+    ctx.client().propose_fee_collector(&ctx.admin, &collector);
+
+    // Wind ledger past the expiry window.
+    ctx.env
+        .ledger()
+        .with_mut(|li| li.sequence_number += crate::ADMIN_TRANSFER_EXPIRY_LEDGERS + 1);
+
+    let err = ctx
+        .client()
+        .try_accept_fee_collector(&collector)
+        .unwrap_err()
+        .unwrap();
+    assert_eq!(err, Error::FeeCollectorTransferExpired.into());
+
+    // Fee collector is unchanged.
+    assert_eq!(ctx.client().get_fee_collector(), None);
+}
+
+#[test]
+fn accept_fee_collector_exactly_at_expiry_ledger_succeeds() {
+    let ctx = Ctx::new();
+    let collector = Address::generate(&ctx.env);
+
+    ctx.client().propose_fee_collector(&ctx.admin, &collector);
+
+    // Advance to exactly the expiry ledger — the boundary must still be accepted.
+    ctx.env
+        .ledger()
+        .with_mut(|li| li.sequence_number += crate::ADMIN_TRANSFER_EXPIRY_LEDGERS);
+
+    ctx.client().accept_fee_collector(&collector);
+    assert_eq!(ctx.client().get_fee_collector(), Some(collector));
+}
+
+#[test]
+fn cancel_fee_collector_transfer_clears_expired_proposal_so_new_one_can_be_proposed() {
+    let ctx = Ctx::new();
+    let stale = Address::generate(&ctx.env);
+    let fresh = Address::generate(&ctx.env);
+
+    ctx.client().propose_fee_collector(&ctx.admin, &stale);
+
+    // Wind ledger past expiry.
+    ctx.env
+        .ledger()
+        .with_mut(|li| li.sequence_number += crate::ADMIN_TRANSFER_EXPIRY_LEDGERS + 1);
+
+    // Admin cancels the stale proposal.
+    ctx.client().cancel_fee_collector_transfer(&ctx.admin);
+    assert_eq!(ctx.client().get_pending_fee_collector(), None);
+
+    // Now a new proposal can be made.
+    ctx.client().propose_fee_collector(&ctx.admin, &fresh);
+    assert_eq!(ctx.client().get_pending_fee_collector(), Some(fresh));
 }
 
 #[cfg(test)]

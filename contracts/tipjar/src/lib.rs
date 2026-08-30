@@ -22,6 +22,14 @@ const LEDGER_BUMP: u32 = 120_960; // ~7 days at 5s/ledger
 
 const PAYOUT_DELAY_LEDGERS: u32 = 17280; // ~1 day at 5s/ledger
 
+/// How long a pending admin-transfer or fee-collector-transfer proposal
+/// remains valid before it expires. Matches the `PendingPayoutChange` delay
+/// so that all "pending state with a deadline" features are on the same clock.
+/// ~2 days at 5 s/ledger — long enough for the proposed address to act, short
+/// enough that a stale or forgotten proposal cannot be weaponised years later
+/// by a compromised key (resolves issue #413).
+pub const ADMIN_TRANSFER_EXPIRY_LEDGERS: u32 = 34_560;
+
 /// Basis-point denominator for fee math (1 bps = 1/10_000).
 const BPS_DENOMINATOR: i128 = 10_000;
 /// Hard on-chain ceiling for the protocol fee: 1_000 bps = 10%.
@@ -195,11 +203,15 @@ pub struct OperatorRevoked {
     operator: Address,
 }
 
-/// Topics `("admin_transfer_proposed",)`, data `(current_admin, new_admin)`.
+/// Topics `("admin_transfer_proposed",)`, data `(current_admin, new_admin, expiry_ledger)`.
 #[contractevent(data_format = "vec")]
 pub struct AdminTransferProposed {
     current_admin: Address,
     new_admin: Address,
+    /// Ledger sequence at or after which the proposal expires and can no
+    /// longer be accepted. Matches the `unlock_ledger` pattern used by
+    /// `UpgradeProposed` so indexers can apply a consistent expiry model.
+    expiry_ledger: u32,
 }
 
 /// Topics `("admin_transfer_accepted",)`, data `(new_admin,)`.
@@ -296,12 +308,15 @@ pub struct FeeWithdraw {
     amount: i128,
 }
 
-/// Topics `("fee_collector_transfer_proposed",)`, data `(current_admin, new_collector)`.
+/// Topics `("fee_collector_transfer_proposed",)`, data `(current_admin, new_collector, expiry_ledger)`.
 /// Mirrors `AdminTransferProposed` for fee-collector rotation.
 #[contractevent(data_format = "vec")]
 pub struct FeeCollectorTransferProposed {
     current_admin: Address,
     new_collector: Address,
+    /// Ledger sequence at or after which the proposal expires. Mirrors
+    /// `AdminTransferProposed.expiry_ledger`.
+    expiry_ledger: u32,
 }
 
 /// Topics `("fee_collector_transfer_accepted",)`, data `(new_collector,)`.
@@ -348,6 +363,20 @@ pub enum Error {
     MaxTokensReached = 25,
     /// No fee-collector transfer is currently pending.
     NoPendingFeeCollector = 26,
+    /// The pending admin-transfer proposal has passed its expiry ledger and
+    /// can no longer be accepted. The current admin must issue a fresh
+    /// `propose_admin` to restart the process.
+    AdminTransferExpired = 27,
+    /// The pending fee-collector-transfer proposal has passed its expiry
+    /// ledger and can no longer be accepted. Issue a fresh
+    /// `propose_fee_collector` to restart the process.
+    FeeCollectorTransferExpired = 28,
+    /// An admin-transfer proposal is already pending. Cancel it with
+    /// `cancel_admin_transfer` before issuing a new one.
+    AdminTransferAlreadyPending = 29,
+    /// A fee-collector-transfer proposal is already pending. Cancel it with
+    /// `cancel_fee_collector_transfer` before issuing a new one.
+    FeeCollectorTransferAlreadyPending = 30,
 }
 
 #[contract]
@@ -766,13 +795,27 @@ impl TipJar {
     /// Proposes `new_admin` as the next admin. Takes effect only once
     /// `new_admin` calls `accept_admin` — a single-step transfer to a typo'd
     /// or unreachable address can never permanently lock out administration.
+    /// The proposal expires after `ADMIN_TRANSFER_EXPIRY_LEDGERS` ledgers; if
+    /// it is never accepted within that window, the pending address is
+    /// effectively voided and `accept_admin` will reject it with
+    /// `AdminTransferExpired`. Only one proposal may be pending at a time —
+    /// cancel the existing one first with `cancel_admin_transfer`.
     pub fn propose_admin(env: Env, admin: Address, new_admin: Address) {
         admin.require_auth();
         Self::require_admin(&env, &admin);
 
+        // Prevent silent overwrite of an in-flight proposal. The admin must
+        // explicitly retract a prior proposal before issuing a new one, so
+        // there is always an unambiguous on-chain record of intent.
+        if env.storage().instance().has(&DataKey::PendingAdmin) {
+            panic_with_error!(&env, Error::AdminTransferAlreadyPending);
+        }
+
+        let expiry_ledger = env.ledger().sequence() + ADMIN_TRANSFER_EXPIRY_LEDGERS;
+
         env.storage()
             .instance()
-            .set(&DataKey::PendingAdmin, &new_admin);
+            .set(&DataKey::PendingAdmin, &(new_admin.clone(), expiry_ledger));
         env.storage()
             .instance()
             .extend_ttl(LEDGER_THRESHOLD, LEDGER_BUMP);
@@ -780,16 +823,19 @@ impl TipJar {
         AdminTransferProposed {
             current_admin: admin,
             new_admin,
+            expiry_ledger,
         }
         .publish(&env);
     }
 
     /// Completes a two-step admin transfer. Must be called by the address
-    /// named in the pending proposal.
+    /// named in the pending proposal before `expiry_ledger` is reached.
+    /// Panics with `AdminTransferExpired` if the proposal window has closed —
+    /// the current admin must issue a fresh `propose_admin` in that case.
     pub fn accept_admin(env: Env, new_admin: Address) {
         new_admin.require_auth();
 
-        let pending: Address = env
+        let (pending, expiry_ledger): (Address, u32) = env
             .storage()
             .instance()
             .get(&DataKey::PendingAdmin)
@@ -798,14 +844,24 @@ impl TipJar {
             panic_with_error!(&env, Error::NoPendingAdmin);
         }
 
+        // Enforce the expiry window: a stale, forgotten proposal cannot be
+        // accepted by a later-compromised key (issue #413).
+        if env.ledger().sequence() > expiry_ledger {
+            panic_with_error!(&env, Error::AdminTransferExpired);
+        }
+
         env.storage().instance().set(&DataKey::Admin, &new_admin);
         env.storage().instance().remove(&DataKey::PendingAdmin);
+        env.storage()
+            .instance()
+            .extend_ttl(LEDGER_THRESHOLD, LEDGER_BUMP);
 
         AdminTransferAccepted { new_admin }.publish(&env);
     }
 
     /// Abandons a pending admin transfer, leaving the current admin in
-    /// place. Admin-only.
+    /// place. Admin-only. Also clears an expired proposal so the admin can
+    /// issue a fresh one without waiting for on-chain TTL eviction.
     pub fn cancel_admin_transfer(env: Env, admin: Address) {
         admin.require_auth();
         Self::require_admin(&env, &admin);
@@ -822,9 +878,14 @@ impl TipJar {
         Self::admin_address(&env)
     }
 
-    /// Address currently proposed as the next admin, if any.
+    /// Address currently proposed as the next admin, if any. Returns `None`
+    /// if no proposal is pending (including if one existed but has expired and
+    /// was cleaned up).
     pub fn get_pending_admin(env: Env) -> Option<Address> {
-        env.storage().instance().get(&DataKey::PendingAdmin)
+        env.storage()
+            .instance()
+            .get::<_, (Address, u32)>(&DataKey::PendingAdmin)
+            .map(|(addr, _)| addr)
     }
 
     /// Admin-only. Records `new_wasm_hash` as a pending upgrade, unlocked
@@ -1163,8 +1224,11 @@ impl TipJar {
     /// Proposes `new_collector` as the next fee collector. Admin-only. Takes
     /// effect only once `new_collector` calls `accept_fee_collector` — a
     /// single-step change to a typo'd or malicious address could never be
-    /// caught before it redirected protocol revenue. Only one proposal may be
-    /// pending at a time; cancel the existing one first to replace it.
+    /// caught before it redirected protocol revenue. The proposal expires
+    /// after `ADMIN_TRANSFER_EXPIRY_LEDGERS` ledgers, mirroring the
+    /// admin-transfer expiry (issue #413). Only one proposal may be pending at
+    /// a time; cancel the existing one first with
+    /// `cancel_fee_collector_transfer`.
     pub fn propose_fee_collector(env: Env, admin: Address, new_collector: Address) {
         admin.require_auth();
         Self::require_admin(&env, &admin);
@@ -1179,9 +1243,16 @@ impl TipJar {
             }
         }
 
+        // Prevent silent overwrite of an in-flight proposal.
+        if env.storage().instance().has(&DataKey::PendingFeeCollector) {
+            panic_with_error!(&env, Error::FeeCollectorTransferAlreadyPending);
+        }
+
+        let expiry_ledger = env.ledger().sequence() + ADMIN_TRANSFER_EXPIRY_LEDGERS;
+
         env.storage()
             .instance()
-            .set(&DataKey::PendingFeeCollector, &new_collector);
+            .set(&DataKey::PendingFeeCollector, &(new_collector.clone(), expiry_ledger));
         env.storage()
             .instance()
             .extend_ttl(LEDGER_THRESHOLD, LEDGER_BUMP);
@@ -1189,22 +1260,30 @@ impl TipJar {
         FeeCollectorTransferProposed {
             current_admin: admin,
             new_collector,
+            expiry_ledger,
         }
         .publish(&env);
     }
 
     /// Completes a two-step fee-collector transfer. Must be called by the
-    /// address named in the pending proposal.
+    /// address named in the pending proposal before `expiry_ledger` is
+    /// reached. Panics with `FeeCollectorTransferExpired` if the window has
+    /// closed.
     pub fn accept_fee_collector(env: Env, new_collector: Address) {
         new_collector.require_auth();
 
-        let pending: Address = env
+        let (pending, expiry_ledger): (Address, u32) = env
             .storage()
             .instance()
             .get(&DataKey::PendingFeeCollector)
             .unwrap_or_else(|| panic_with_error!(&env, Error::NoPendingFeeCollector));
         if pending != new_collector {
             panic_with_error!(&env, Error::NoPendingFeeCollector);
+        }
+
+        // Enforce the expiry window (mirrors admin-transfer expiry, issue #413).
+        if env.ledger().sequence() > expiry_ledger {
+            panic_with_error!(&env, Error::FeeCollectorTransferExpired);
         }
 
         env.storage()
@@ -1221,7 +1300,8 @@ impl TipJar {
     }
 
     /// Abandons a pending fee-collector transfer, leaving the current
-    /// collector in place. Admin-only.
+    /// collector in place. Admin-only. Also clears an expired proposal so the
+    /// admin can issue a fresh one.
     pub fn cancel_fee_collector_transfer(env: Env, admin: Address) {
         admin.require_auth();
         Self::require_admin(&env, &admin);
@@ -1237,7 +1317,10 @@ impl TipJar {
 
     /// Address currently proposed as the next fee collector, if any.
     pub fn get_pending_fee_collector(env: Env) -> Option<Address> {
-        env.storage().instance().get(&DataKey::PendingFeeCollector)
+        env.storage()
+            .instance()
+            .get::<_, (Address, u32)>(&DataKey::PendingFeeCollector)
+            .map(|(addr, _)| addr)
     }
 
     /// Pays out the fee collector's full or partial share of
